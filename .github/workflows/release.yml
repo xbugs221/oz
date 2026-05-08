@@ -1,0 +1,129 @@
+# Release workflow builds and publishes standalone Go CLI archives from version tags.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Go test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: Test
+        run: go test ./...
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: Build archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          mkdir -p dist
+          binary="oz"
+          archive="oz-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+
+          rm -rf build
+          mkdir -p build
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            binary="oz.exe"
+            archive="oz-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
+          fi
+
+          CGO_ENABLED=0 GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" go build \
+            -ldflags "-s -w -X main.version=${version}" \
+            -o "build/${binary}" ./cmd/oz
+
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            (cd build && zip -q "../dist/${archive}" "${binary}")
+          else
+            chmod +x "build/${binary}"
+            tar -czf "dist/${archive}" -C build "${binary}"
+          fi
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: oz-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download archive artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum oz-* > SHA256SUMS)
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" dist/* --clobber
+          else
+            gh release create "${tag}" dist/* --title "${tag}" --notes "Go CLI binary release ${tag}"
+          fi
