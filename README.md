@@ -47,12 +47,16 @@ docs/changes
 oz plan
 oz init [--global]
 oz create <中文需求描述>
+oz list [--json]
+oz status <change> [--json]
 oz exec
 oz validate <change> [--json]
 oz archive <change> --yes
 ```
 
 `oz create 重写-oz-go-cli` 会扫描 `docs/changes/` 和 `docs/changes/archive/`，取已有数字编号最大值加一，创建类似 `docs/changes/2-重写-oz-go-cli/` 的提案目录。提案名称可以混用英文单词、数字和连字符，但必须至少包含一个中文汉字。
+
+`oz list --json` 输出当前活动提案列表，不包含 `docs/changes/archive/` 下的历史提案。`oz status <change> --json` 输出固定产物状态和 `task.md` 任务进度，用于快速判断提案是否已经准备归档。
 
 `oz validate <change> --json` 输出稳定 JSON，包含 `valid`、`change`、`errors`、`warnings` 和 `artifacts` 字段。校验内容包括目录命名、四个必需文档、`spec.md` 中的需求/规范词/场景、`task.md` 任务项，以及 `tests/` 是否只包含真实测试代码。
 

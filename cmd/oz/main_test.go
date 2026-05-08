@@ -174,6 +174,64 @@ func TestCreateRejectsEnglishOnlyChangeName(t *testing.T) {
 	}
 }
 
+func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
+	// TestListAndStatusReportActiveChangeProgress covers lightweight inspection commands.
+	project := newProject(t)
+	writeValidChange(t, project, "2-重写-oz-go-cli")
+	if err := os.MkdirAll(filepath.Join(project, "docs", "changes", "archive", "2026-05-01-1-历史提案"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	list := runCLI(t, project, "list", "--json")
+	if list.code != 0 {
+		t.Fatalf("list failed: %s", list.stderr)
+	}
+	var listPayload struct {
+		Changes []struct {
+			Name string `json:"name"`
+		} `json:"changes"`
+	}
+	if err := json.Unmarshal([]byte(list.stdout), &listPayload); err != nil {
+		t.Fatalf("invalid list JSON: %v\n%s", err, list.stdout)
+	}
+	if len(listPayload.Changes) != 1 || listPayload.Changes[0].Name != "2-重写-oz-go-cli" {
+		t.Fatalf("list should include only active changes: %#v", listPayload)
+	}
+	status := runCLI(t, project, "status", "2-重写-oz-go-cli", "--json")
+	if status.code != 0 {
+		t.Fatalf("status failed: %s", status.stderr)
+	}
+	var statusPayload struct {
+		Change    string `json:"change"`
+		Status    string `json:"status"`
+		Artifacts []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"artifacts"`
+		Tasks struct {
+			Total int `json:"total"`
+			Done  int `json:"done"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal([]byte(status.stdout), &statusPayload); err != nil {
+		t.Fatalf("invalid status JSON: %v\n%s", err, status.stdout)
+	}
+	if statusPayload.Change != "2-重写-oz-go-cli" || statusPayload.Status != "ready" {
+		t.Fatalf("unexpected status payload: %#v", statusPayload)
+	}
+	if statusPayload.Tasks.Total != 1 || statusPayload.Tasks.Done != 1 {
+		t.Fatalf("unexpected task progress: %#v", statusPayload.Tasks)
+	}
+	seen := map[string]string{}
+	for _, artifact := range statusPayload.Artifacts {
+		seen[artifact.Name] = artifact.Status
+	}
+	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "tests"} {
+		if seen[name] != "present" {
+			t.Fatalf("artifact %s not present in status: %#v", name, seen)
+		}
+	}
+}
+
 func TestValidateOutputsStableJSON(t *testing.T) {
 	// TestValidateOutputsStableJSON verifies valid and invalid proposal diagnostics.
 	project := newProject(t)
