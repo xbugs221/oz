@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -49,7 +52,7 @@ func (c *cli) run(args []string) int {
 		return 0
 	}
 	if args[0] == "--version" || args[0] == "-v" {
-		fmt.Fprintln(c.out, version)
+		fmt.Fprintln(c.out, resolvedVersion())
 		return 0
 	}
 	var err error
@@ -76,7 +79,7 @@ func (c *cli) run(args []string) int {
 
 func (c *cli) printHelp() {
 	// printHelp separates user commands from automation interfaces.
-	fmt.Fprintln(c.out, "oz "+version)
+	fmt.Fprintln(c.out, "oz "+resolvedVersion())
 	fmt.Fprintln(c.out, "")
 	fmt.Fprintln(c.out, "日常命令：")
 	fmt.Fprintln(c.out, "  list | l [--json]")
@@ -86,6 +89,63 @@ func (c *cli) printHelp() {
 	fmt.Fprintln(c.out, "  status <change> [--json]")
 	fmt.Fprintln(c.out, "  validate <change> [--json]")
 	fmt.Fprintln(c.out, "  archive <change> --yes")
+}
+
+func resolvedVersion() string {
+	// resolvedVersion reports the release tag when oz was installed or run from the source repository.
+	if version != "" && version != "dev" {
+		return version
+	}
+	if tag, err := sourceGitTag(); err == nil && tag != "" {
+		return tag
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
+
+func sourceGitTag() (string, error) {
+	// sourceGitTag reads git describe only when the current repository is oz itself.
+	root, err := sourceRoot()
+	if err != nil {
+		return "", err
+	}
+	describeCmd := exec.Command("git", "-C", root, "describe", "--tags", "--always", "--dirty")
+	describeOut, err := describeCmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(describeOut)), nil
+}
+
+func sourceRoot() (string, error) {
+	// sourceRoot locates the oz checkout from compiled source paths before consulting the current directory.
+	if _, file, _, ok := runtime.Caller(0); ok {
+		if root, err := ozModuleRoot(filepath.Dir(file)); err == nil {
+			return root, nil
+		}
+	}
+	rootCmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	rootOut, err := rootCmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return ozModuleRoot(strings.TrimSpace(string(rootOut)))
+}
+
+func ozModuleRoot(start string) (string, error) {
+	// ozModuleRoot walks upward until it finds the oz module root.
+	for dir := start; ; dir = filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && strings.Contains(string(data), "module github.com/xbugs221/oz\n") {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("oz module root not found")
+		}
+	}
 }
 
 func (c *cli) installCmd(args []string) error {

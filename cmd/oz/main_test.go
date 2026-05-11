@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -100,6 +101,23 @@ func TestHelpMentionsOzWithoutNodeTooling(t *testing.T) {
 		if strings.Contains(result.stdout, removed) {
 			t.Fatalf("help mentions removed tooling %q:\n%s", removed, result.stdout)
 		}
+	}
+}
+
+func TestVersionReportsGitTagDescriptionFromSourceRepo(t *testing.T) {
+	// TestVersionReportsGitTagDescriptionFromSourceRepo covers release diagnostics from source builds.
+	wantBytes, err := exec.Command("git", "describe", "--tags", "--always", "--dirty").Output()
+	if err != nil {
+		t.Skipf("git tag description unavailable: %v", err)
+	}
+	result := runCLI(t, newProject(t), "--version")
+	if result.code != 0 {
+		t.Fatalf("version failed: %s", result.stderr)
+	}
+	got := strings.TrimSpace(result.stdout)
+	want := strings.TrimSpace(string(wantBytes))
+	if got == "dev" || got != want {
+		t.Fatalf("version should use git tag description, got %q want %q", got, want)
 	}
 }
 
