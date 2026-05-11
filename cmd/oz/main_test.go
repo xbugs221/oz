@@ -78,27 +78,37 @@ func writeValidChange(t *testing.T, project, change string) {
 }
 
 func TestHelpMentionsOzWithoutNodeTooling(t *testing.T) {
-	// TestHelpMentionsOzWithoutNodeTooling covers the no-Node help scenario.
+	// TestHelpMentionsOzWithoutNodeTooling covers the reduced command surface.
 	result := runCLI(t, newProject(t), "--help")
 	if result.code != 0 {
 		t.Fatalf("help failed: %s", result.stderr)
 	}
-	if !strings.Contains(result.stdout, "oz ") || !strings.Contains(result.stdout, "init [--global]") || !strings.Contains(result.stdout, "create <change-name>") {
-		t.Fatalf("help does not describe oz commands:\n%s", result.stdout)
+	for _, want := range []string{
+		"日常命令：",
+		"list | l [--json]",
+		"install | i [--global | -g]",
+		"自动化接口：",
+		"status <change> [--json]",
+		"validate <change> [--json]",
+		"archive <change> --yes",
+	} {
+		if !strings.Contains(result.stdout, want) {
+			t.Fatalf("help missing %q:\n%s", want, result.stdout)
+		}
 	}
-	for _, removed := range []string{"Node.js", "pnpm", "npm", "TypeScript", "ox "} {
+	for _, removed := range []string{"Node.js", "pnpm", "npm", "TypeScript", "ox ", "init", "plan", "create", "exec"} {
 		if strings.Contains(result.stdout, removed) {
 			t.Fatalf("help mentions removed tooling %q:\n%s", removed, result.stdout)
 		}
 	}
 }
 
-func TestInitInstallsBuiltInSkillsIntoProject(t *testing.T) {
-	// TestInitInstallsBuiltInSkillsIntoProject covers local agent skill installation.
+func TestInstallInstallsBuiltInSkillsIntoProject(t *testing.T) {
+	// TestInstallInstallsBuiltInSkillsIntoProject covers local agent skill installation.
 	project := newProject(t)
-	result := runCLI(t, project, "init")
+	result := runCLI(t, project, "install")
 	if result.code != 0 {
-		t.Fatalf("init failed: %s", result.stderr)
+		t.Fatalf("install failed: %s", result.stderr)
 	}
 	for _, name := range []string{"oz-plan", "oz-create", "oz-exec", "oz-archive"} {
 		data, err := os.ReadFile(filepath.Join(project, ".agents", "skills", name, "SKILL.md"))
@@ -111,66 +121,26 @@ func TestInitInstallsBuiltInSkillsIntoProject(t *testing.T) {
 	}
 }
 
-func TestInitGlobalInstallsBuiltInSkillsIntoHome(t *testing.T) {
-	// TestInitGlobalInstallsBuiltInSkillsIntoHome covers user-level agent skill installation.
-	project := newProject(t)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	result := runCLI(t, project, "init", "--global")
-	if result.code != 0 {
-		t.Fatalf("global init failed: %s", result.stderr)
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".agents", "skills", "oz-archive", "SKILL.md"))
-	if err != nil {
-		t.Fatalf("missing global archive skill: %v", err)
-	}
-	if !strings.Contains(string(data), "oz archive <change> --yes") {
-		t.Fatalf("global archive skill content missing archive command:\n%s", string(data))
-	}
-	if _, err := os.Stat(filepath.Join(project, ".agents", "skills")); !os.IsNotExist(err) {
-		t.Fatalf("global init should not install project skills: %v", err)
-	}
-}
-
-func TestCreateUsesChineseNumberedFixedArtifacts(t *testing.T) {
-	// TestCreateUsesChineseNumberedFixedArtifacts covers numbering, Chinese names, and fixed files.
-	project := newProject(t)
-	if err := os.MkdirAll(filepath.Join(project, "docs", "changes", "3-已有提案"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(project, "docs", "changes", "archive", "2026-05-01-8-历史提案"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	result := runCLI(t, project, "create", "重写-oz-go-cli")
-	if result.code != 0 {
-		t.Fatalf("create failed: %s", result.stderr)
-	}
-	if !strings.Contains(result.stdout, "9-重写-oz-go-cli") {
-		t.Fatalf("create did not use next number from active and archive dirs:\n%s", result.stdout)
-	}
-	changeDir := filepath.Join(project, "docs", "changes", "9-重写-oz-go-cli")
-	for _, rel := range []string{"proposal.md", "design.md", "spec.md", "task.md", "tests"} {
-		if _, err := os.Stat(filepath.Join(changeDir, rel)); err != nil {
-			t.Fatalf("missing %s: %v", rel, err)
+func TestInstallGlobalAliasesInstallBuiltInSkillsIntoHome(t *testing.T) {
+	// TestInstallGlobalAliasesInstallBuiltInSkillsIntoHome covers user-level install aliases.
+	for _, args := range [][]string{{"install", "--global"}, {"i", "--global"}, {"i", "-g"}} {
+		project := newProject(t)
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		result := runCLI(t, project, args...)
+		if result.code != 0 {
+			t.Fatalf("%v failed: %s", args, result.stderr)
 		}
-	}
-	entries, err := os.ReadDir(filepath.Join(changeDir, "tests"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("tests directory should not contain placeholder files")
-	}
-}
-
-func TestCreateRejectsEnglishOnlyChangeName(t *testing.T) {
-	// TestCreateRejectsEnglishOnlyChangeName keeps proposal names Chinese-first.
-	result := runCLI(t, newProject(t), "create", "rewrite-go-cli")
-	if result.code == 0 {
-		t.Fatal("expected create to reject English-only change name")
-	}
-	if !strings.Contains(result.stderr, "change-name 至少包含一个中文汉字") {
-		t.Fatalf("unexpected error: %s", result.stderr)
+		data, err := os.ReadFile(filepath.Join(home, ".agents", "skills", "oz-archive", "SKILL.md"))
+		if err != nil {
+			t.Fatalf("missing global archive skill for %v: %v", args, err)
+		}
+		if !strings.Contains(string(data), "oz archive <change> --yes") {
+			t.Fatalf("global archive skill content missing archive command:\n%s", string(data))
+		}
+		if _, err := os.Stat(filepath.Join(project, ".agents", "skills")); !os.IsNotExist(err) {
+			t.Fatalf("%v should not install project skills: %v", args, err)
+		}
 	}
 }
 
@@ -184,6 +154,13 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	list := runCLI(t, project, "list", "--json")
 	if list.code != 0 {
 		t.Fatalf("list failed: %s", list.stderr)
+	}
+	shortList := runCLI(t, project, "l", "--json")
+	if shortList.code != 0 {
+		t.Fatalf("short list failed: %s", shortList.stderr)
+	}
+	if shortList.stdout != list.stdout {
+		t.Fatalf("list aliases differ:\nlist=%s\nl=%s", list.stdout, shortList.stdout)
 	}
 	var listPayload struct {
 		Changes []struct {
@@ -228,6 +205,46 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "tests"} {
 		if seen[name] != "present" {
 			t.Fatalf("artifact %s not present in status: %#v", name, seen)
+		}
+	}
+}
+
+func TestCommandHelpForDailyAndAutomationCommands(t *testing.T) {
+	// TestCommandHelpForDailyAndAutomationCommands keeps diagnostics useful for users and tools.
+	project := newProject(t)
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"list", "--help"}, "oz list [--json]"},
+		{[]string{"l", "-h"}, "oz l [--json]"},
+		{[]string{"install", "--help"}, "oz install [--global | -g]"},
+		{[]string{"i", "-h"}, "oz i [--global | -g]"},
+		{[]string{"status", "--help"}, "用法：oz status <change> [--json]"},
+		{[]string{"validate", "--help"}, "用法：oz validate <change> [--json]"},
+		{[]string{"archive", "--help"}, "用法：oz archive <change> --yes"},
+	}
+	for _, tc := range cases {
+		result := runCLI(t, project, tc.args...)
+		if result.code != 0 {
+			t.Fatalf("%v failed: %s", tc.args, result.stderr)
+		}
+		if !strings.Contains(result.stdout, tc.want) {
+			t.Fatalf("%v missing %q:\n%s", tc.args, tc.want, result.stdout)
+		}
+	}
+}
+
+func TestRemovedStageCommandsFail(t *testing.T) {
+	// TestRemovedStageCommandsFail ensures agents, not CLI stages, drive proposal work.
+	project := newProject(t)
+	for _, args := range [][]string{{"init"}, {"create", "需求"}, {"exec"}, {"plan"}} {
+		result := runCLI(t, project, args...)
+		if result.code == 0 {
+			t.Fatalf("%v unexpectedly succeeded with stdout:\n%s", args, result.stdout)
+		}
+		if !strings.Contains(result.stderr, "未知命令") {
+			t.Fatalf("%v returned unexpected error: %s", args, result.stderr)
 		}
 	}
 }
@@ -297,7 +314,7 @@ func TestValidateReportsUnreadableTestsDirectory(t *testing.T) {
 	if payload.Valid {
 		t.Fatalf("expected valid=false: %#v", payload)
 	}
-	if !strings.Contains(strings.Join(payload.Errors, "\n"), "cannot read tests") {
+	if !strings.Contains(strings.Join(payload.Errors, "\n"), "无法读取 tests") {
 		t.Fatalf("missing tests read error: %#v", payload.Errors)
 	}
 }
@@ -347,7 +364,7 @@ func TestArchiveRequiresAtLeastOneTestFile(t *testing.T) {
 	if result.code == 0 {
 		t.Fatal("expected archive to reject an empty tests directory")
 	}
-	if !strings.Contains(result.stderr, "archive requires at least one test file") {
+	if !strings.Contains(result.stderr, "归档至少需要一个测试文件") {
 		t.Fatalf("unexpected empty-tests error: %s", result.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "2-登录能力")); err != nil {
@@ -370,7 +387,7 @@ func TestArchiveStopsOnTestFileConflict(t *testing.T) {
 	if result.code == 0 {
 		t.Fatal("expected archive conflict")
 	}
-	if !strings.Contains(result.stderr, "test target already exists") {
+	if !strings.Contains(result.stderr, "测试目标已存在") {
 		t.Fatalf("unexpected conflict error: %s", result.stderr)
 	}
 	data, err := os.ReadFile(conflict)

@@ -1,4 +1,4 @@
-// Package main provides the standalone oz CLI for the fixed Chinese SDD workflow.
+// Package main provides the standalone oz CLI for installing skills and inspecting oz changes.
 package main
 
 import (
@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -55,24 +54,18 @@ func (c *cli) run(args []string) int {
 	}
 	var err error
 	switch args[0] {
-	case "init":
-		err = c.initCmd(args[1:])
-	case "plan":
-		err = c.stageCmd("plan")
-	case "create":
-		err = c.createCmd(args[1:])
-	case "list":
+	case "list", "l":
 		err = c.listCmd(args[1:])
+	case "install", "i":
+		err = c.installCmd(args[1:])
 	case "status":
 		err = c.statusCmd(args[1:])
-	case "exec":
-		err = c.stageCmd("exec")
 	case "validate":
 		err = c.validateCmd(args[1:])
 	case "archive":
 		err = c.archiveCmd(args[1:])
 	default:
-		err = fmt.Errorf("unknown command: %s", args[0])
+		err = fmt.Errorf("未知命令：%s", args[0])
 	}
 	if err != nil {
 		fmt.Fprintln(c.err, err)
@@ -82,25 +75,28 @@ func (c *cli) run(args []string) int {
 }
 
 func (c *cli) printHelp() {
-	// printHelp describes oz without mentioning removed Node or TypeScript workflows.
+	// printHelp separates user commands from automation interfaces.
 	fmt.Fprintln(c.out, "oz "+version)
 	fmt.Fprintln(c.out, "")
-	fmt.Fprintln(c.out, "Commands:")
-	fmt.Fprintln(c.out, "  init [--global]")
-	fmt.Fprintln(c.out, "  plan")
-	fmt.Fprintln(c.out, "  create <change-name>")
-	fmt.Fprintln(c.out, "  list [--json]")
+	fmt.Fprintln(c.out, "日常命令：")
+	fmt.Fprintln(c.out, "  list | l [--json]")
+	fmt.Fprintln(c.out, "  install | i [--global | -g]")
+	fmt.Fprintln(c.out, "")
+	fmt.Fprintln(c.out, "自动化接口：")
 	fmt.Fprintln(c.out, "  status <change> [--json]")
-	fmt.Fprintln(c.out, "  exec")
 	fmt.Fprintln(c.out, "  validate <change> [--json]")
 	fmt.Fprintln(c.out, "  archive <change> --yes")
 }
 
-func (c *cli) initCmd(args []string) error {
-	// initCmd installs the built-in agent skills into a project or user skill directory.
-	global := hasArg(args, "--global")
+func (c *cli) installCmd(args []string) error {
+	// installCmd installs built-in agent skills into a project or user skill directory.
+	if hasHelp(args) {
+		c.printInstallHelp()
+		return nil
+	}
+	global := hasArg(args, "--global") || hasArg(args, "-g")
 	if len(args) > 1 || (len(args) == 1 && !global) {
-		return errors.New("usage: oz init [--global]")
+		return errors.New("用法：oz install [--global | -g]")
 	}
 	targetRoot := filepath.Join(".agents", "skills")
 	if global {
@@ -123,59 +119,19 @@ func (c *cli) initCmd(args []string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(c.out, "Installed %d skills to %s\n", len(builtIn), targetRoot)
-	return nil
-}
-
-func (c *cli) stageCmd(stage string) error {
-	// stageCmd points agents at the repository skill templates for a workflow phase.
-	fmt.Fprintf(c.out, "Run oz init, then use .agents/skills/oz-%s/SKILL.md for the %s stage.\n", stage, stage)
-	return nil
-}
-
-func (c *cli) createCmd(args []string) error {
-	// createCmd creates the numbered fixed artifact set for a new change.
-	if len(args) != 1 {
-		return errors.New("usage: oz create <change-name>")
-	}
-	name := args[0]
-	if err := validateChangeName(name); err != nil {
-		return err
-	}
-	root, err := stateRoot()
-	if err != nil {
-		return err
-	}
-	next, err := nextChangeNumber(root)
-	if err != nil {
-		return err
-	}
-	change := fmt.Sprintf("%d-%s", next, name)
-	changeDir := filepath.Join(root, "changes", change)
-	if err := os.MkdirAll(filepath.Join(changeDir, "tests"), 0o755); err != nil {
-		return err
-	}
-	files := map[string]string{
-		"proposal.md": "## 背景\n\n## 变更内容\n\n## 能力范围\n\n## 影响范围\n",
-		"design.md":   "## 背景\n\n## 目标 / 非目标\n\n## 决策\n\n## 风险 / 取舍\n",
-		"spec.md":     "## 新增需求\n\n### 需求：能力名称\n\n系统必须描述可验收行为。\n\n#### 场景：主要场景\n\n- **当** 触发条件发生\n- **则** 系统表现符合预期\n",
-		"task.md":     "## 1. 实现\n\n- [ ] 1.1 完成实现并运行真实测试\n",
-	}
-	for file, body := range files {
-		target := filepath.Join(changeDir, file)
-		if err := writeNewFile(target, body); err != nil {
-			return err
-		}
-	}
-	fmt.Fprintf(c.out, "Created %s\n", changeDir)
+	fmt.Fprintf(c.out, "已安装 %d 个技能到 %s\n", len(builtIn), targetRoot)
 	return nil
 }
 
 func (c *cli) listCmd(args []string) error {
 	// listCmd reports active changes under docs/changes.
+	if hasHelp(args) {
+		c.printListHelp()
+		return nil
+	}
 	jsonOut := hasArg(args, "--json")
 	if len(args) > 1 || (len(args) == 1 && !jsonOut) {
-		return errors.New("usage: oz list [--json]")
+		return errors.New("用法：oz list [--json]")
 	}
 	root, err := stateRoot()
 	if err != nil {
@@ -205,12 +161,30 @@ func (c *cli) listCmd(args []string) error {
 	return nil
 }
 
+func (c *cli) printListHelp() {
+	// printListHelp documents both the full list command and its short alias.
+	fmt.Fprintln(c.out, "用法：")
+	fmt.Fprintln(c.out, "  oz list [--json]")
+	fmt.Fprintln(c.out, "  oz l [--json]")
+}
+
+func (c *cli) printInstallHelp() {
+	// printInstallHelp documents local and global skill installation forms.
+	fmt.Fprintln(c.out, "用法：")
+	fmt.Fprintln(c.out, "  oz install [--global | -g]")
+	fmt.Fprintln(c.out, "  oz i [--global | -g]")
+}
+
 func (c *cli) statusCmd(args []string) error {
 	// statusCmd reports fixed artifact presence and task progress for one active change.
+	if hasHelp(args) {
+		fmt.Fprintln(c.out, "用法：oz status <change> [--json]")
+		return nil
+	}
 	jsonOut := hasArg(args, "--json")
 	change := firstPositional(args)
 	if change == "" {
-		return errors.New("usage: oz status <change> [--json]")
+		return errors.New("用法：oz status <change> [--json]")
 	}
 	if err := validateNumberedChange(change); err != nil {
 		return err
@@ -223,19 +197,23 @@ func (c *cli) statusCmd(args []string) error {
 	if jsonOut {
 		return writeJSON(c.out, payload)
 	}
-	fmt.Fprintf(c.out, "%s: %s\n", change, payload["status"])
+	fmt.Fprintf(c.out, "%s：%s\n", change, displayStatus(payload["status"].(string)))
 	for _, artifact := range payload["artifacts"].([]map[string]any) {
-		fmt.Fprintf(c.out, "- %s: %s\n", artifact["name"], artifact["status"])
+		fmt.Fprintf(c.out, "- %s：%s\n", artifact["name"], displayStatus(artifact["status"].(string)))
 	}
 	return nil
 }
 
 func (c *cli) validateCmd(args []string) error {
 	// validateCmd validates a fixed-format oz change and optionally emits stable JSON.
+	if hasHelp(args) {
+		fmt.Fprintln(c.out, "用法：oz validate <change> [--json]")
+		return nil
+	}
 	jsonOut := hasArg(args, "--json")
 	change := firstPositional(args)
 	if change == "" {
-		return errors.New("usage: oz validate <change> [--json]")
+		return errors.New("用法：oz validate <change> [--json]")
 	}
 	root, err := stateRoot()
 	if err != nil {
@@ -245,26 +223,30 @@ func (c *cli) validateCmd(args []string) error {
 	if jsonOut {
 		_ = writeJSON(c.out, result)
 	} else if result.Valid {
-		fmt.Fprintf(c.out, "%s is valid\n", change)
+		fmt.Fprintf(c.out, "%s 校验通过\n", change)
 	} else {
 		for _, e := range result.Errors {
 			fmt.Fprintln(c.err, e)
 		}
 	}
 	if !result.Valid {
-		return errors.New("validation failed")
+		return errors.New("校验失败")
 	}
 	return nil
 }
 
 func (c *cli) archiveCmd(args []string) error {
 	// archiveCmd performs deterministic file moves; agents merge archived specs afterward.
+	if hasHelp(args) {
+		fmt.Fprintln(c.out, "用法：oz archive <change> --yes")
+		return nil
+	}
 	if len(args) == 0 {
-		return errors.New("usage: oz archive <change> --yes")
+		return errors.New("用法：oz archive <change> --yes")
 	}
 	change := args[0]
 	if !hasArg(args[1:], "--yes") {
-		return errors.New("archive requires --yes")
+		return errors.New("归档必须显式传入 --yes")
 	}
 	root, err := stateRoot()
 	if err != nil {
@@ -286,17 +268,17 @@ func (c *cli) archiveCmd(args []string) error {
 		return err
 	}
 	if len(moves) == 0 {
-		return errors.New("archive requires at least one test file")
+		return errors.New("归档至少需要一个测试文件")
 	}
 	archiveDir := filepath.Join(root, "changes", "archive", date+"-"+change)
 	if _, err := os.Stat(archiveDir); err == nil {
-		return fmt.Errorf("archive target already exists: %s", archiveDir)
+		return fmt.Errorf("归档目标已存在：%s", archiveDir)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	for _, move := range moves {
 		if _, err := os.Stat(move.dst); err == nil {
-			return fmt.Errorf("test target already exists: %s", move.dst)
+			return fmt.Errorf("测试目标已存在：%s", move.dst)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -318,7 +300,7 @@ func (c *cli) archiveCmd(args []string) error {
 	if err := os.Rename(changeDir, archiveDir); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "Archived to %s\n", archiveDir)
+	fmt.Fprintf(c.out, "已归档到 %s\n", archiveDir)
 	return nil
 }
 
@@ -336,10 +318,10 @@ func plannedTestMoves(projectRoot, testsDir, date, change string) ([]testMove, e
 	moves := []testMove{}
 	for _, entry := range entries {
 		if entry.IsDir() {
-			return nil, fmt.Errorf("tests directory only supports files: %s", entry.Name())
+			return nil, fmt.Errorf("tests 目录只支持文件：%s", entry.Name())
 		}
 		if !looksLikeTestCode(entry.Name()) {
-			return nil, fmt.Errorf("tests directory contains non-test file: %s", entry.Name())
+			return nil, fmt.Errorf("tests 目录包含非测试文件：%s", entry.Name())
 		}
 		moves = append(moves, testMove{
 			src: filepath.Join(testsDir, entry.Name()),
@@ -432,19 +414,19 @@ func validateChange(root, change string) validationResult {
 		path := filepath.Join(changeDir, name)
 		result.Artifacts[name] = path
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
-			result.Errors = append(result.Errors, "missing "+name)
+			result.Errors = append(result.Errors, "缺少 "+name)
 		}
 	}
 	testsDir := filepath.Join(changeDir, "tests")
 	result.Artifacts["tests"] = testsDir
 	if info, err := os.Stat(testsDir); err != nil || !info.IsDir() {
-		result.Errors = append(result.Errors, "missing tests")
+		result.Errors = append(result.Errors, "缺少 tests")
 	} else if entries, err := os.ReadDir(testsDir); err != nil {
-		result.Errors = append(result.Errors, "cannot read tests: "+err.Error())
+		result.Errors = append(result.Errors, "无法读取 tests："+err.Error())
 	} else {
 		for _, entry := range entries {
 			if entry.IsDir() || !looksLikeTestCode(entry.Name()) {
-				result.Errors = append(result.Errors, "tests contains non-test code: "+entry.Name())
+				result.Errors = append(result.Errors, "tests 包含非测试代码："+entry.Name())
 			}
 		}
 	}
@@ -452,7 +434,7 @@ func validateChange(root, change string) validationResult {
 		result.Errors = append(result.Errors, validateSpecText(string(data))...)
 	}
 	if data, err := os.ReadFile(filepath.Join(changeDir, "task.md")); err == nil && !strings.Contains(string(data), "- [") {
-		result.Errors = append(result.Errors, "task.md must contain task items")
+		result.Errors = append(result.Errors, "task.md 必须包含任务项")
 	}
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0
@@ -477,13 +459,13 @@ func validateSpecText(text string) []string {
 	}
 	errs := []string{}
 	if !hasReq {
-		errs = append(errs, "spec.md missing requirement")
+		errs = append(errs, "spec.md 缺少需求")
 	}
 	if !hasNorm {
-		errs = append(errs, "spec.md missing normative word")
+		errs = append(errs, "spec.md 缺少规范词")
 	}
 	if !hasScenario {
-		errs = append(errs, "spec.md missing scenario")
+		errs = append(errs, "spec.md 缺少场景")
 	}
 	return errs
 }
@@ -497,38 +479,10 @@ func ensureTasksDone(path string) error {
 	for _, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "- [ ]") {
-			return errors.New("task.md contains unfinished tasks")
+			return errors.New("task.md 包含未完成任务")
 		}
 	}
 	return nil
-}
-
-func nextChangeNumber(root string) (int, error) {
-	// nextChangeNumber scans active and archived changes and returns max prefix plus one.
-	max := 0
-	for _, dir := range []string{filepath.Join(root, "changes"), filepath.Join(root, "changes", "archive")} {
-		entries, err := os.ReadDir(dir)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return 0, err
-		}
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			name := entry.Name()
-			if dir == filepath.Join(root, "changes", "archive") {
-				parts := strings.SplitN(name, "-", 4)
-				if len(parts) == 4 {
-					name = parts[3]
-				}
-			}
-			n := leadingNumber(name)
-			if n > max {
-				max = n
-			}
-		}
-	}
-	return max + 1, nil
 }
 
 func stateRoot() (string, error) {
@@ -543,7 +497,7 @@ func stateRoot() (string, error) {
 func validateChangeName(name string) error {
 	// validateChangeName accepts Chinese descriptions mixed with ASCII words, digits, and hyphens.
 	if name == "" {
-		return errors.New("change-name must not be empty")
+		return errors.New("change-name 不能为空")
 	}
 	hasChinese := false
 	for i, r := range name {
@@ -553,7 +507,7 @@ func validateChangeName(name string) error {
 		}
 		valid := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || unicode.IsDigit(r) || r == '-'
 		if !valid || (i == 0 && r == '-') {
-			return errors.New("change-name may only contain Chinese characters, ASCII letters, digits, and hyphens")
+			return errors.New("change-name 只能包含中文汉字、ASCII 字母、数字和连字符")
 		}
 	}
 	if !hasChinese {
@@ -567,22 +521,25 @@ func validateNumberedChange(change string) error {
 	re := regexp.MustCompile(`^[1-9][0-9]*-(.+)$`)
 	matches := re.FindStringSubmatch(change)
 	if matches == nil {
-		return errors.New("change directory must be <number>-<change-name>")
+		return errors.New("变更目录必须符合 <number>-<change-name>")
 	}
 	return validateChangeName(matches[1])
 }
 
-func leadingNumber(name string) int {
-	// leadingNumber extracts the numeric prefix used for local change ordering.
-	parts := strings.SplitN(name, "-", 2)
-	if len(parts) < 2 {
-		return 0
+func displayStatus(status string) string {
+	// displayStatus localizes human-readable status values while JSON keeps stable machine strings.
+	switch status {
+	case "present":
+		return "已存在"
+	case "missing":
+		return "缺失"
+	case "ready":
+		return "可归档"
+	case "incomplete":
+		return "未完成"
+	default:
+		return status
 	}
-	n, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return 0
-	}
-	return n
 }
 
 func looksLikeTestCode(name string) bool {
@@ -599,17 +556,6 @@ func isChinese(r rune) bool {
 	return (r >= '\u4e00' && r <= '\u9fff') || (r >= '\u3400' && r <= '\u4dbf')
 }
 
-func writeNewFile(path, body string) error {
-	// writeNewFile avoids silently overwriting user-authored proposal artifacts.
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = file.WriteString(body)
-	return err
-}
-
 func hasArg(args []string, want string) bool {
 	// hasArg reports whether a flag-like argument is present.
 	for _, arg := range args {
@@ -620,10 +566,15 @@ func hasArg(args []string, want string) bool {
 	return false
 }
 
+func hasHelp(args []string) bool {
+	// hasHelp reports whether a command-specific help flag was requested.
+	return hasArg(args, "--help") || hasArg(args, "-h")
+}
+
 func firstPositional(args []string) string {
 	// firstPositional skips flags and returns the command target.
 	for _, arg := range args {
-		if !strings.HasPrefix(arg, "--") {
+		if !strings.HasPrefix(arg, "-") {
 			return arg
 		}
 	}
