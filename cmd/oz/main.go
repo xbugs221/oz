@@ -484,6 +484,9 @@ func validateChange(root, change string) validationResult {
 	} else if entries, err := os.ReadDir(testsDir); err != nil {
 		result.Errors = append(result.Errors, "无法读取 tests："+err.Error())
 	} else {
+		if len(entries) == 0 {
+			result.Errors = append(result.Errors, "tests 必须包含至少一个测试文件")
+		}
 		for _, entry := range entries {
 			if entry.IsDir() || !looksLikeTestCode(entry.Name()) {
 				result.Errors = append(result.Errors, "tests 包含非测试代码："+entry.Name())

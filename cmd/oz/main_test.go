@@ -337,6 +337,32 @@ func TestValidateReportsUnreadableTestsDirectory(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsEmptyTestsDirectory(t *testing.T) {
+	// TestValidateRejectsEmptyTestsDirectory prevents empty proposal test gates from passing.
+	project := newProject(t)
+	writeValidChange(t, project, "2-重写-oz-go-cli")
+	if err := os.Remove(filepath.Join(project, "docs", "changes", "2-重写-oz-go-cli", "tests", "archive_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLI(t, project, "validate", "2-重写-oz-go-cli", "--json")
+	if result.code == 0 {
+		t.Fatal("expected validate to reject empty tests directory")
+	}
+	var payload struct {
+		Valid  bool     `json:"valid"`
+		Errors []string `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(result.stdout), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, result.stdout)
+	}
+	if payload.Valid {
+		t.Fatalf("expected valid=false: %#v", payload)
+	}
+	if !strings.Contains(strings.Join(payload.Errors, "\n"), "tests 必须包含至少一个测试文件") {
+		t.Fatalf("missing empty tests error: %#v", payload.Errors)
+	}
+}
+
 func TestArchiveMovesTestsWithoutEditingMainSpec(t *testing.T) {
 	// TestArchiveMovesTestsWithoutEditingMainSpec keeps semantic spec merging outside the CLI.
 	project := newProject(t)
@@ -382,7 +408,7 @@ func TestArchiveRequiresAtLeastOneTestFile(t *testing.T) {
 	if result.code == 0 {
 		t.Fatal("expected archive to reject an empty tests directory")
 	}
-	if !strings.Contains(result.stderr, "归档至少需要一个测试文件") {
+	if !strings.Contains(result.stderr, "tests 必须包含至少一个测试文件") {
 		t.Fatalf("unexpected empty-tests error: %s", result.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "2-登录能力")); err != nil {
