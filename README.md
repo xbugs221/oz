@@ -48,7 +48,9 @@ docs/changes
 
 各阶段都对应一个内置 skill ，先运行 `oz install --global` 安装模板；之后和智能体对话时只要提及对应关键词，智能体就能读取模板并学习如何理解 `oz` 工具、提案格式和当前阶段的职责。
 
+创建阶段的目录编号由 CLI 计算：运行 `oz create` 会输出下一个提案数字，例如已有最大编号 `53` 时输出 `54`。这个命令只提供编号，不创建提案文件；智能体继续按 `oz-create` skill 创建 `proposal.md`、`design.md`、`spec.md`、`task.md` 和 `tests/`。
+
 ## 批注
 
 > Openspec 是一个面向 AI 协作开发的 SDD（Spec-Driven Development，规格驱动开发）工具。它的核心思路是：先把“要改什么、为什么改、验收标准是什么”写成结构化文档，再让编程人员围绕这些规格推进，而不是直接根据一句临时模糊需求随意修改代码。落盘的文档和测试案例都将成为后续工作的可靠依据，也能方便协作
-plan`、`create`、`exec`不再是 CLI 阶段命令；这些阶段由智能体读取内置 skill 后完成。`status`、`validate`、`archive` 虽可直接运行，但定位是下游自动化接口，不作为日常用户入口。
+`plan`、`exec`不再是 CLI 阶段命令；`create` 只作为编号查询接口保留，不负责创建阶段产物。创建、规划、执行阶段由智能体读取内置 skill 后完成。`status`、`validate`、`archive` 虽可直接运行，但定位是下游自动化接口，不作为日常用户入口。

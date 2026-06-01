@@ -4,19 +4,27 @@
 
 ## 需求：命令组最小化且保留自动化接口
 
-系统必须把 `list` 和 `install` 作为用户日常命令，同时保留 `status`、`validate`、`archive` 作为下游 `wo` 工具和内置 skill 使用的自动化接口。
+系统必须把 `list` 和 `install` 作为用户日常命令，同时保留 `create`、`status`、`validate`、`archive` 作为下游 `wo` 工具和内置 skill 使用的自动化接口。
 
 ### 场景：顶层帮助区分日常命令和自动化接口
 
 - **当** 用户运行 `oz --help`
 - **则** 帮助内容包含 `list | l [--json]` 和 `install | i [--global | -g]`
-- **并且** 帮助内容以独立小节展示 `status <change> [--json]`、`validate <change> [--json]`、`archive <change> --yes`
-- **并且** 帮助内容不包含 `init`、`plan`、`create`、`exec`
+- **并且** 帮助内容以独立小节展示 `create`、`status <change> [--json]`、`validate <change> [--json]`、`archive <change> --yes`
+- **并且** 帮助内容不包含 `init`、`plan`、`exec`
 
 ### 场景：旧阶段命令不再可执行
 
 - **当** 用户运行 `oz init`、`oz create 需求`、`oz plan` 或 `oz exec`
 - **则** 命令失败并返回非零退出码
+
+### 场景：创建接口返回下一个提案编号
+
+- **当** 项目中已有活动提案和归档提案
+- **并且** 最大提案编号是 `53`
+- **当** 下游工具运行 `oz create`
+- **则** 命令输出 `54`
+- **并且** 命令不得创建提案目录或提案文件
 
 ### 场景：下游校验接口继续可用
 

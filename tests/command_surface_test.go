@@ -48,6 +48,7 @@ func TestSimplifiedCommandHelp(t *testing.T) {
 	for _, want := range []string{
 		"list | l [--json]",
 		"install | i [--global | -g]",
+		"create",
 		"status <change> [--json]",
 		"validate <change> [--json]",
 		"archive <change> --yes",
@@ -56,7 +57,7 @@ func TestSimplifiedCommandHelp(t *testing.T) {
 			t.Fatalf("help missing %q:\n%s", want, stdout)
 		}
 	}
-	for _, removed := range []string{"init", "plan", "create", "exec"} {
+	for _, removed := range []string{"init", "plan", "exec"} {
 		if strings.Contains(stdout, removed) {
 			t.Fatalf("help still includes removed command %q:\n%s", removed, stdout)
 		}
@@ -64,7 +65,7 @@ func TestSimplifiedCommandHelp(t *testing.T) {
 }
 
 func TestRemovedStageCommandsFail(t *testing.T) {
-	// TestRemovedStageCommandsFail covers init/create/exec/plan no longer being CLI stages.
+	// TestRemovedStageCommandsFail covers removed stages and keeps create from accepting stage arguments.
 	root := repoRoot(t)
 	for _, args := range [][]string{{"init"}, {"create", "需求"}, {"exec"}, {"plan"}} {
 		stdout, err := runOz(t, root, args...)

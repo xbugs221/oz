@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -20,7 +21,11 @@ import (
 	"github.com/xbugs221/oz/skills"
 )
 
-var version = "dev"
+var (
+	version                = "dev"
+	activeChangeNumberRe   = regexp.MustCompile(`^([1-9][0-9]*)-.+$`)
+	archivedChangeNumberRe = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}-([1-9][0-9]*)-.+$`)
+)
 
 type cli struct {
 	out io.Writer
@@ -61,6 +66,8 @@ func (c *cli) run(args []string) int {
 		err = c.listCmd(args[1:])
 	case "install", "i":
 		err = c.installCmd(args[1:])
+	case "create":
+		err = c.createCmd(args[1:])
 	case "status":
 		err = c.statusCmd(args[1:])
 	case "validate":
@@ -86,6 +93,7 @@ func (c *cli) printHelp() {
 	fmt.Fprintln(c.out, "  install | i [--global | -g]")
 	fmt.Fprintln(c.out, "")
 	fmt.Fprintln(c.out, "自动化接口：")
+	fmt.Fprintln(c.out, "  create")
 	fmt.Fprintln(c.out, "  status <change> [--json]")
 	fmt.Fprintln(c.out, "  validate <change> [--json]")
 	fmt.Fprintln(c.out, "  archive <change> --yes")
@@ -233,6 +241,27 @@ func (c *cli) printInstallHelp() {
 	fmt.Fprintln(c.out, "用法：")
 	fmt.Fprintln(c.out, "  oz install [--global | -g]")
 	fmt.Fprintln(c.out, "  oz i [--global | -g]")
+}
+
+func (c *cli) createCmd(args []string) error {
+	// createCmd reports the next proposal number while agents still create artifacts via skills.
+	if hasHelp(args) {
+		fmt.Fprintln(c.out, "用法：oz create")
+		return nil
+	}
+	if len(args) != 0 {
+		return errors.New("用法：oz create")
+	}
+	root, err := stateRoot()
+	if err != nil {
+		return err
+	}
+	next, err := nextChangeNumber(root)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(c.out, next)
+	return nil
 }
 
 func (c *cli) statusCmd(args []string) error {
@@ -389,6 +418,79 @@ func plannedTestMoves(projectRoot, testsDir, date, change string) ([]testMove, e
 		})
 	}
 	return moves, nil
+}
+
+func nextChangeNumber(root string) (int, error) {
+	// nextChangeNumber scans proposal directory names without requiring agents to print them into context.
+	maxNumber := 0
+	changesDir := filepath.Join(root, "changes")
+	entries, err := os.ReadDir(changesDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return 1, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if entry.Name() == "archive" {
+			archivedMax, err := maxArchivedChangeNumber(filepath.Join(changesDir, entry.Name()))
+			if err != nil {
+				return 0, err
+			}
+			if archivedMax > maxNumber {
+				maxNumber = archivedMax
+			}
+			continue
+		}
+		if number, ok := activeChangeNumber(entry.Name()); ok && number > maxNumber {
+			maxNumber = number
+		}
+	}
+	return maxNumber + 1, nil
+}
+
+func maxArchivedChangeNumber(archiveDir string) (int, error) {
+	// maxArchivedChangeNumber reads dated archive directory names like 2026-05-11-53-需求.
+	entries, err := os.ReadDir(archiveDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	maxNumber := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if number, ok := archivedChangeNumber(entry.Name()); ok && number > maxNumber {
+			maxNumber = number
+		}
+	}
+	return maxNumber, nil
+}
+
+func activeChangeNumber(name string) (int, bool) {
+	// activeChangeNumber extracts the numeric prefix from active change directories.
+	matches := activeChangeNumberRe.FindStringSubmatch(name)
+	if matches == nil {
+		return 0, false
+	}
+	number, err := strconv.Atoi(matches[1])
+	return number, err == nil
+}
+
+func archivedChangeNumber(name string) (int, bool) {
+	// archivedChangeNumber extracts the proposal number from dated archive directories.
+	matches := archivedChangeNumberRe.FindStringSubmatch(name)
+	if matches == nil {
+		return 0, false
+	}
+	number, err := strconv.Atoi(matches[1])
+	return number, err == nil
 }
 
 func statusPayload(root, change string) map[string]any {

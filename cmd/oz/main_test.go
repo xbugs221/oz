@@ -89,6 +89,7 @@ func TestHelpMentionsOzWithoutNodeTooling(t *testing.T) {
 		"list | l [--json]",
 		"install | i [--global | -g]",
 		"自动化接口：",
+		"create",
 		"status <change> [--json]",
 		"validate <change> [--json]",
 		"archive <change> --yes",
@@ -97,7 +98,7 @@ func TestHelpMentionsOzWithoutNodeTooling(t *testing.T) {
 			t.Fatalf("help missing %q:\n%s", want, result.stdout)
 		}
 	}
-	for _, removed := range []string{"Node.js", "pnpm", "npm", "TypeScript", "ox ", "init", "plan", "create", "exec"} {
+	for _, removed := range []string{"Node.js", "pnpm", "npm", "TypeScript", "ox ", "init", "plan", "exec"} {
 		if strings.Contains(result.stdout, removed) {
 			t.Fatalf("help mentions removed tooling %q:\n%s", removed, result.stdout)
 		}
@@ -238,6 +239,7 @@ func TestCommandHelpForDailyAndAutomationCommands(t *testing.T) {
 		{[]string{"l", "-h"}, "oz l [--json]"},
 		{[]string{"install", "--help"}, "oz install [--global | -g]"},
 		{[]string{"i", "-h"}, "oz i [--global | -g]"},
+		{[]string{"create", "--help"}, "用法：oz create"},
 		{[]string{"status", "--help"}, "用法：oz status <change> [--json]"},
 		{[]string{"validate", "--help"}, "用法：oz validate <change> [--json]"},
 		{[]string{"archive", "--help"}, "用法：oz archive <change> --yes"},
@@ -253,10 +255,46 @@ func TestCommandHelpForDailyAndAutomationCommands(t *testing.T) {
 	}
 }
 
+func TestCreateReportsNextProposalNumber(t *testing.T) {
+	// TestCreateReportsNextProposalNumber lets agents avoid listing all historical proposal directories.
+	project := newProject(t)
+	for _, dir := range []string{
+		filepath.Join(project, "docs", "changes", "12-活动提案"),
+		filepath.Join(project, "docs", "changes", "archive", "2026-05-01-53-历史提案"),
+		filepath.Join(project, "docs", "changes", "archive", "2026-05-02-7-旧提案"),
+		filepath.Join(project, "docs", "changes", "archive", "not-a-proposal"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result := runCLI(t, project, "create")
+	if result.code != 0 {
+		t.Fatalf("create failed: %s", result.stderr)
+	}
+	if strings.TrimSpace(result.stdout) != "54" {
+		t.Fatalf("unexpected next number: stdout=%q stderr=%q", result.stdout, result.stderr)
+	}
+	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "54-需求")); !os.IsNotExist(err) {
+		t.Fatalf("create should only report the number, stat err=%v", err)
+	}
+}
+
+func TestCreateRejectsStageArguments(t *testing.T) {
+	// TestCreateRejectsStageArguments keeps proposal file creation in the oz-create skill.
+	result := runCLI(t, newProject(t), "create", "需求")
+	if result.code == 0 {
+		t.Fatalf("create with a title unexpectedly succeeded with stdout:\n%s", result.stdout)
+	}
+	if !strings.Contains(result.stderr, "用法：oz create") {
+		t.Fatalf("unexpected create error: %s", result.stderr)
+	}
+}
+
 func TestRemovedStageCommandsFail(t *testing.T) {
 	// TestRemovedStageCommandsFail ensures agents, not CLI stages, drive proposal work.
 	project := newProject(t)
-	for _, args := range [][]string{{"init"}, {"create", "需求"}, {"exec"}, {"plan"}} {
+	for _, args := range [][]string{{"init"}, {"exec"}, {"plan"}} {
 		result := runCLI(t, project, args...)
 		if result.code == 0 {
 			t.Fatalf("%v unexpectedly succeeded with stdout:\n%s", args, result.stdout)
