@@ -12,7 +12,8 @@ url: https://github.com/xbugs221/oz
 - `design.md`：阐述思路：为实现用户需求，计划采取的方案、取舍和风险
 - `spec.md` 分场景声明系统具备的行为：在特定情况下，系统应表现出什么特征
 - `task.md` 任务拆解：根据计划方案和场景描述，拆解具体任务
-- `tests` 测试集：符合场景声明的契约测试，编码后必须通过；独立工作流可在 acceptance 阶段继续补齐端到端验收测试和运行时证据
+- `acceptance.json` 结构化验收合同：列出必须通过的测试和 QA 必须采集的截图、trace、network、runtime log 等证据
+- `tests` 测试集：符合场景声明的契约测试，编码后必须通过
 
 文件树示意：
 
@@ -27,6 +28,7 @@ docs/changes
 │   ├── design.md
 │   ├── spec.md
 │   ├── task.md
+│   ├── acceptance.json
 │   └── tests/
 └── N+2-需求描述
 ```
@@ -48,7 +50,7 @@ docs/changes
 
 各阶段都对应一个内置 skill ，先运行 `oz install --global` 安装模板；之后和智能体对话时只要提及对应关键词，智能体就能读取模板并学习如何理解 `oz` 工具、提案格式和当前阶段的职责。
 
-创建阶段的目录编号由 CLI 计算：运行 `oz create` 会输出下一个提案数字，例如已有最大编号 `53` 时输出 `54`。这个命令只提供编号，不创建提案文件；智能体继续按 `oz-create` skill 创建 `proposal.md`、`design.md`、`spec.md`、`task.md` 和 `tests/`。
+创建阶段的目录编号由 CLI 计算：运行 `oz create` 会输出下一个提案数字，例如已有最大编号 `53` 时输出 `54`。这个命令只提供编号，不创建提案文件；智能体继续按 `oz-create` skill 创建 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`。
 
 ## 批注
 
