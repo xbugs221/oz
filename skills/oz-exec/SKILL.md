@@ -27,7 +27,7 @@ git log --oneline -- docs/changes/<change>/
 实现时：
 
 - 以当前提案和用户最新意图为准
-- 审查根目录 `tests/` 中与本次变更相关的历史测试
+- 审查 `tests/specs/` 和根目录 `tests/` 中与本次变更相关的历史测试；`tests/specs/` 按业务能力组织，不按提案编号机械分组
 - 如果历史测试与新意图冲突，更新测试代码，并在 `design.md` 或 `task.md` 记录原因
 - 先运行创建阶段写入 `docs/changes/<change>/tests/` 的契约测试；如果功能尚未实现，失败原因应指向目标行为缺失
 - 不得删除、弱化、跳过或改写创建阶段的契约测试或 `acceptance.json` 来让实现过关

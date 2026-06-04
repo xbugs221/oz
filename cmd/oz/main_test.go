@@ -64,7 +64,7 @@ func writeValidChange(t *testing.T, project, change string) {
 	files := map[string]string{
 		"proposal.md": "## 背景\n需要可追溯变更。\n\n## 变更内容\n- 实现 oz。\n",
 		"design.md":   "## 背景\n固定工作流。\n\n## 决策\nCLI 先归档，智能体再合并主规格。\n",
-		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须移动测试文件。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 测试移动到根目录\n",
+		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留\n",
 		"task.md":     "## 1. 实现\n\n- [x] 1.1 完成实现\n",
 	}
 	for name, body := range files {
@@ -401,8 +401,8 @@ func TestValidateRejectsEmptyTestsDirectory(t *testing.T) {
 	}
 }
 
-func TestArchiveMovesTestsWithoutEditingMainSpec(t *testing.T) {
-	// TestArchiveMovesTestsWithoutEditingMainSpec keeps semantic spec merging outside the CLI.
+func TestArchiveKeepsProposalTestsWithoutEditingMainSpec(t *testing.T) {
+	// TestArchiveKeepsProposalTestsWithoutEditingMainSpec keeps semantic spec and test merging outside the CLI.
 	project := newProject(t)
 	writeValidChange(t, project, "2-登录能力")
 	mainSpec := filepath.Join(project, "docs", "specs", "oz-go-cli.md")
@@ -422,11 +422,18 @@ func TestArchiveMovesTestsWithoutEditingMainSpec(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "2-登录能力")); !os.IsNotExist(err) {
 		t.Fatalf("active change still exists or stat failed differently: %v", err)
 	}
-	matches, err := filepath.Glob(filepath.Join(project, "tests", "*-2-登录能力-archive_test.go"))
-	if err != nil || len(matches) != 1 {
-		t.Fatalf("archived test not moved, matches=%v err=%v", matches, err)
+	archivedTest := filepath.Join(project, "docs", "changes", "archive", "2026-05-08-2-登录能力", "tests", "archive_test.go")
+	data, err := os.ReadFile(archivedTest)
+	if err != nil {
+		t.Fatalf("archived proposal test missing: %v", err)
 	}
-	data, err := os.ReadFile(mainSpec)
+	if strings.Contains(string(data), "Source proposal:") {
+		t.Fatalf("CLI should not rewrite proposal tests:\n%s", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(project, "tests", "specs", "2-登录能力", "archive_test.go")); !os.IsNotExist(err) {
+		t.Fatalf("CLI should not mechanically create tests/specs change directory: %v", err)
+	}
+	data, err = os.ReadFile(mainSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,32 +461,29 @@ func TestArchiveRequiresAtLeastOneTestFile(t *testing.T) {
 	}
 }
 
-func TestArchiveStopsOnTestFileConflict(t *testing.T) {
-	// TestArchiveStopsOnTestFileConflict prevents overwriting long-lived root tests.
+func TestArchiveIgnoresExistingSpecTests(t *testing.T) {
+	// TestArchiveIgnoresExistingSpecTests leaves logical test merging to the archive skill.
 	project := newProject(t)
 	writeValidChange(t, project, "2-登录能力")
-	if err := os.MkdirAll(filepath.Join(project, "tests"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(project, "tests", "specs", "oz-go-cli"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	conflict := filepath.Join(project, "tests", "2026-05-08-2-登录能力-archive_test.go")
-	if err := os.WriteFile(conflict, []byte("keep me"), 0o644); err != nil {
+	existing := filepath.Join(project, "tests", "specs", "oz-go-cli", "archive_test.go")
+	if err := os.WriteFile(existing, []byte("keep me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	result := runCLI(t, project, "archive", "2-登录能力", "--yes")
-	if result.code == 0 {
-		t.Fatal("expected archive conflict")
+	if result.code != 0 {
+		t.Fatalf("archive should ignore existing spec tests: %s", result.stderr)
 	}
-	if !strings.Contains(result.stderr, "测试目标已存在") {
-		t.Fatalf("unexpected conflict error: %s", result.stderr)
-	}
-	data, err := os.ReadFile(conflict)
+	data, err := os.ReadFile(existing)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(data) != "keep me" {
-		t.Fatal("archive overwrote conflicting root test")
+		t.Fatal("archive overwrote existing spec test")
 	}
-	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "2-登录能力")); err != nil {
-		t.Fatalf("change should remain active after conflict: %v", err)
+	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "archive", "2026-05-08-2-登录能力")); err != nil {
+		t.Fatalf("change should be archived: %v", err)
 	}
 }

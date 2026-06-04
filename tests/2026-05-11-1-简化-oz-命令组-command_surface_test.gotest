@@ -1,3 +1,0 @@
-// This Go test source is mirrored in ../../../../tests/command_surface_test.go.
-// It is stored with a non-.go extension here because Go import paths cannot
-// contain the Chinese change directory name when running go test ./...

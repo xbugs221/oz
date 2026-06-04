@@ -349,38 +349,11 @@ func (c *cli) archiveCmd(args []string) error {
 		return err
 	}
 	date := c.now().Format("2006-01-02")
-	projectRoot := filepath.Dir(root)
 	changeDir := filepath.Join(root, "changes", change)
-	testsDir := filepath.Join(changeDir, "tests")
-	moves, err := plannedTestMoves(projectRoot, testsDir, date, change)
-	if err != nil {
-		return err
-	}
-	if len(moves) == 0 {
-		return errors.New("归档至少需要一个测试文件")
-	}
 	archiveDir := filepath.Join(root, "changes", "archive", date+"-"+change)
 	if _, err := os.Stat(archiveDir); err == nil {
 		return fmt.Errorf("归档目标已存在：%s", archiveDir)
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	for _, move := range moves {
-		if _, err := os.Stat(move.dst); err == nil {
-			return fmt.Errorf("测试目标已存在：%s", move.dst)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	if err := os.MkdirAll(filepath.Join(projectRoot, "tests"), 0o755); err != nil {
-		return err
-	}
-	for _, move := range moves {
-		if err := os.Rename(move.src, move.dst); err != nil {
-			return err
-		}
-	}
-	if err := os.Remove(testsDir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(archiveDir), 0o755); err != nil {
@@ -391,33 +364,6 @@ func (c *cli) archiveCmd(args []string) error {
 	}
 	fmt.Fprintf(c.out, "已归档到 %s\n", archiveDir)
 	return nil
-}
-
-type testMove struct {
-	src string
-	dst string
-}
-
-func plannedTestMoves(projectRoot, testsDir, date, change string) ([]testMove, error) {
-	// plannedTestMoves builds all test moves before archive mutates the filesystem.
-	entries, err := os.ReadDir(testsDir)
-	if err != nil {
-		return nil, err
-	}
-	moves := []testMove{}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return nil, fmt.Errorf("tests 目录只支持文件：%s", entry.Name())
-		}
-		if !looksLikeTestCode(entry.Name()) {
-			return nil, fmt.Errorf("tests 目录包含非测试文件：%s", entry.Name())
-		}
-		moves = append(moves, testMove{
-			src: filepath.Join(testsDir, entry.Name()),
-			dst: filepath.Join(projectRoot, "tests", date+"-"+change+"-"+entry.Name()),
-		})
-	}
-	return moves, nil
 }
 
 func nextChangeNumber(root string) (int, error) {
