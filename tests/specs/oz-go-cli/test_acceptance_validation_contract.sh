@@ -93,8 +93,75 @@ mv "$change_dir/acceptance.json.bak" "$change_dir/acceptance.json"
 
 cat >"$change_dir/acceptance.json" <<'JSON'
 {
-  "summary": "包含当前 wo 不允许的扩展字段",
-  "coverage": [],
+  "summary": "包含验收矩阵、断言和预期初始失败",
+  "coverage": [
+    {
+      "spec": "需求：统一验收合同 / 场景：合法合同通过",
+      "tests": ["sample-contract"],
+      "evidence": ["validate-json"],
+      "risk": ""
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "sample-contract",
+      "source": "change_contract",
+      "path": "docs/changes/1-统一验收合同/tests/merge_contract_test.sh",
+      "command": "bash docs/changes/1-统一验收合同/tests/merge_contract_test.sh",
+      "purpose": "证明 change 自带契约测试入口被验收合同引用",
+      "assertions": [
+        "acceptance.json 随 change 落盘",
+        "契约测试路径能由命令直接执行"
+      ],
+      "expected_initial_failure": "缺少 acceptance.json 时测试应失败"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "validate-json",
+      "kind": "runtime_log",
+      "path": "test-results/oz-validate-valid.json",
+      "purpose": "记录 oz validate 对当前 wo 格式 acceptance.json 的校验结果"
+    }
+  ]
+}
+JSON
+(cd "$project" && "$oz" validate "$change" --json) >"$tmp/rich.json"
+grep -q '"valid": true' "$tmp/rich.json"
+
+cat >"$change_dir/acceptance.json" <<'JSON'
+{
+  "summary": "coverage 引用未知测试必须失败",
+  "coverage": [
+    {
+      "spec": "需求：统一验收合同 / 场景：合法合同通过",
+      "tests": ["missing-contract"],
+      "evidence": [],
+      "risk": "缺少证据"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "sample-contract",
+      "source": "change_contract",
+      "path": "docs/changes/1-统一验收合同/tests/merge_contract_test.sh",
+      "command": "bash docs/changes/1-统一验收合同/tests/merge_contract_test.sh",
+      "purpose": "证明 change 自带契约测试入口被验收合同引用"
+    }
+  ],
+  "required_evidence": []
+}
+JSON
+if (cd "$project" && "$oz" validate "$change" --json) >"$tmp/bad-ref.json" 2>"$tmp/bad-ref.err"; then
+  echo "oz validate 不应接受 coverage 引用不存在的测试 id" >&2
+  exit 1
+fi
+grep -qi 'missing-contract' "$tmp/bad-ref.err" "$tmp/bad-ref.json"
+
+cat >"$change_dir/acceptance.json" <<'JSON'
+{
+  "summary": "未知字段仍必须失败",
+  "unexpected": true,
   "required_tests": [
     {
       "id": "sample-contract",
@@ -108,9 +175,9 @@ cat >"$change_dir/acceptance.json" <<'JSON'
 }
 JSON
 if (cd "$project" && "$oz" validate "$change" --json) >"$tmp/unknown.json" 2>"$tmp/unknown.err"; then
-  echo "oz validate 不应接受当前 wo schema 不允许的 coverage 字段" >&2
+  echo "oz validate 不应接受真正未知的 acceptance 字段" >&2
   exit 1
 fi
-grep -qi 'coverage\|unknown\|acceptance' "$tmp/unknown.err" "$tmp/unknown.json"
+grep -qi 'unexpected\|unknown\|acceptance' "$tmp/unknown.err" "$tmp/unknown.json"
 
 echo "PASS"

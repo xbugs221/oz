@@ -37,16 +37,21 @@
 - **给定** 一个活动提案包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `wo` 允许的 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令成功并在 artifacts 中返回 `acceptance.json`
-- **并且** `acceptance.json` 只需要包含 `summary`、`required_tests`、`required_evidence` 及其当前 `wo` 已支持的子字段
+- **并且** `acceptance.json` 支持 `coverage`、`required_tests[].assertions` 和 `required_tests[].expected_initial_failure`
+- **并且** `coverage[].tests` 必须引用真实存在的 `required_tests[].id`
+- **并且** `coverage[].evidence` 必须引用真实存在的 `required_evidence[].id`
 
 ### 场景：下游校验接口拒绝无效验收合同
 
 - **给定** 一个活动提案缺少 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令失败并指出 acceptance 合同问题
-- **给定** 一个活动提案的 `acceptance.json` 包含当前 `wo` schema 不允许的字段
+- **给定** 一个活动提案的 `acceptance.json` 包含真正未知的字段
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令失败并指出 schema 或 acceptance 合同问题
+- **给定** 一个活动提案的 `coverage` 引用了不存在的测试或证据 id
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令失败并指出引用错误
 
 ### 场景：下游状态和归档接口继续可用
 

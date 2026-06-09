@@ -13,17 +13,28 @@ import (
 // Contract is the JSON contract produced before implementation starts.
 type Contract struct {
 	Summary          string     `json:"summary"`
+	Coverage         []Coverage `json:"coverage,omitempty"`
 	RequiredTests    []Test     `json:"required_tests"`
 	RequiredEvidence []Evidence `json:"required_evidence"`
 }
 
+// Coverage links spec scenarios to concrete tests and QA evidence.
+type Coverage struct {
+	Spec     string   `json:"spec"`
+	Tests    []string `json:"tests"`
+	Evidence []string `json:"evidence"`
+	Risk     string   `json:"risk"`
+}
+
 // Test records one executable test command that later stages must pass.
 type Test struct {
-	ID      string `json:"id"`
-	Source  string `json:"source"`
-	Path    string `json:"path"`
-	Command string `json:"command"`
-	Purpose string `json:"purpose"`
+	ID                     string   `json:"id"`
+	Source                 string   `json:"source"`
+	Path                   string   `json:"path"`
+	Command                string   `json:"command"`
+	Purpose                string   `json:"purpose"`
+	Assertions             []string `json:"assertions,omitempty"`
+	ExpectedInitialFailure string   `json:"expected_initial_failure,omitempty"`
 }
 
 // Evidence records one runtime artifact that QA must collect.
@@ -84,6 +95,11 @@ func Validate(contract Contract) error {
 		if testIDs[test.ID] {
 			return fmt.Errorf("required_tests[%d].id 重复：%q", i, test.ID)
 		}
+		for j, assertion := range test.Assertions {
+			if strings.TrimSpace(assertion) == "" {
+				return fmt.Errorf("required_tests[%d].assertions[%d] 不能为空", i, j)
+			}
+		}
 		testIDs[test.ID] = true
 	}
 	evidenceIDs := map[string]bool{}
@@ -98,6 +114,33 @@ func Validate(contract Contract) error {
 			return fmt.Errorf("required_evidence[%d].id 重复：%q", i, evidence.ID)
 		}
 		evidenceIDs[evidence.ID] = true
+	}
+	for i, coverage := range contract.Coverage {
+		if strings.TrimSpace(coverage.Spec) == "" {
+			return fmt.Errorf("coverage[%d].spec 不能为空", i)
+		}
+		if len(coverage.Tests) == 0 {
+			return fmt.Errorf("coverage[%d].tests 至少引用一个 required_tests id", i)
+		}
+		for j, id := range coverage.Tests {
+			if strings.TrimSpace(id) == "" {
+				return fmt.Errorf("coverage[%d].tests[%d] 不能为空", i, j)
+			}
+			if !testIDs[id] {
+				return fmt.Errorf("coverage[%d].tests[%d] 引用未知 required_tests id：%q", i, j, id)
+			}
+		}
+		for j, id := range coverage.Evidence {
+			if strings.TrimSpace(id) == "" {
+				return fmt.Errorf("coverage[%d].evidence[%d] 不能为空", i, j)
+			}
+			if !evidenceIDs[id] {
+				return fmt.Errorf("coverage[%d].evidence[%d] 引用未知 required_evidence id：%q", i, j, id)
+			}
+		}
+		if len(coverage.Evidence) == 0 && strings.TrimSpace(coverage.Risk) == "" {
+			return fmt.Errorf("coverage[%d].risk 必须说明无证据覆盖的剩余风险", i)
+		}
 	}
 	return nil
 }

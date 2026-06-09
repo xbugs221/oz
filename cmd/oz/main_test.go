@@ -378,8 +378,62 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
 		t.Fatalf("missing acceptance diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
 	}
 	body := `{
+  "summary": "验收矩阵必须能引用真实测试和证据",
+  "coverage": [
+    {
+      "spec": "需求：归档测试 / 场景：归档包含测试",
+      "tests": ["archive-test"],
+      "evidence": ["archive-log"],
+      "risk": ""
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "archive-test",
+      "source": "change_contract",
+      "path": "x",
+      "command": "go test ./...",
+      "purpose": "覆盖契约",
+      "assertions": ["归档后测试文件仍保留"],
+      "expected_initial_failure": "未实现归档时测试文件缺失"
+    }
+  ],
+  "required_evidence": [
+    {"id": "archive-log", "kind": "runtime_log", "path": "test-results/archive.log", "purpose": "记录测试结果"}
+  ]
+}
+`
+	if err := os.WriteFile(acceptancePath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code != 0 {
+		t.Fatalf("expected coverage acceptance to pass:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+	body = `{
+  "summary": "验收矩阵引用未知测试必须失败",
+  "coverage": [
+    {"spec": "需求：归档测试 / 场景：归档包含测试", "tests": ["missing-test"], "evidence": [], "risk": "缺少证据"}
+  ],
+  "required_tests": [
+    {"id": "archive-test", "source": "change_contract", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
+  ],
+  "required_evidence": []
+}
+`
+	if err := os.WriteFile(acceptancePath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected unknown coverage test reference to fail")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "missing-test") {
+		t.Fatalf("missing coverage reference diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+	body = `{
   "summary": "未知字段必须失败",
-  "coverage": [],
+  "unexpected": true,
   "required_tests": [
     {"id": "archive-test", "source": "change_contract", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
   ],
@@ -393,7 +447,7 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
 	if result.code == 0 {
 		t.Fatal("expected unknown acceptance field to fail")
 	}
-	if !strings.Contains(result.stdout+result.stderr, "coverage") {
+	if !strings.Contains(result.stdout+result.stderr, "unexpected") {
 		t.Fatalf("missing unknown field diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
 	}
 	body = `{
