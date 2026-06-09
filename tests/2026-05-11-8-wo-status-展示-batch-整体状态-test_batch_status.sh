@@ -93,7 +93,7 @@ echo "=== wo status output ==="
 echo "$OUTPUT"
 
 # Assertions
-for want in "批量任务 b1 running 2/3" "- 1-a" "- 2-b" "- 3-c"; do
+for want in "→ b1 2/3" "- 1-a" "- 2-b" "- 3-c"; do
     if ! echo "$OUTPUT" | grep -qF -- "$want"; then
         echo "FAIL: missing '$want'"
         exit 1
@@ -101,11 +101,11 @@ for want in "批量任务 b1 running 2/3" "- 1-a" "- 2-b" "- 3-c"; do
 done
 
 # Check every created run stage detail is indented
-if ! echo "$OUTPUT" | grep -q "  - 写 工作流开始之前就已完成 ✓"; then
+if ! echo "$OUTPUT" | grep -q "  执行阶段 - ✓ -"; then
     echo "FAIL: missing completed run stage detail"
     exit 1
 fi
-if ! echo "$OUTPUT" | grep -q "  - 写 exec-thread ✓"; then
+if ! echo "$OUTPUT" | grep -q "  执行阶段 exec-thread ✓ -"; then
     echo "FAIL: missing indented stage detail"
     exit 1
 fi

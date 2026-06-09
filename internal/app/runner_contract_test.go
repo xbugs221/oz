@@ -127,7 +127,7 @@ func TestRunHumanStatusPrintsNewestChecklist(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"- 写 executor-thread ✓", "- 审 reviewer-thread →"} {
+	for _, want := range []string{"执行阶段 executor-thread ✓ -", "审核阶段 reviewer-thread → -"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status missing %q:\n%s", want, got)
 		}
@@ -163,12 +163,12 @@ func TestRunHumanStatusMarksBlockedReviewLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"blocked_review_limit", " x ", "审核修正达到上限"} {
+	for _, want := range []string{"审核阶段 reviewer-thread x -"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "→") {
+	if strings.Contains(got, " → -") {
 		t.Fatalf("blocked status must not look running:\n%s", got)
 	}
 
@@ -219,10 +219,10 @@ func TestRunHumanStatusUsesNewestRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	if strings.Contains(got, "old-executor") || strings.Contains(got, "- 审 new-reviewer →") {
+	if strings.Contains(got, "old-executor") || strings.Contains(got, "审核阶段 new-reviewer → -") {
 		t.Fatalf("status used stale unfinished run:\n%s", got)
 	}
-	for _, want := range []string{"- 写 new-executor ✓", "- 审 new-reviewer ✓", "- 存 new-archiver ✓"} {
+	for _, want := range []string{"执行阶段 new-executor ✓ -", "审核阶段 new-reviewer ✓ -", "归档阶段 new-archiver ✓ -"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status missing newest run line %q:\n%s", want, got)
 		}

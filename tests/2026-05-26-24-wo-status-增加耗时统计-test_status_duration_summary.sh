@@ -197,41 +197,41 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status -w1 > status-w1.txt
-grep -qF -- "- 耗时 300分钟=100+120+80" status-w1.txt
-grep -qF -- "  - 写 execution 100分钟" status-w1.txt
-grep -qF -- "  - 审 review_1 120分钟" status-w1.txt
-grep -qF -- "  - 存 archive 80分钟" status-w1.txt
+grep -qF -- "执行阶段 executor-thread ✓ 100.00" status-w1.txt
+grep -qF -- "审核阶段 reviewer-thread ✓ 120.00" status-w1.txt
+grep -qF -- "归档阶段 archiver-thread ✓ 80.00" status-w1.txt
+! grep -qF -- "耗时" status-w1.txt
+! grep -qF -- "分钟" status-w1.txt
 
 python3 - <<'PY'
 from pathlib import Path
 
 lines = Path("status-w1.txt").read_text(encoding="utf-8").splitlines()
-total = next(i for i, line in enumerate(lines) if "耗时 300分钟=100+120+80" in line)
-detail = next(i for i, line in enumerate(lines) if "写 execution 100分钟" in line)
-if not total < detail:
-    raise SystemExit("duration total must appear before details")
+execution = next(i for i, line in enumerate(lines) if "执行阶段 executor-thread ✓ 100.00" in line)
+review = next(i for i, line in enumerate(lines) if "审核阶段 reviewer-thread ✓ 120.00" in line)
+archive = next(i for i, line in enumerate(lines) if "归档阶段 archiver-thread ✓ 80.00" in line)
+if not execution < review < archive:
+    raise SystemExit("duration columns must stay in stage order")
 PY
 
 "$WO" status -w2 > status-w2.txt
-grep -qF -- "- 耗时 2.75分钟=1.5+1.25" status-w2.txt
-grep -qF -- "  - 写 execution 1.5分钟" status-w2.txt
-grep -qF -- "  - 存 archive 1.25分钟" status-w2.txt
-! grep -qF -- "  - 审 review_1" status-w2.txt
+grep -qF -- "执行阶段 executor-thread ✓ 1.50" status-w2.txt
+grep -qF -- "归档阶段 archiver-thread ✓ 1.25" status-w2.txt
+grep -qF -- "审核阶段 reviewer-thread ✓ -" status-w2.txt
 
 "$WO" status -w3 > status-w3.txt
-grep -qF -- "- 耗时 21分钟=1+6+8+6" status-w3.txt
-grep -qF -- "  - 审 review 6分钟" status-w3.txt
-grep -qF -- "  - 修 fix 8分钟" status-w3.txt
-! grep -qF -- "  - 审 review_1" status-w3.txt
-! grep -qF -- "  - 审 review_2" status-w3.txt
-! grep -qF -- "  - 修 fix_1" status-w3.txt
-! grep -qF -- "  - 修 fix_2" status-w3.txt
+grep -qF -- "审核阶段 reviewer-thread ✓✓ 6.00" status-w3.txt
+grep -qF -- "修正阶段 fixer-thread ✓✓ 8.00" status-w3.txt
+! grep -qF -- "review_1" status-w3.txt
+! grep -qF -- "review_2" status-w3.txt
+! grep -qF -- "fix_1" status-w3.txt
+! grep -qF -- "fix_2" status-w3.txt
 
 "$WO" status > status-batch.txt
-grep -qF "批量任务 b1 running 1/2" status-batch.txt
+grep -qF "→ b1 1/2" status-batch.txt
 grep -qF -- "- 1-演示统计" status-batch.txt
-grep -qF -- "  - 耗时 300分钟=100+120+80" status-batch.txt
-grep -qF -- "    - 写 execution 100分钟" status-batch.txt
+grep -qF -- "  执行阶段 executor-thread ✓ 100.00" status-batch.txt
+grep -qF -- "  审核阶段 reviewer-thread ✓ 120.00" status-batch.txt
 grep -qF -- "- 3-尚未开始" status-batch.txt
 
 python3 - <<'PY'
@@ -239,8 +239,8 @@ from pathlib import Path
 
 lines = Path("status-batch.txt").read_text(encoding="utf-8").splitlines()
 unstarted = next(i for i, line in enumerate(lines) if line == "- 3-尚未开始")
-if any("耗时" in line for line in lines[unstarted + 1:]):
-    raise SystemExit("unstarted change must not have duration lines")
+if any("阶段" in line for line in lines[unstarted + 1:]):
+    raise SystemExit("unstarted change must not have stage lines")
 PY
 
 "$WO" status --run-id 20260525T040000.000000000Z --json > status.json

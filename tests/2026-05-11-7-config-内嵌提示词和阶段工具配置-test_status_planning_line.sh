@@ -29,7 +29,7 @@ wo:
   workflow:
     max_review_iterations: 0
   prompts:
-    writing: |
+    execution: |
       execution
       state={{.StatePath}}
     archive: |
@@ -80,7 +80,7 @@ cat >"$RUN_DIR/state.json" <<'JSON'
   "baseline_head": "HEAD",
   "baseline_diff": "",
   "sessions": {},
-  "stages": {},
+  "stages": {"planning": "completed"},
   "paths": {},
   "workflow_config": {
     "max_review_iterations": 0,
@@ -95,5 +95,5 @@ cat >"$RUN_DIR/state.json" <<'JSON'
 JSON
 
 STATUS=$(cd "$REPO" && "$WO" status)
-printf '%s\n' "$STATUS" | grep -q -- "- 规 工作流开始之前就已完成 ✓"
-printf '%s\n' "$STATUS" | grep -q -- "- 写"
+printf '%s\n' "$STATUS" | grep -q -- "规划阶段 - ✓ -"
+printf '%s\n' "$STATUS" | grep -q -- "执行阶段"

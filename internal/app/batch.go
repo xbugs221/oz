@@ -495,7 +495,7 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 	if batchAlias == "" {
 		batchAlias = batch.BatchID
 	}
-	lines = append(lines, fmt.Sprintf("批量任务 %s %s %d/%d", batchAlias, batch.Status, currentPos, len(batch.Changes)))
+	lines = append(lines, fmt.Sprintf("→ %s %d/%d", batchAlias, currentPos, len(batch.Changes)))
 	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
 		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
 	}
@@ -505,11 +505,9 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 		lines = append(lines, fmt.Sprintf("- %s", changeName))
 		if runID != "" {
 			if state, err := loadState(repo, runID); err == nil {
-				runtime := map[string]stageRuntime{}
-				if state.Status == statusRunning && state.Stage != "" {
-					runtime[state.Stage] = stageRuntime{}
-				}
-				for _, line := range stageChecklistLinesWithParallel(repo, state, runtime) {
+				runRefs, _ := ListRunRefs(repo)
+				runAlias := RunAliasForID(runRefs, runID)
+				for _, line := range compactStatusLines(buildStatusView(repo, state, runAlias, "→")) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
 			}

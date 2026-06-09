@@ -1,0 +1,83 @@
+{
+  "summary": "验证 wo status/watch 统一为极简固定列状态视图，并让 status --run-id --json 新增阶段与子代理产物路径，同时保留旧 runner 顶层字段。",
+  "coverage": [
+    {
+      "spec": "需求：极简 workflow human 输出 / 场景：单 workflow status/watch 使用同一套固定列视图",
+      "tests": ["status-watch-compact-output-contract"],
+      "evidence": ["status-watch-compact-output-log"],
+      "risk": "不验证真实 TTY 原地刷新，只验证 watch 每帧内容合同。"
+    },
+    {
+      "spec": "需求：batch 组合 workflow 视图 / 场景：batch 外层只包装多个极简 workflow 视图",
+      "tests": ["status-watch-compact-output-contract"],
+      "evidence": ["status-watch-compact-output-log"],
+      "risk": "failed batch 恢复提示沿用既有失败摘要测试，本提案只覆盖 running batch 的组合样式。"
+    },
+    {
+      "spec": "需求：JSON 可观测产物路径 / 场景：JSON rows 给出阶段和子代理固定产物路径",
+      "tests": ["status-json-observability-artifacts-contract"],
+      "evidence": ["status-json-observability-artifacts-log"],
+      "risk": "契约测试覆盖 implementation context 子代理，review/QA 子代理需由执行阶段补充邻近单元测试。"
+    },
+    {
+      "spec": "需求：JSON 兼容旧 runner 字段 / 场景：新增 observability 时保留既有 runner 顶层字段",
+      "tests": ["status-json-observability-artifacts-contract", "go-test-internal-app-regression"],
+      "evidence": ["status-json-observability-artifacts-log"],
+      "risk": "历史测试里禁止新增 parallel/members 字段的旧意图需要同步更新为允许 observability。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "status-watch-compact-output-contract",
+      "source": "change_contract",
+      "path": "docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh",
+      "command": "bash docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh",
+      "purpose": "证明 wo status/watch 使用统一极简固定列视图，subagent 缩进短名展示，batch 只组合多个 workflow 视图。",
+      "assertions": [
+        "status 第一行是静态 indicator 加 workflow 短编号，而不是旧的工作流标题或 engine 行",
+        "主阶段和 subagent 行都是固定四列，耗时为两位小数分钟且不写单位",
+        "batch watch 第一行只显示 indicator、batch 短编号和队列进度，已创建 run 内嵌同一套 workflow 视图"
+      ],
+      "expected_initial_failure": "当前实现仍输出工作流/批量任务标题、引擎行、并行 group 汇总和总耗时行，应失败于目标输出合同缺失。"
+    },
+    {
+      "id": "status-json-observability-artifacts-contract",
+      "source": "change_contract",
+      "path": "docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh",
+      "command": "bash docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh",
+      "purpose": "证明 wo status --run-id --json 在保留旧 runner 字段的同时，新增可供下游工具定位阶段和 subagent 产物的 observability 结构。",
+      "assertions": [
+        "JSON 保留 run_id、change_name、status、stage、stages、paths、sessions、error 顶层字段",
+        "observability.rows 为执行、审核、测试、归档阶段给出固定产物路径",
+        "subagent row 给出短名、完整名称、会话 id、member artifact 和 fan-in group artifact 绝对路径"
+      ],
+      "expected_initial_failure": "当前 JSON runner DTO 没有 observability 字段，应失败于新增机器可观测合同缺失。"
+    },
+    {
+      "id": "go-test-internal-app-regression",
+      "source": "existing_regression",
+      "path": "internal/app",
+      "command": "go test ./internal/app",
+      "purpose": "证明状态视图改造没有破坏 internal/app 既有工作流、batch、restart、parallel 和 runner 回归行为。",
+      "assertions": [
+        "internal/app 现有 Go 回归测试全部通过",
+        "受新输出合同影响的旧断言按本提案新意图更新，而不是删除业务覆盖"
+      ],
+      "expected_initial_failure": "执行前可能因旧 status/watch 输出断言与新合同冲突失败，执行阶段需同步更新。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "status-watch-compact-output-log",
+      "kind": "runtime_log",
+      "path": "test-results/7-status-watch-compact-output/status-watch-compact-output.log",
+      "purpose": "记录 compact human 输出契约测试的 status/watch/batch 实际输出和失败点。"
+    },
+    {
+      "id": "status-json-observability-artifacts-log",
+      "kind": "runtime_log",
+      "path": "test-results/7-status-watch-compact-output/status-json-observability-artifacts.log",
+      "purpose": "记录 JSON observability 契约测试的 status --run-id --json 输出和路径断言。"
+    }
+  ]
+}

@@ -153,10 +153,10 @@ run_backend_case() {
 wo:
   workflow:
     max_review_iterations: 3
+    parallel:
+      enabled: false
     stages:
-      writing:
-        cli: $tool
-      acceptance:
+      execution:
         cli: $tool
       review:
         cli: $tool
@@ -167,9 +167,6 @@ wo:
       archive:
         cli: $tool
   prompts:
-    acceptance: |
-      {{.Stage}}
-      {{.AcceptancePath}}
     execution: |
       {{.Stage}}
       {{.ReviewPath}}
@@ -203,8 +200,8 @@ YAML
   ! grep -q "\"$tool:executor\": \"$tool-fixer\"" "$state"
   grep -q "^$tool-fixer$" "$work/$tool-resume.log"
   PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" status -w1 > status.txt
-  grep -q -- "- 修 $tool-fixer ✓✓" status.txt
-  ! grep -q -- "- 修 未知" status.txt
+  grep -q -- "修正阶段 $tool-fixer ✓✓" status.txt
+  ! grep -q -- "修正阶段 未知" status.txt
 }
 
 run_legacy_case() {
@@ -250,8 +247,8 @@ run_legacy_case() {
 }
 JSON
   HOME="$home" XDG_STATE_HOME="$state_home" "$bin" status -w1 > legacy-status.txt
-  grep -q -- "- 修 未知 ✓" legacy-status.txt
-  ! grep -q -- "- 修 executor-thread" legacy-status.txt
+  grep -q -- "修正阶段 - ✓" legacy-status.txt
+  ! grep -q -- "修正阶段 executor-thread" legacy-status.txt
 }
 
 run_backend_case codex

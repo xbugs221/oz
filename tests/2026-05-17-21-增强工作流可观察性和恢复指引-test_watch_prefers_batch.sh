@@ -84,11 +84,12 @@ go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 # Use timeout to capture the initial frame.
 timeout -s INT 2s "$WO" watch > watch_output.txt 2>&1 || true
 
-# Watch should show batch content, not single-run.
-grep -qF "批量任务 b1 running" watch_output.txt
+# Watch should show compact batch content, not single-run.
+grep -qF "| b1 1/2" watch_output.txt
 
 # Only one frame expected in non-TTY (might get 2-3 frames from ticker).
 # Verify it's showing batch not single-run in the first line.
-head -1 watch_output.txt | grep -qF "批量任务"
+head -1 watch_output.txt | grep -qF "| b1 1/2"
+! grep -qF "工作流 w1 running" watch_output.txt
 
 echo "PASS"

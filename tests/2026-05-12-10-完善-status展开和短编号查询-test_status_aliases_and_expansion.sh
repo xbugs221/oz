@@ -77,17 +77,17 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status-default.txt
-grep -qF "批量任务 b1 running 2/3" status-default.txt
+grep -qF "→ b1 2/3" status-default.txt
 grep -qF -- "- 1-a" status-default.txt
 grep -qF -- "- 2-b" status-default.txt
 grep -qF -- "- 3-c" status-default.txt
-grep -qF "  - 写 exec-a ✓" status-default.txt
-grep -qF "  - 审 review-b →" status-default.txt
+grep -qF "  执行阶段 exec-a ✓ -" status-default.txt
+grep -qF "  审核阶段 review-b → -" status-default.txt
 
 line_run1=$(grep -nF -- "- 1-a" status-default.txt | cut -d: -f1)
-line_run1_stage=$(grep -nF "  - 写 exec-a ✓" status-default.txt | cut -d: -f1)
+line_run1_stage=$(grep -nF "  执行阶段 exec-a ✓ -" status-default.txt | cut -d: -f1)
 line_run2=$(grep -nF -- "- 2-b" status-default.txt | cut -d: -f1)
-line_run2_stage=$(grep -nF "  - 审 review-b →" status-default.txt | cut -d: -f1)
+line_run2_stage=$(grep -nF "  审核阶段 review-b → -" status-default.txt | cut -d: -f1)
 line_unstarted=$(grep -nF -- "- 3-c" status-default.txt | cut -d: -f1)
 test "$line_run1" -lt "$line_run1_stage"
 test "$line_run1_stage" -lt "$line_run2"
@@ -95,10 +95,10 @@ test "$line_run2" -lt "$line_run2_stage"
 test "$line_run2_stage" -lt "$line_unstarted"
 
 "$WO" status -b2 > status-b2.txt
-grep -qF "批量任务 b2 done 1/1" status-b2.txt
+grep -qF "→ b2 1/1" status-b2.txt
 
 "$WO" status -w2 > status-w2.txt
-grep -qF "写 exec-a ✓" status-w2.txt
+grep -qF "执行阶段 exec-a ✓ -" status-w2.txt
 ! grep -qF "批量任务" status-w2.txt
 
 if "$WO" status -b99 >"$TMPDIR/wo-b99.out" 2>"$TMPDIR/wo-b99.err"; then

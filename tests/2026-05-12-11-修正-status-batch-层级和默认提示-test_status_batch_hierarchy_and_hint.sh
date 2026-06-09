@@ -72,15 +72,15 @@ go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status-default.txt
 head -n 1 status-default.txt | grep -qF "正在查看 repo 最近一次批量工作流，如需查看普通工作流，请使用 wo status -w1"
-grep -qF "批量任务 b1 running 2/3" status-default.txt
+grep -qF "→ b1 2/3" status-default.txt
 grep -qF -- "- 1-a" status-default.txt
 grep -qF -- "- 2-b" status-default.txt
 grep -qF -- "- 3-c" status-default.txt
 
 line_run1=$(grep -nF -- "- 1-a" status-default.txt | cut -d: -f1)
-line_run1_stage=$(grep -nF "  - 写 exec-a ✓" status-default.txt | cut -d: -f1)
+line_run1_stage=$(grep -nF "  执行阶段 exec-a ✓ -" status-default.txt | cut -d: -f1)
 line_run2=$(grep -nF -- "- 2-b" status-default.txt | cut -d: -f1)
-line_run2_stage=$(grep -nF "  - 审 review-b →" status-default.txt | cut -d: -f1)
+line_run2_stage=$(grep -nF "  审核阶段 review-b → -" status-default.txt | cut -d: -f1)
 line_unstarted=$(grep -nF -- "- 3-c" status-default.txt | cut -d: -f1)
 
 test "$line_run1" -lt "$line_run1_stage"
@@ -92,9 +92,11 @@ tail -n +"$line_unstarted" status-default.txt | grep -qF -- "- 3-c"
 ! tail -n +"$line_unstarted" status-default.txt | grep -qF "  - 审"
 ! tail -n +"$line_unstarted" status-default.txt | grep -qF "  - 存"
 ! tail -n +"$line_unstarted" status-default.txt | grep -qF "  - 规"
+! tail -n +"$line_unstarted" status-default.txt | grep -qF "  执行阶段"
+! tail -n +"$line_unstarted" status-default.txt | grep -qF "  审核阶段"
 
 "$WO" status -w1 > status-w1.txt
-grep -qF "写 exec-b ✓" status-w1.txt
+grep -qF "执行阶段 exec-b ✓ -" status-w1.txt
 ! grep -qF "最近一次批量工作流" status-w1.txt
 ! grep -qF "批量任务" status-w1.txt
 

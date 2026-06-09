@@ -22,14 +22,15 @@ var runnerCapabilities = []string{"list-changes", "run", "resume", "restart", "s
 
 // RunnerState is the JSON DTO consumed by workflow runners.
 type RunnerState struct {
-	RunID      string            `json:"run_id"`
-	ChangeName string            `json:"change_name"`
-	Status     string            `json:"status"`
-	Stage      string            `json:"stage"`
-	Stages     map[string]string `json:"stages"`
-	Paths      map[string]string `json:"paths"`
-	Sessions   map[string]string `json:"sessions"`
-	Error      string            `json:"error"`
+	RunID         string            `json:"run_id"`
+	ChangeName    string            `json:"change_name"`
+	Status        string            `json:"status"`
+	Stage         string            `json:"stage"`
+	Stages        map[string]string `json:"stages"`
+	Paths         map[string]string `json:"paths"`
+	Sessions      map[string]string `json:"sessions"`
+	Error         string            `json:"error"`
+	Observability *statusView       `json:"observability,omitempty"`
 }
 
 // runnerContract is the capability discovery payload for wo.
@@ -64,6 +65,14 @@ func runnerStateFromState(state State) RunnerState {
 		Sessions:   state.Sessions,
 		Error:      state.Error,
 	}
+}
+
+// runnerStateFromStatusView keeps the legacy runner fields and attaches compact observability.
+func runnerStateFromStatusView(repo string, state State, displayID string) RunnerState {
+	dto := runnerStateFromState(state)
+	view := buildStatusView(repo, state, displayID, "")
+	dto.Observability = &view
+	return dto
 }
 
 // normalizeStateMaps ensures JSON maps are encoded as empty objects, not null.

@@ -1162,99 +1162,91 @@
 - **且** 后续刷新必须能切换 spinner 帧
 - **且** `wo status` 的普通输出仍可继续使用静态 running 标记
 
-### 需求：人类 run status 会话进度
+### 需求：人类 run status 极简固定列视图
 
-系统必须支持用户通过 `wo status` 查看按会话角色聚合的进度，而不是内部 workflow stage 列表。
+系统必须支持用户通过 `wo status` 和 `wo watch` 查看同一套极简固定列进度视图，而不是内部 workflow stage 列表、标题摘要或 engine 诊断行。
 
 #### 场景：查询人类状态
 
-- **给定** 当前 run 已完成 execution、review_1、fix_1 和 review_2
-- **当** 调用 `wo status`
-- **则** stdout 包含 `规` 行
-- **且** 规划会话 id 缺失时 `规` 行显示 `未知`
-- **且** stdout 包含 `写` 行
-- **且** `写` 行显示 executor session id
-- **且** `写` 行尾部包含一个 `✓`，代表 execution
-- **且** stdout 包含 `审` 行
-- **且** `审` 行显示 reviewer session id
-- **且** `审` 行尾部包含两个 `✓`，分别代表 review_1 和 review_2
-- **且** stdout 包含 `修` 行
-- **且** `修` 行尾部包含一个 `✓`，代表 fix_1
+- **给定** 当前 run 已完成 planning，正在 execution，且配置了 implementation context 子代理
+- **当** 调用 `wo status -w1`
+- **则** stdout 第一行必须是静态 indicator 和 workflow 短编号，例如 `→ w1`
+- **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `规划阶段 planner-session ✓ 2.00` 和 `执行阶段 writer-session → 6.50`
+- **且** 子代理行必须缩进两个空格并使用用户可读短名，例如 `  代码侦察 explore-session ✓ 1.50`
+- **且** marker 只使用 `-`、`→`、`✓` 或 `x`
+- **且** 耗时必须格式化为两位小数分钟，不追加单位
+- **且** 输出不得包含 `工作流`、状态英文单词、change name、`引擎`、并行 group 汇总行或总耗时行
 
 #### 场景：规划会话可见
 
 - **给定** 当前 run 的 sessions 中记录了 planning 会话 id
-- **当** 调用 `wo status`
-- **则** stdout 包含 `规` 行
-- **且** `规` 行显示 planning 会话 id
-- **且** `规` 行排在 `写`、`审`、`修`、`存` 之前
+- **当** 调用 `wo status -w1`
+- **则** stdout 包含 `规划阶段` 行
+- **且** `规划阶段` 行显示 planning 会话 id
+- **且** `规划阶段` 行排在执行、审核、修正、测试和归档阶段之前
 
 #### 场景：归档会话独立展示
 
 - **给定** 当前 run 已进入 archive 阶段
-- **当** 调用 `wo status`
-- **则** stdout 包含 `存` 行
-- **且** `存` 行显示 archiver session id
-- **且** `存` 行不得复用 executor session id
+- **当** 调用 `wo status -w1`
+- **则** stdout 包含 `归档阶段` 行
+- **且** `归档阶段` 行显示 archiver session id
+- **且** `归档阶段` 行不得复用 executor session id
 
 #### 场景：当前正在修复
 
 - **给定** run 当前 stage 为 `fix_2`
 - **且** execution 和 fix_1 已完成
-- **当** 调用 `wo status`
-- **则** `写` 行显示 executor session id
-- **且** `写` 行显示一个 `✓`
-- **且** `修` 行显示 fixer session id
-- **且** `修` 行显示一个 `✓`
-- **且** `修` 行显示 `→`
-- **且** `写` 行不得显示 `→`
-- **且** `审` 行不得显示 `→`
+- **当** 调用 `wo status -w1`
+- **则** `执行阶段` 行显示 executor session id 和 `✓`
+- **且** `修正阶段` 行显示 fixer session id 和 `→`
+- **且** `执行阶段` 行不得显示 `→`
+- **且** `审核阶段` 行不得显示 `→`
 
 #### 场景：多轮修复只展示一条 fixer 行
 
 - **给定** run 已完成 `fix_1` 和 `fix_2`
 - **且** `state.json.sessions` 存在 `<tool>:fixer`
-- **当** 调用 `wo status`
-- **则** stdout 必须只包含一条 `修` 角色行
-- **且** `修` 行显示 `<tool>:fixer` 对应 session id
-- **且** `修` 行尾部包含两个 `✓`
+- **当** 调用 `wo status -w1`
+- **则** stdout 必须只包含一条聚合后的 `修正阶段` 行
+- **且** `修正阶段` 行显示 `<tool>:fixer` 对应 session id
+- **且** `修正阶段` 行显示 `✓`
 
 #### 场景：历史修复缺少 fixer session
 
 - **给定** 历史 run 的 stages 包含已完成的 `fix_1`
 - **且** `state.json.sessions` 没有任何 `<tool>:fixer`
 - **且** `state.json.sessions` 存在 `<tool>:executor`
-- **当** 调用 `wo status`
-- **则** `修` 行必须显示 `未知`
-- **且** `修` 行不得展示 executor session id
+- **当** 调用 `wo status -w1`
+- **则** `修正阶段` 行必须显示 `未知`
+- **且** `修正阶段` 行不得展示 executor session id
 
 #### 场景：当前正在审核
 
 - **给定** run 当前 stage 为 `review_3`
 - **且** review_1 和 review_2 已完成
-- **当** 调用 `wo status`
-- **则** `审` 行显示 reviewer session id
-- **且** `审` 行显示两个 `✓`
-- **且** `审` 行显示 `→`
-- **且** `写` 行不得显示 `→`
-- **且** `修` 行不得显示 `→`
+- **当** 调用 `wo status -w1`
+- **则** `审核阶段` 行显示 reviewer session id
+- **且** `审核阶段` 行显示 `→`
+- **且** `执行阶段` 行不得显示 `→`
+- **且** `修正阶段` 行不得显示 `→`
 
 #### 场景：已发生阶段缺少会话 id
 
 - **给定** run id 为 `20260512T051106.925886354Z`
 - **且** run 已进入或完成 execution 阶段
 - **且** run 状态中没有 executor session id
-- **当** 调用 `wo status`
-- **则** `写` 行必须显示 `未知`
-- **且** `写` 行不得包含 run id `20260512T051106.925886354Z`
+- **当** 调用 `wo status -w1`
+- **则** `执行阶段` 行必须显示 `未知`
+- **且** `执行阶段` 行不得包含 run id `20260512T051106.925886354Z`
 
 #### 场景：归档完成
 
 - **给定** run 已完成 archive 阶段
-- **当** 调用 `wo status`
-- **则** stdout 包含 `存` 行
-- **且** `存` 行显示 archiver session id
-- **且** `存` 行尾部包含一个 `✓`
+- **当** 调用 `wo status -w1`
+- **则** stdout 包含 `归档阶段` 行
+- **且** `归档阶段` 行显示 archiver session id
+- **且** `归档阶段` 行显示 `✓`
 
 ### 需求：status 默认目标和短编号
 
@@ -1264,9 +1256,7 @@
 
 - **给定** 当前仓库存在 batch state
 - **当** 用户运行 `wo status`
-- **则** stdout 第一行必须提示正在查看当前项目最近一次批量工作流
-- **且** 第一行必须提示可使用 `wo status -w1` 查看普通 workflow
-- **且** 输出必须包含 `批量任务 b1`
+- **则** stdout 第一行必须显示 indicator、batch 短编号和队列进度，例如 `→ b1 1/2`
 - **且** batch 标题行不得包含最新 batch 的真实 batch id
 
 #### 场景：查询历史 batch 或 workflow
@@ -1287,7 +1277,7 @@
 
 ### 需求：batch 状态人类输出
 
-系统必须在 `wo status` 的人类可读输出中展示 batch 级别的整体状态，让用户能看到队列总进度和每个 change，并展开 batch 内所有已创建 workflow 的内部阶段。
+系统必须在 `wo status` 的人类可读输出中展示 batch 级别的整体状态，让用户能看到队列总进度和每个 change，并展开 batch 内所有已创建 workflow 的极简固定列视图。
 
 #### 场景：运行中的 batch 展示整体和当前工作流
 
@@ -1297,14 +1287,13 @@
 - **且** `2-b` 对应的 run 正在执行 `review_1`
 - **且** `3-c` 尚未创建 run
 - **当** 用户运行 `wo status`
-- **则** 输出必须包含 `批量任务 b1 running 2/3`
+- **则** 第一行必须显示 indicator、batch 短编号和整体进度，例如 `→ b1 2/3`
 - **且** 批量任务组名不得包含真实 batch id
-- **且** 输出必须显示 batch 状态为 `running`
 - **且** 输出必须显示整体进度为 `2/3`
 - **且** 输出必须把 `1-a`、`2-b` 和 `3-c` 分别显示为只包含 change 名称的独立行
 - **且** change 行不得包含 workflow 短编号、run id、索引、状态或运行中标记
 - **且** 未开始的 `3-c` 行不得追加 `未开始`
-- **且** 每个已创建 workflow 行下方必须紧跟它自己的既有 `规`、`写`、`审` 或 `存` 会话进度
+- **且** 每个已创建 workflow 行下方必须紧跟它自己的 `→ wN` header 和固定列阶段/子代理行
 - **且** 未开始 change 下方不得显示伪造的内部阶段
 
 #### 场景：batch 刚提交但尚未创建 run
@@ -1376,7 +1365,7 @@
 - **给定** 当前仓库没有 batch state
 - **且** 最新 run 不包含 `batch_id`
 - **当** 用户运行 `wo status`
-- **则** 输出必须继续使用既有 `写`、`审`、`存` 会话进度
+- **则** 输出必须继续使用单 workflow 极简固定列视图
 - **且** 输出不得出现 `批量任务`
 - **且** 输出不得出现 batch 队列行
 
@@ -1389,20 +1378,17 @@
 - **且** JSON 不得包含 `批量任务`、`工作流`、完成标记或运行中标记
 - **且** `stage` 必须仍使用内部 stage 值，例如 `execution`、`review_1`、`fix_1` 或 `archive`
 
-### 需求：单 workflow status 展示耗时总计和阶段拆分
+### 需求：单 workflow status 展示阶段耗时
 
-系统必须在 `wo status -wN` 的人类可读输出中展示已实际执行阶段的耗时统计，且总计行必须先于阶段拆分行。
+系统必须在 `wo status -wN` 的人类可读输出中把已实际执行阶段的耗时展示在对应固定列行中，不再输出总耗时公式或独立耗时块。
 
 #### 场景：完成的 workflow 展示分钟级耗时
 
 - **给定** 当前仓库存在一个已完成 workflow
 - **且** 该 workflow 的 `execution`、`review_1`、`archive` 阶段都有开始和结束时间
 - **当** 用户运行 `wo status -w1`
-- **则** 输出必须包含 `耗时 300分钟=100+120+80`
-- **且** 输出必须包含 `写 execution 100分钟`
-- **且** 输出必须包含 `审 review_1 120分钟`
-- **且** 输出必须包含 `存 archive 80分钟`
-- **且** 总计行必须出现在这些阶段拆分行之前
+- **则** `执行阶段`、`审核阶段` 和 `归档阶段` 行必须分别在第四列显示两位小数分钟
+- **且** 输出不得包含 `耗时`、`分钟` 或总耗时公式
 
 ### 需求：跳过阶段不进入耗时统计
 
@@ -1414,12 +1400,12 @@
 - **且** `review_1` 在 `stages` 中为 `completed`
 - **但** `review_1` 没有 `stage_timings` 记录
 - **当** 用户运行 `wo status -w2`
-- **则** 输出必须包含 `耗时 2.75分钟=1.5+1.25`
-- **且** 耗时拆分中不得包含 `审 review_1`
+- **则** 对应阶段行不得把缺失 timing 的 `review_1` 写入耗时
+- **且** 输出不得包含独立耗时拆分块
 
 ### 需求：batch status 在对应 change 下展示耗时
 
-系统必须在 batch 人类输出中把每个已创建 run 的耗时块展示在对应 change 下方，未开始 change 不显示耗时。
+系统必须在 batch 人类输出中把每个已创建 run 的固定列阶段耗时展示在对应 change 下方，未开始 change 不显示伪造耗时。
 
 #### 场景：batch 中只有已创建 run 显示耗时
 
@@ -1427,12 +1413,12 @@
 - **且** 第一个 change 已创建 run 并有阶段 timing
 - **且** 第二个 change 尚未开始
 - **当** 用户运行 `wo status`
-- **则** 第一个 change 下必须包含缩进的 `耗时 300分钟=100+120+80`
-- **且** 第二个 change 下不得出现耗时块
+- **则** 第一个 change 下必须包含缩进的 workflow header 和阶段耗时列
+- **且** 第二个 change 下不得出现阶段耗时行
 
 ### 需求：JSON status 机器接口保持兼容
 
-系统必须保持 `wo status --run-id <run-id> --json` 的 runner contract 不变，耗时统计只出现在人类可读输出。
+系统必须保持 `wo status --run-id <run-id> --json` 的 runner 顶层 contract 不变，同时允许新增 `observability` 字段暴露阶段和子代理产物路径。耗时统计只出现在人类可读输出。
 
 #### 场景：JSON 输出不包含耗时内部字段
 
@@ -1440,8 +1426,18 @@
 - **当** 用户运行 `wo status --run-id <run-id> --json`
 - **则** 输出必须是合法 JSON
 - **且** JSON 必须包含既有字段 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
+- **且** JSON 可以新增 `observability.engine`、`observability.rows` 和 `observability.artifacts`
 - **且** JSON 不得包含 `stage_timings`
 - **且** JSON 不得包含 `耗时` 或 `分钟`
+
+#### 场景：JSON observability 暴露固定产物路径
+
+- **给定** 当前仓库存在一个 sealed run
+- **当** 用户运行 `wo status --run-id <run-id> --json`
+- **则** `observability.rows` 必须为 execution、review、fix、qa 和 archive 阶段给出稳定行
+- **且** 每个阶段 row 必须包含阶段中文名、session id、marker 和固定 `stage_artifact` 路径
+- **且** 即使审核、测试或归档尚未开始，也必须给出 `review-1.json`、`qa-1.json` 和 `delivery-summary.md` 的预期路径
+- **且** subagent row 必须给出短名、完整名称、session id、`member_artifact` 和 `group_artifact` 绝对路径
 
 ### 需求：失败 batch 展示可理解原因
 

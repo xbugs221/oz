@@ -113,6 +113,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			}
 			return writeChangeList(stdout, changes)
 		case "run":
+			if len(args) == 1 {
+				return submitAllActiveChanges(ctx, stdout, repo, engine)
+			}
 			if !hasFlag(args[1:], "--json") {
 				return fmt.Errorf("用法：wo run --change <change-name> [--engine go-dag] --json")
 			}
@@ -130,6 +133,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 				return err
 			}
 			return nil
+		case "r":
+			if len(args) != 1 {
+				return fmt.Errorf("用法：wo r")
+			}
+			return submitAllActiveChanges(ctx, stdout, repo, engine)
 		case "resume":
 			if !hasFlag(args[1:], "--json") {
 				return fmt.Errorf("用法：wo resume --run-id <run-id> --json")
@@ -225,7 +233,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					_ = writeFailedRunnerError(stdout, runID, err)
 					return err
 				}
-				return writeRunnerState(stdout, state)
+				runRefs, _ := ListRunRefs(repo)
+				return writeJSON(stdout, runnerStateFromStatusView(repo, state, RunAliasForID(runRefs, runID)))
 			}
 			return printHumanStatus(stdout, repo, args[1:]...)
 		case "abort":
@@ -270,6 +279,19 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 
 	return interactive(ctx, stdin, stdout, repo, engine)
+}
+
+// submitAllActiveChanges starts a queue for every currently active oz change.
+func submitAllActiveChanges(ctx context.Context, stdout io.Writer, repo string, engine *Engine) error {
+	changes, err := ListChanges(repo)
+	if err != nil {
+		return err
+	}
+	if len(changes) == 0 {
+		fmt.Fprintln(stdout, "没有 active 变更提案")
+		return nil
+	}
+	return engine.SubmitBatch(ctx, changes)
 }
 
 // commandNeedsWorkflowTools reports whether the CLI path will invoke workflow backends.
@@ -854,7 +876,9 @@ func printHumanStatus(stdout io.Writer, repo string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	printHumanStatusStageChecklist(stdout, repo, state)
+	for _, line := range compactStatusLines(buildStatusView(repo, state, ref.Alias, "→")) {
+		fmt.Fprintln(stdout, line)
+	}
 	printUpdateHint(stdout)
 	return nil
 }
@@ -875,6 +899,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "用法：")
 	fmt.Fprintln(stdout, "  wo")
 	fmt.Fprintln(stdout, "  wo config [--global]")
+	fmt.Fprintln(stdout, "  wo run | wo r")
 	fmt.Fprintln(stdout, "  wo status")
 	fmt.Fprintln(stdout, "  wo restart")
 	fmt.Fprintln(stdout, "  wo clean")
@@ -890,6 +915,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  wo                         进入规划、选择 active change，或恢复 run")
 	fmt.Fprintln(stdout, "  wo clean                   清理当前项目失败或异常运行态")
 	fmt.Fprintln(stdout, "  wo config [--global]       写入仓库 wo.yaml 或用户 ~/wo.yaml")
+	fmt.Fprintln(stdout, "  wo run | wo r              直接全选 active change 并启动任务队列")
 	fmt.Fprintln(stdout, "  wo status                  打印最新 run 进度")
 	fmt.Fprintln(stdout, "  wo restart [-bN|-wN]       重启最近失败或中断的批量任务/工作流")
 	fmt.Fprintln(stdout, "  wo watch [-bN|-wN]         持续刷新运行中的任务状态")
@@ -1370,7 +1396,7 @@ func watchStatusLines(repo, kind string, ref StatusRef, spinner string) []string
 	if err != nil {
 		return []string{fmt.Sprintf("工作流 %s 状态读取失败: %v", ref.Alias, err)}
 	}
-	return watchRunStatusLines(state, ref.Alias, spinner)
+	return watchRunStatusLines(repo, state, ref.Alias, spinner)
 }
 
 // watchBatchStatusLines formats a batch with spinner in the running stage.
@@ -1383,7 +1409,7 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 	if batchAlias == "" {
 		batchAlias = batch.BatchID
 	}
-	lines = append(lines, fmt.Sprintf("批量任务 %s %s %d/%d", batchAlias, batch.Status, currentPos, len(batch.Changes)))
+	lines = append(lines, fmt.Sprintf("%s %s %d/%d", spinner, batchAlias, currentPos, len(batch.Changes)))
 	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
 		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
 	}
@@ -1393,11 +1419,9 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 		lines = append(lines, fmt.Sprintf("- %s", changeName))
 		if runID != "" {
 			if state, err := loadState(repo, runID); err == nil {
-				runtime := map[string]stageRuntime{}
-				if state.Status == statusRunning && state.Stage != "" {
-					runtime[state.Stage] = stageRuntime{}
-				}
-				for _, line := range watchStageChecklistLines(state, runtime, spinner) {
+				runRefs, _ := ListRunRefs(repo)
+				runAlias := RunAliasForID(runRefs, runID)
+				for _, line := range compactStatusLines(buildStatusView(repo, state, runAlias, "→")) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
 			}
@@ -1408,19 +1432,12 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 }
 
 // watchRunStatusLines formats a single run with spinner in the running stage.
-func watchRunStatusLines(state State, runAlias string, spinner string) []string {
+func watchRunStatusLines(repo string, state State, runAlias string, spinner string) []string {
 	var lines []string
 	if runAlias == "" {
 		runAlias = state.RunID
 	}
-	lines = append(lines, fmt.Sprintf("工作流 %s %s %s", runAlias, state.Status, state.ChangeName))
-	runtime := map[string]stageRuntime{}
-	if state.Status == statusRunning && state.Stage != "" {
-		runtime[state.Stage] = stageRuntime{}
-	}
-	for _, line := range watchStageChecklistLines(state, runtime, spinner) {
-		lines = append(lines, line)
-	}
+	lines = append(lines, compactStatusLines(buildStatusView(repo, state, runAlias, spinner))...)
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {
 		lines = append(lines, "提示: 可运行 wo restart 重启最近失败任务")
 	}

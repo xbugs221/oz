@@ -135,6 +135,72 @@ func TestRunFlagStartsSingleChangeQueue(t *testing.T) {
 	}
 }
 
+// TestRunCommandStartsAllActiveChangesQueue verifies the non-interactive shortcut selects every active change.
+func TestRunCommandStartsAllActiveChangesQueue(t *testing.T) {
+	for _, args := range [][]string{{"run"}, {"r"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			repo := gitRepo(t)
+			chdir(t, repo)
+			mustChange(t, repo, "5-丙")
+			mustChange(t, repo, "3-甲")
+			mustChange(t, repo, "abc")
+			mustPrompts(t, repo)
+			installRealOz(t)
+			var started []string
+			previous := startDetachedBatchCommand
+			startDetachedBatchCommand = func(_ string, batchID string) error {
+				started = append(started, batchID)
+				return nil
+			}
+			t.Cleanup(func() { startDetachedBatchCommand = previous })
+
+			var stdout bytes.Buffer
+			if err := Run(args, strings.NewReader("not-used\n"), &stdout, &bytes.Buffer{}); err != nil {
+				t.Fatal(err)
+			}
+			if len(started) != 1 {
+				t.Fatalf("batch workers = %v, want one", started)
+			}
+			batch, err := loadBatchState(repo, started[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(batch.Changes, ","); got != "3-甲,5-丙,abc" {
+				t.Fatalf("batch changes = %s, want all active changes sorted", got)
+			}
+			if strings.Contains(stdout.String(), "> ") {
+				t.Fatalf("run shortcut should not render interactive prompt:\n%s", stdout.String())
+			}
+		})
+	}
+}
+
+// TestRunCommandWithNoActiveChangesDoesNotPrompt verifies the shortcut does not enter planning.
+func TestRunCommandWithNoActiveChangesDoesNotPrompt(t *testing.T) {
+	repo := gitRepo(t)
+	chdir(t, repo)
+	installRealOz(t)
+	var started []string
+	previous := startDetachedBatchCommand
+	startDetachedBatchCommand = func(_ string, batchID string) error {
+		started = append(started, batchID)
+		return nil
+	}
+	t.Cleanup(func() { startDetachedBatchCommand = previous })
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"run"}, strings.NewReader("not-used\n"), &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(started) != 0 {
+		t.Fatalf("batch workers = %v, want none without active changes", started)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "没有 active 变更提案") || strings.Contains(got, "> ") {
+		t.Fatalf("stdout = %q, want no-active message without prompt", got)
+	}
+}
+
 // TestRunFlagRejectsInvalidChangeBeforeQueue verifies bad input never creates a queue.
 func TestRunFlagRejectsInvalidChangeBeforeQueue(t *testing.T) {
 	repo := gitRepo(t)
@@ -742,7 +808,7 @@ func TestPrintHumanStatusRunningBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 running 2/3", "- 1-a", "- 2-b", "- 3-c"} {
+	for _, want := range []string{"→ b1 2/3", "- 1-a", "- 2-b", "- 3-c"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -752,18 +818,18 @@ func TestPrintHumanStatusRunningBatch(t *testing.T) {
 		t.Fatalf("batch output should hide batch/run details and unstarted labels:\n%s", got)
 	}
 	// Every created run should show its stage checklist indented.
-	if !strings.Contains(got, "  - 写 exec-thread ✓") {
+	if !strings.Contains(got, "  执行阶段 exec-thread ✓ -") {
 		t.Fatalf("output missing current run stage detail:\n%s", got)
 	}
-	if !strings.Contains(got, "  - 规 工作流开始之前就已完成 ✓") {
+	if !strings.Contains(got, "  规划阶段 - - -") {
 		t.Fatalf("output missing completed run stage detail:\n%s", got)
 	}
 	assertLineOrder(t, got,
 		"- 1-a",
-		"  - 规 工作流开始之前就已完成 ✓",
+		"  → w2",
 		"- 2-b",
-		"  - 写 exec-thread ✓",
-		"  - 审 未知 →",
+		"  执行阶段 exec-thread ✓ -",
+		"  审核阶段 - → -",
 		"- 3-c",
 	)
 }
@@ -794,7 +860,7 @@ func TestPrintHumanStatusFailedBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 failed 1/2", "1-a 的写阶段失败", "- 1-a", "- 2-b", "提示: 可运行 wo restart -b1 删除失败记录并继续该批量任务"} {
+	for _, want := range []string{"→ b1 1/2", "1-a 的写阶段失败", "- 1-a", "- 2-b", "提示: 可运行 wo restart -b1 删除失败记录并继续该批量任务"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -831,7 +897,7 @@ func TestPrintHumanStatusFailedBatchHidesInternalNetworkError(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 failed 1/2", "1-network 的写阶段失败", "智能体后端连接失败", "- 1-network", "- 2-next"} {
+	for _, want := range []string{"→ b1 1/2", "1-network 的写阶段失败", "智能体后端连接失败", "- 1-network", "- 2-next"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -869,7 +935,7 @@ func TestPrintHumanStatusBlockedReviewLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 failed 1/2", "- 1-a", "- 2-b", "blocked_review_limit"} {
+	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b", "审核修正达到上限"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -902,7 +968,7 @@ func TestPrintHumanStatusBlockedValidationLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 failed 1/2", "- 1-a", "- 2-b", "blocked_validation_limit"} {
+	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b", "阶段验证达到上限"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -925,7 +991,7 @@ func TestPrintHumanStatusSingleRunNoBatch(t *testing.T) {
 	if strings.Contains(got, "批量任务") || strings.Contains(got, "最近一次批量工作流") {
 		t.Fatalf("single run output should not contain batch terms:\n%s", got)
 	}
-	if !strings.Contains(got, "- 写 未知 →") {
+	if !strings.Contains(got, "执行阶段 - → -") {
 		t.Fatalf("single run output missing expected line:\n%s", got)
 	}
 }
@@ -994,16 +1060,16 @@ func TestPrintHumanStatusDoneBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 done 2/2", "- 1-a", "- 2-b"} {
+	for _, want := range []string{"→ b1 2/2", "- 1-a", "- 2-b"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
 	assertLineOrder(t, got,
 		"- 1-a",
-		"  - 规 工作流开始之前就已完成 ✓",
+		"  → w2",
 		"- 2-b",
-		"  - 规 工作流开始之前就已完成 ✓",
+		"  → w1",
 	)
 	if strings.Contains(got, "x") {
 		t.Fatalf("done batch should not contain failure marker:\n%s", got)
@@ -1034,7 +1100,7 @@ func TestPrintHumanStatusAbortedBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 aborted 1/2", "- 1-a", "- 2-b", "错误: 用户已中止", "清理: 可运行 wo clean 清理当前项目失败或异常运行态"} {
+	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b", "错误: 用户已中止", "清理: 可运行 wo clean 清理当前项目失败或异常运行态"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -1093,7 +1159,7 @@ func TestPrintHumanStatusBatchNoRunsYet(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"批量任务 b1 running 1/2", "- 1-a", "- 2-b"} {
+	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -1139,7 +1205,7 @@ func TestPrintHumanStatusDefaultPrefersLatestBatch(t *testing.T) {
 	if !strings.Contains(firstLine, wantHint) {
 		t.Fatalf("default batch status first line = %q, want %q\nfull output:\n%s", firstLine, wantHint, got)
 	}
-	if !strings.Contains(got, "批量任务 b1 done 1/1") {
+	if !strings.Contains(got, "→ b1 1/1") {
 		t.Fatalf("default status should show latest batch:\n%s", got)
 	}
 	stdout.Reset()
@@ -1150,7 +1216,7 @@ func TestPrintHumanStatusDefaultPrefersLatestBatch(t *testing.T) {
 	if strings.Contains(w1Output, "最近一次批量工作流") {
 		t.Fatalf("-w1 output should not contain default batch hint:\n%s", w1Output)
 	}
-	if !strings.Contains(w1Output, "- 写 未知 →") {
+	if !strings.Contains(w1Output, "执行阶段 - → -") {
 		t.Fatalf("-w1 output missing expected line:\n%s", w1Output)
 	}
 }
@@ -1180,7 +1246,7 @@ func TestPrintHumanStatusNewerBatchTakesPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "批量任务 b1 running 1/2") {
+	if !strings.Contains(got, "→ b1 1/2") {
 		t.Fatalf("newer batch should take precedence over old single run:\n%s", got)
 	}
 	if strings.Contains(got, "写 20260510T000000.000000000Z →") {
@@ -1212,14 +1278,14 @@ func TestPrintHumanStatusShortRefsResolveHistory(t *testing.T) {
 	if err := printHumanStatus(&stdout, repo, "-b2"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "批量任务 b2 done 1/1") {
+	if !strings.Contains(stdout.String(), "→ b2 1/1") {
 		t.Fatalf("-b2 should show older batch:\n%s", stdout.String())
 	}
 	stdout.Reset()
 	if err := printHumanStatus(&stdout, repo, "-w2"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "- 写 未知 →") {
+	if !strings.Contains(stdout.String(), "执行阶段 - → -") {
 		t.Fatalf("-w2 should show older workflow:\n%s", stdout.String())
 	}
 	if err := printHumanStatus(&stdout, repo, "-b99"); err == nil || !strings.Contains(err.Error(), "找不到 b99") {
@@ -1257,10 +1323,10 @@ func TestPrintHumanStatusBatchCurrentRunShowsActiveReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "  - 审 review-thread →") {
+	if !strings.Contains(got, "  审核阶段 review-thread → -") {
 		t.Fatalf("output missing active review stage with arrow:\n%s", got)
 	}
-	if !strings.Contains(got, "  - 写 工作流开始之前就已完成 ✓") || strings.Contains(got, "  - 写 run-2") {
+	if !strings.Contains(got, "  执行阶段 - ✓ -") || strings.Contains(got, "  执行阶段 run-2") {
 		t.Fatalf("pre-completed executor should not use run id:\n%s", got)
 	}
 }
@@ -1966,13 +2032,13 @@ func TestWatchSpinnerReplacesArrowInRunningStage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lines := watchRunStatusLines(run, "w1", "|")
+	lines := watchRunStatusLines(repo, run, "w1", "|")
 	got := strings.Join(lines, "\n")
-	if !strings.Contains(got, "|") {
-		t.Fatalf("watch output missing spinner:\n%s", got)
+	if !strings.HasPrefix(got, "| w1\n") {
+		t.Fatalf("watch output missing spinner header:\n%s", got)
 	}
-	if strings.Contains(got, "→") {
-		t.Fatalf("watch output should not contain static arrow:\n%s", got)
+	if !strings.Contains(got, "执行阶段 - →") {
+		t.Fatalf("watch body should keep static running marker:\n%s", got)
 	}
 }
 

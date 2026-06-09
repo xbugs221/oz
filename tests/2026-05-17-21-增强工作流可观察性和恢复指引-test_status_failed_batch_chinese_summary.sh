@@ -70,7 +70,7 @@ go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 "$WO" status > status.txt
 
 # Must show batch header with failed status.
-grep -qF "批量任务 b1 failed 1/2" status.txt
+grep -qF "→ b1 1/2" status.txt
 
 # Must show Chinese failure summary with change name and stage role.
 grep -qF "1-演示变更" status.txt
