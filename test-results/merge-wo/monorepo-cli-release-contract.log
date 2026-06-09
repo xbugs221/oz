@@ -1,0 +1,9 @@
+检查同一仓库内的 CLI 入口
+go module: github.com/xbugs221/oz
+internal/app import path: github.com/xbugs221/oz/internal/app
+cmd/wo deps 不含旧模块路径
+构建 oz 和 wo
+oz version: v0.5.5-1-gf3865f7-dirty
+wo version: v0.5.5-1-gf3865f7-dirty
+检查 CI/Release workflow 不再下载外部 latest oz
+PASS

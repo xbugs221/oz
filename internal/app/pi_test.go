@@ -1,0 +1,94 @@
+// Package app tests Pi CLI argument building and JSONL session parsing.
+package app
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+// TestPiPlanningArgsPassPromptModelAndThinking verifies interactive planning uses Pi syntax.
+func TestPiPlanningArgsPassPromptModelAndThinking(t *testing.T) {
+	args := piPlanningArgs("planning prompt", StageOptions{Model: "anthropic/claude", Reasoning: "high", Fast: true})
+	for _, want := range []string{"--model", "anthropic/claude", "--thinking", "high", "planning prompt"} {
+		if !containsArg(args, want) {
+			t.Fatalf("args = %v, missing %q", args, want)
+		}
+	}
+	if containsArg(args, "fast_mode") {
+		t.Fatalf("args = %v, pi must ignore fast mode", args)
+	}
+}
+
+// TestPiRunArgsSupportJSONModeAndResumeSessions verifies sealed run argument construction.
+func TestPiRunArgsSupportJSONModeAndResumeSessions(t *testing.T) {
+	args := piRunArgs("prompt", "s-1", StageOptions{Model: "anthropic/claude", Reasoning: "xhigh", Fast: true})
+	for _, pair := range [][2]string{{"--mode", "json"}, {"--model", "anthropic/claude"}, {"--thinking", "xhigh"}, {"--session", "s-1"}} {
+		if !containsArgPair(args, pair[0], pair[1]) {
+			t.Fatalf("args = %v, missing %s %s", args, pair[0], pair[1])
+		}
+	}
+	if args[len(args)-1] != "prompt" {
+		t.Fatalf("args = %v, want prompt as final arg", args)
+	}
+	if containsArg(args, "fast_mode") || containsArg(args, "--enable") || containsArg(args, "--disable") {
+		t.Fatalf("args = %v, pi must ignore codex fast flags", args)
+	}
+}
+
+// TestDrainPiJSONLExtractsSessionID verifies Pi session headers expose a resumable id.
+func TestDrainPiJSONLExtractsSessionID(t *testing.T) {
+	input := strings.Join([]string{
+		`{"type":"session","version":3,"id":"pi-session-1","cwd":"/repo"}`,
+		`{"type":"message","content":"done"}`,
+	}, "\n")
+	var progress bytes.Buffer
+	sessionID, err := drainPiJSONL(strings.NewReader(input), &progress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessionID != "pi-session-1" {
+		t.Fatalf("session id = %q, want pi-session-1", sessionID)
+	}
+	if !strings.Contains(progress.String(), "agent session started: tool=pi session=pi-session-1") {
+		t.Fatalf("progress = %q, want pi session", progress.String())
+	}
+}
+
+// TestPiCLICapturesStderr verifies Pi diagnostics are captured separately.
+func TestPiCLICapturesStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is Unix-only")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "pi-fixture")
+	body := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"session\",\"id\":\"s-1\"}'\nprintf '%s\\n' 'pi error line' >&2\nexit 7\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (PiCLI{Path: script}).Run(context.Background(), dir, "prompt", "", StageOptions{})
+	if err == nil {
+		t.Fatal("expected pi failure")
+	}
+	if !strings.Contains(err.Error(), "stderr：pi error line") {
+		t.Fatalf("error does not include bounded stderr: %v", err)
+	}
+}
+
+// TestAgentRegistryIncludesPiOnly verifies pi is registered while pi-ai stays invalid.
+func TestAgentRegistryIncludesPiOnly(t *testing.T) {
+	registry := NewAgentRegistry()
+	if tool, err := registry.Tool("pi"); err != nil || tool.Name() != "pi" {
+		t.Fatalf("pi tool = %#v, err = %v", tool, err)
+	}
+	if _, err := registry.Tool("pi-ai"); err == nil {
+		t.Fatal("pi-ai must not be registered")
+	}
+	if !validAgentTool("pi") || validAgentTool("pi-ai") {
+		t.Fatal("validAgentTool should accept only the real pi CLI name")
+	}
+}

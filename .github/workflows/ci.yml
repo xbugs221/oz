@@ -1,55 +1,50 @@
-# CI workflow verifies the pure Go oz CLI before merge.
+# This workflow runs the repository test gate for regular pushes and PRs.
 name: CI
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  pull_request:
 
 jobs:
-  go:
-    name: Go test and build
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Go
+      - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
-          cache: false
+          go-version-file: go.mod
 
-      - name: Test
+      - name: Build local CLIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="${RUNNER_TEMP}/oz-bin"
+          mkdir -p "$install_dir"
+          go build -o "$install_dir/oz" ./cmd/oz
+          go build -o "$install_dir/wo" ./cmd/wo
+          echo "$install_dir" >> "$GITHUB_PATH"
+          "$install_dir/oz" --version
+          "$install_dir/wo" --version
+
+      - name: Run Go tests
         run: go test ./...
 
-      - name: Cross compile
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        run: go build -o /tmp/oz ./cmd/oz
+      - name: Run shell business tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in tests/*.sh; do
+            echo "::group::$script"
+            set +e
+            bash "$script"
+            status=$?
+            set -e
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+          done

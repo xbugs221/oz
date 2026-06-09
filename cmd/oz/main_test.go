@@ -66,6 +66,27 @@ func writeValidChange(t *testing.T, project, change string) {
 		"design.md":   "## 背景\n固定工作流。\n\n## 决策\nCLI 先归档，智能体再合并主规格。\n",
 		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留\n",
 		"task.md":     "## 1. 实现\n\n- [x] 1.1 完成实现\n",
+		"acceptance.json": `{
+  "summary": "验证归档测试随提案保留",
+  "required_tests": [
+    {
+      "id": "archive-test",
+      "source": "change_contract",
+      "path": "docs/changes/` + change + `/tests/archive_test.go",
+      "command": "go test ./...",
+      "purpose": "证明提案包含真实测试入口"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "archive-log",
+      "kind": "runtime_log",
+      "path": "test-results/archive.log",
+      "purpose": "记录归档测试结果"
+    }
+  ]
+}
+`,
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
@@ -221,7 +242,7 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	for _, artifact := range statusPayload.Artifacts {
 		seen[artifact.Name] = artifact.Status
 	}
-	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "tests"} {
+	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"} {
 		if seen[name] != "present" {
 			t.Fatalf("artifact %s not present in status: %#v", name, seen)
 		}
@@ -337,6 +358,63 @@ func TestValidateOutputsStableJSON(t *testing.T) {
 	}
 	if payload["valid"] != false {
 		t.Fatalf("expected valid=false: %#v", payload)
+	}
+}
+
+func TestValidateChecksAcceptanceContract(t *testing.T) {
+	// TestValidateChecksAcceptanceContract keeps oz and wo aligned on sealed-run inputs.
+	project := newProject(t)
+	change := "2-重写-oz-go-cli"
+	writeValidChange(t, project, change)
+	acceptancePath := filepath.Join(project, "docs", "changes", change, "acceptance.json")
+	if err := os.Remove(acceptancePath); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected missing acceptance.json to fail")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "acceptance.json") {
+		t.Fatalf("missing acceptance diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+	body := `{
+  "summary": "未知字段必须失败",
+  "coverage": [],
+  "required_tests": [
+    {"id": "archive-test", "source": "change_contract", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
+  ],
+  "required_evidence": []
+}
+`
+	if err := os.WriteFile(acceptancePath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected unknown acceptance field to fail")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "coverage") {
+		t.Fatalf("missing unknown field diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+	body = `{
+  "summary": "无效 source 必须失败",
+  "required_tests": [
+    {"id": "archive-test", "source": "fake", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
+  ],
+  "required_evidence": [
+    {"id": "archive-log", "kind": "runtime_log", "path": "test-results/archive.log", "purpose": "记录测试结果"}
+  ]
+}
+`
+	if err := os.WriteFile(acceptancePath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected invalid acceptance source to fail")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "source") {
+		t.Fatalf("missing source diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
 	}
 }
 

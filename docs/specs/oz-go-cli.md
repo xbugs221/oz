@@ -32,6 +32,22 @@
 - **则** 命令保持稳定 JSON 输出
 - **并且** JSON 内容包含 `valid`、`change`、`errors`、`warnings` 和 `artifacts`
 
+### 场景：下游校验接口要求验收合同
+
+- **给定** 一个活动提案包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `wo` 允许的 `acceptance.json`
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令成功并在 artifacts 中返回 `acceptance.json`
+- **并且** `acceptance.json` 只需要包含 `summary`、`required_tests`、`required_evidence` 及其当前 `wo` 已支持的子字段
+
+### 场景：下游校验接口拒绝无效验收合同
+
+- **给定** 一个活动提案缺少 `acceptance.json`
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令失败并指出 acceptance 合同问题
+- **给定** 一个活动提案的 `acceptance.json` 包含当前 `wo` schema 不允许的字段
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令失败并指出 schema 或 acceptance 合同问题
+
 ### 场景：下游状态和归档接口继续可用
 
 - **当** 下游工具运行 `oz status 1-需求 --json`
@@ -40,6 +56,13 @@
 - **则** 命令继续按既有规则校验任务完成状态并归档提案
 - **并且** 命令不得机械移动、改写或合并提案测试文件
 - **并且** 归档后的提案测试留在 `docs/changes/archive/<date>-1-需求/tests/` 作为后续规格测试合并来源
+
+### 场景：wo 继续通过 oz JSON 协议选择和校验 change
+
+- **给定** `wo` 代码已经合入当前仓库
+- **当** 执行器需要发现、校验或归档 change
+- **则** `wo` 必须仍保留对 `oz list/status/validate/archive` 命令协议的调用能力
+- **并且** 合并不得要求执行器测试改成直接 import `cmd/oz`
 
 ### 场景：归档阶段按逻辑维护长期规格测试
 

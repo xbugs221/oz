@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/xbugs221/oz/internal/acceptance"
 	"github.com/xbugs221/oz/skills"
 )
 
@@ -443,7 +444,7 @@ func statusPayload(root, change string) map[string]any {
 	// statusPayload summarizes fixed oz artifacts without dynamic workflow configuration.
 	changeDir := filepath.Join(root, "changes", change)
 	artifacts := []map[string]any{}
-	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "tests"} {
+	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"} {
 		path := filepath.Join(changeDir, name)
 		exists := false
 		if info, err := os.Stat(path); err == nil {
@@ -517,7 +518,7 @@ func validateChange(root, change string) validationResult {
 		result.Errors = append(result.Errors, err.Error())
 	}
 	changeDir := filepath.Join(root, "changes", change)
-	required := []string{"proposal.md", "design.md", "spec.md", "task.md"}
+	required := []string{"proposal.md", "design.md", "spec.md", "task.md", "acceptance.json"}
 	for _, name := range required {
 		path := filepath.Join(changeDir, name)
 		result.Artifacts[name] = path
@@ -546,6 +547,10 @@ func validateChange(root, change string) validationResult {
 	}
 	if data, err := os.ReadFile(filepath.Join(changeDir, "task.md")); err == nil && !strings.Contains(string(data), "- [") {
 		result.Errors = append(result.Errors, "task.md 必须包含任务项")
+	}
+	acceptancePath := filepath.Join(changeDir, "acceptance.json")
+	if _, err := acceptance.Read(acceptancePath); err != nil {
+		result.Errors = append(result.Errors, "acceptance.json 无效："+err.Error())
 	}
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0

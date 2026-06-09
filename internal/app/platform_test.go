@@ -1,0 +1,496 @@
+// Package app tests cross-platform path and command helpers.
+package app
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+// TestRepoPathStateRoundTripUsesSlash verifies state paths stay stable and native on read.
+func TestRepoPathStateRoundTripUsesSlash(t *testing.T) {
+	repo := t.TempDir()
+	absolute := filepath.Join(repo, ".wo", "runs", "run-1", "state.json")
+
+	statePath, err := repoRelPath(repo, absolute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statePath != ".wo/runs/run-1/state.json" {
+		t.Fatalf("state path = %q", statePath)
+	}
+
+	native := repoAbsPath(repo, ".wo/runs/run-1/state.json")
+	want := filepath.Join(repo, ".wo", "runs", "run-1", "state.json")
+	if native != want {
+		t.Fatalf("native path = %q, want %q", native, want)
+	}
+}
+
+// TestRepoAbsPathAcceptsWindowsStyleSlashInput verifies slash state paths become native paths.
+func TestRepoAbsPathAcceptsWindowsStyleSlashInput(t *testing.T) {
+	repo := filepath.Join("C:", "work", "repo")
+	got := repoAbsPath(repo, ".wo/runs/run-1/state.json")
+	want := filepath.Join(repo, ".wo", "runs", "run-1", "state.json")
+	if got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+}
+
+// TestResolveCommandUsesPath verifies command lookup goes through the host PATH.
+func TestResolveCommandUsesPath(t *testing.T) {
+	path, err := resolveCommand("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Fatal("empty go path")
+	}
+}
+
+// TestEnsureBaseWorkflowCommandsResolvesOz verifies oz is part of command discovery.
+func TestEnsureBaseWorkflowCommandsResolvesOz(t *testing.T) {
+	if _, err := resolveCommand("oz"); err != nil {
+		t.Skipf("oz not on PATH: %v", err)
+	}
+	if err := ensureBaseWorkflowCommands(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResolveCommandReportsMissingExecutable verifies lookup failures are actionable.
+func TestResolveCommandReportsMissingExecutable(t *testing.T) {
+	_, err := resolveCommand("wo-missing-command-for-test")
+	if err == nil {
+		t.Fatal("missing command should fail")
+	}
+	if !strings.Contains(err.Error(), "找不到 wo-missing-command-for-test 可执行文件") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+// TestCodexExecArgsKeepPromptOutOfArgv verifies prompts are passed through stdin.
+func TestCodexExecArgsKeepPromptOutOfArgv(t *testing.T) {
+	prompt := "line one\n\"quoted\""
+	args := codexExecArgs(os.TempDir(), "thread-1", StageOptions{})
+	for _, arg := range args {
+		if strings.Contains(arg, prompt) {
+			t.Fatalf("prompt leaked into argv: %v", args)
+		}
+	}
+	if args[len(args)-1] != "-" {
+		t.Fatalf("last arg = %q, want stdin marker", args[len(args)-1])
+	}
+}
+
+// TestPlanningCommandKeepsInteractiveStdin verifies planning mode remains a TUI.
+func TestPlanningCommandKeepsInteractiveStdin(t *testing.T) {
+	stdin := strings.NewReader("human input\n")
+	prompt := "planning prompt"
+	cmd := codexPlanningCommand(context.Background(), "codex", prompt, stdin, StageOptions{Reasoning: "high", Fast: false})
+	if cmd.Stdin != stdin {
+		t.Fatal("planning command should keep caller stdin")
+	}
+	if !containsArg(cmd.Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("args = %v, want yolo mode flag", cmd.Args)
+	}
+	if !containsArgPair(cmd.Args, "-c", "model_reasoning_effort=high") || cmd.Args[len(cmd.Args)-1] != prompt {
+		t.Fatalf("args = %v, want yolo mode and high reasoning config before prompt", cmd.Args)
+	}
+}
+
+// TestCodexExecArgsCanSetStageOptions verifies Codex receives explicit runtime options.
+func TestCodexExecArgsCanSetStageOptions(t *testing.T) {
+	args := codexExecArgs(os.TempDir(), "", StageOptions{Model: "gpt-test", Reasoning: "high", Fast: true})
+	if !containsArgPair(args, "-m", "gpt-test") {
+		t.Fatalf("args = %v, want model flag", args)
+	}
+	if !containsArgPair(args, "-c", "model_reasoning_effort=high") {
+		t.Fatalf("args = %v, want high reasoning config", args)
+	}
+	if !containsArgPair(args, "--enable", "fast_mode") {
+		t.Fatalf("args = %v, want fast mode enabled", args)
+	}
+}
+
+// TestDefaultWorkflowConfigSetsStageOptions verifies built-in stage options are explicit.
+func TestDefaultWorkflowConfigSetsStageOptions(t *testing.T) {
+	config := DefaultWorkflowConfig()
+	planning, err := config.StageOption("planning")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if planning.Tool != "codex" || planning.Reasoning != "xhigh" || !planning.Fast {
+		t.Fatalf("planning options = %#v, want codex, xhigh reasoning and fast enabled", planning)
+	}
+	review, err := config.StageOption("review_3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review.Tool != "codex" || review.Reasoning != "high" || review.Fast {
+		t.Fatalf("review options = %#v, want codex, high reasoning and fast disabled", review)
+	}
+	fix, err := config.StageOption("fix_3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fix.Tool != "codex" || fix.Reasoning != "low" || fix.Fast {
+		t.Fatalf("fix options = %#v, want codex, low reasoning and fast disabled", fix)
+	}
+	execution, err := config.StageOption("execution")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execution.Tool != "codex" || execution.Reasoning != "low" || execution.Fast {
+		t.Fatalf("execution options = %#v, want codex, low reasoning and fast disabled", execution)
+	}
+}
+
+// TestRequiredAgentToolsUsesOnlySealedStages verifies command discovery can skip unused tools.
+func TestRequiredAgentToolsUsesOnlySealedStages(t *testing.T) {
+	config := DefaultWorkflowConfig()
+	if got := strings.Join(requiredAgentTools(config), ","); got != "codex" {
+		t.Fatalf("tools = %s, want codex", got)
+	}
+	config.Stages["planning"] = StageOptions{Tool: "opencode"}
+	if got := strings.Join(requiredAgentTools(config), ","); got != "codex" {
+		t.Fatalf("tools = %s, sealed run should not require planning-only tool", got)
+	}
+	config.Stages["execution"] = StageOptions{Tool: "opencode"}
+	if got := strings.Join(requiredAgentTools(config), ","); got != "codex,opencode" {
+		t.Fatalf("tools = %s, want mixed tools", got)
+	}
+	config.Stages["planning"] = StageOptions{Tool: "pi"}
+	if got := strings.Join(requiredAgentTools(config), ","); got != "codex,opencode" {
+		t.Fatalf("tools = %s, planning-only pi should not be required", got)
+	}
+	config.Stages["archive"] = StageOptions{Tool: "pi"}
+	if got := strings.Join(requiredAgentTools(config), ","); got != "codex,opencode,pi" {
+		t.Fatalf("tools = %s, want pi when used by sealed stage", got)
+	}
+	for stage, options := range config.Stages {
+		options.Tool = "opencode"
+		config.Stages[stage] = options
+	}
+	if got := strings.Join(requiredAgentTools(config), ","); got != "opencode" {
+		t.Fatalf("tools = %s, want opencode only", got)
+	}
+}
+
+// containsArg reports whether argv contains a single expected value.
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
+// containsArgPair reports whether adjacent argv entries match a key-value pair.
+func containsArgPair(args []string, key, value string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == key && args[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+// TestParseLockInfoRequiresJSON verifies lock metadata stays structured.
+func TestParseLockInfoRequiresJSON(t *testing.T) {
+	lock, err := parseLockInfo([]byte(`{"pid":123,"hostname":"host","run_id":"run","started_at":"now"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock.PID != 123 || lock.Hostname != "host" || lock.RunID != "run" {
+		t.Fatalf("json lock = %#v", lock)
+	}
+
+	if _, err := parseLockInfo([]byte("456\n")); err == nil {
+		t.Fatal("pid-only lock should fail")
+	}
+}
+
+// TestAcquireLockWritesStructuredLock verifies active locks use portable metadata.
+func TestAcquireLockWritesStructuredLock(t *testing.T) {
+	repo := t.TempDir()
+	runID := "lock-run"
+	unlock, err := acquireLock(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	data, err := os.ReadFile(filepath.Join(runDir(repo, runID), "lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := parseLockInfo(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock.PID != os.Getpid() || lock.RunID != runID || lock.StartedAt == "" {
+		t.Fatalf("lock = %#v", lock)
+	}
+	if runtime.GOOS != "windows" {
+		active, err := lockActive(repo, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !active {
+			t.Fatal("current process lock should be active")
+		}
+	}
+}
+
+// TestAcquireLockActiveConflictIsTyped verifies lock acquisition races stay recoverable.
+func TestAcquireLockActiveConflictIsTyped(t *testing.T) {
+	repo := t.TempDir()
+	runID := "active-conflict"
+	hostname, _ := os.Hostname()
+	mustWriteLock(t, repo, runID, LockInfo{
+		PID:       os.Getpid(),
+		Hostname:  hostname,
+		RunID:     runID,
+		StartedAt: "2026-05-05T00:00:00Z",
+	})
+
+	_, err := acquireLockForGOOS(repo, runID, runtime.GOOS)
+	if err == nil || !isRunLockedError(err) {
+		t.Fatalf("acquireLockForGOOS error = %v, want run lock conflict", err)
+	}
+}
+
+// TestWindowsLockStatusTreatsOtherPIDAsUnknown verifies residual locks require user choice.
+func TestWindowsLockStatusTreatsOtherPIDAsUnknown(t *testing.T) {
+	repo := t.TempDir()
+	runID := "windows-unknown"
+	hostname, _ := os.Hostname()
+	mustWriteLock(t, repo, runID, LockInfo{
+		PID:       os.Getpid() + 100000,
+		Hostname:  hostname,
+		RunID:     runID,
+		StartedAt: "2026-05-05T00:00:00Z",
+	})
+
+	status, err := lockFileStatus(repo, runID, "windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != lockStatusUnknown {
+		t.Fatalf("status = %s, want unknown", status)
+	}
+
+	if _, err := acquireLockForGOOS(repo, runID, "windows"); err == nil {
+		t.Fatal("unknown Windows lock should not be silently overwritten")
+	}
+}
+
+// TestWindowsLockStatusRejectsCurrentProcessPID verifies live same-process locks still block.
+func TestWindowsLockStatusRejectsCurrentProcessPID(t *testing.T) {
+	repo := t.TempDir()
+	runID := "windows-active"
+	hostname, _ := os.Hostname()
+	mustWriteLock(t, repo, runID, LockInfo{
+		PID:       os.Getpid(),
+		Hostname:  hostname,
+		RunID:     runID,
+		StartedAt: "2026-05-05T00:00:00Z",
+	})
+
+	status, err := lockFileStatus(repo, runID, "windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != lockStatusActive {
+		t.Fatalf("status = %s, want active", status)
+	}
+}
+
+// TestAbortRunRemovesResidualLock verifies abort tolerates stale locks and clears the lock file.
+func TestAbortRunRemovesResidualLock(t *testing.T) {
+	repo := t.TempDir()
+	runID := "abort-run"
+	state := State{
+		RunID:      runID,
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteLock(t, repo, runID, LockInfo{PID: os.Getpid() + 100000, RunID: runID})
+
+	if err := AbortRun(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(runDir(repo, runID), "lock")) {
+		t.Fatal("abort should remove residual lock")
+	}
+	got, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "aborted" {
+		t.Fatalf("status = %s, want aborted", got.Status)
+	}
+}
+
+// TestAbortRunInterruptsDetachedProcessGroup verifies abort stops a live background worker.
+func TestAbortRunInterruptsDetachedProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix process groups are verified separately from Windows taskkill behavior")
+	}
+	repo := t.TempDir()
+	runID := "interrupt-run"
+	state := State{
+		RunID:      runID,
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "30")
+	configureDetachedCommand(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	waited := false
+	defer func() {
+		if !waited {
+			_ = cmd.Process.Kill()
+			<-done
+		}
+	}()
+	mustWriteLock(t, repo, runID, LockInfo{PID: cmd.Process.Pid, RunID: runID})
+
+	if err := AbortRun(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+		waited = true
+	case <-time.After(2 * time.Second):
+		t.Fatal("abort did not interrupt detached worker")
+	}
+	got, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "aborted" {
+		t.Fatalf("status = %s, want aborted", got.Status)
+	}
+}
+
+// TestFindUnfinishedRunSkipsAbortedRuns verifies abort does not loop in resume selection.
+func TestFindUnfinishedRunSkipsAbortedRuns(t *testing.T) {
+	repo := t.TempDir()
+	aborted := State{
+		RunID:      "older-aborted",
+		ChangeName: "demo",
+		Status:     "aborted",
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+	}
+	running := State{
+		RunID:      "newer-running",
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+	}
+	if err := saveState(repo, aborted); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveState(repo, running); err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := FindUnfinishedRun(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID != "newer-running" {
+		t.Fatalf("runID = %q, want newer-running", runID)
+	}
+	if err := AbortRun(repo, "newer-running"); err != nil {
+		t.Fatal(err)
+	}
+	runID, err = FindUnfinishedRun(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID != "" {
+		t.Fatalf("runID = %q, want none after aborts", runID)
+	}
+}
+
+// TestArchiveSupersededRunRemovesResidualLock verifies replacement runs retire stale state.
+func TestArchiveSupersededRunRemovesResidualLock(t *testing.T) {
+	repo := t.TempDir()
+	runID := "superseded-run"
+	state := State{
+		RunID:      runID,
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "review_1",
+		Sessions:   map[string]string{"codex:executor": "executor-thread"},
+		Stages:     map[string]string{"execution": "completed"},
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteLock(t, repo, runID, LockInfo{PID: os.Getpid() + 100000, RunID: runID})
+
+	if err := ArchiveSupersededRun(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != statusArchived || got.Error == "" {
+		t.Fatalf("state = %s error=%q, want archived with reason", got.Status, got.Error)
+	}
+	if fileExists(filepath.Join(runDir(repo, runID), "lock")) {
+		t.Fatal("archived run should remove residual lock")
+	}
+	selected, err := FindUnfinishedRun(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected != "" {
+		t.Fatalf("FindUnfinishedRun = %q, want none", selected)
+	}
+}
+
+// mustWriteLock writes a structured test lock file.
+func mustWriteLock(t *testing.T, repo, runID string, lock LockInfo) {
+	t.Helper()
+	data := []byte(`{"pid":` + strconv.Itoa(lock.PID) + `,"hostname":"` + lock.Hostname + `","run_id":"` + lock.RunID + `","started_at":"` + lock.StartedAt + `"}` + "\n")
+	path := filepath.Join(runDir(repo, runID), "lock")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

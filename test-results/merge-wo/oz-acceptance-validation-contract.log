@@ -1,0 +1,20 @@
+合法 acceptance.json 应通过 oz validate
+{
+  "valid": true,
+  "change": "1-统一验收合同",
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "acceptance.json": "/tmp/tmp.GgU7kn7zW6/project/docs/changes/1-统一验收合同/acceptance.json",
+    "design.md": "/tmp/tmp.GgU7kn7zW6/project/docs/changes/1-统一验收合同/design.md",
+    "proposal.md": "/tmp/tmp.GgU7kn7zW6/project/docs/changes/1-统一验收合同/proposal.md",
+    "spec.md": "/tmp/tmp.GgU7kn7zW6/project/docs/changes/1-统一验收合同/spec.md",
+    "task.md": "/tmp/tmp.GgU7kn7zW6/project/docs/changes/1-统一验收合同/task.md",
+    "tests": "/tmp/tmp.GgU7kn7zW6/project/docs/changes/1-统一验收合同/tests"
+  }
+}
+缺失 acceptance.json 应失败
+校验失败
+当前 wo schema 不允许的未知字段应失败
+校验失败
+PASS

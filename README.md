@@ -2,11 +2,15 @@
 url: https://github.com/xbugs221/oz
 ---
 
-**用 Go 语言重写的中文精简版 Openspec**
+**中文精简版 Openspec 规范工具和工作流执行器**
 
 ## 适用场景
 
-智能体编程一不小心就会变成天马行空的 vibe coding。AI 时代的编程瓶颈早已不是代码的读写速度了，而是需求是否对齐，以及变更历史是否详细可复查。`oz` 借鉴 [Openspec](https://github.com/Fission-AI/OpenSpec) 的思路，将每个需求的编码实现过程的关键信息记录下来：
+智能体编程一不小心就会变成天马行空的 vibe coding。AI 时代的编程瓶颈早已不是代码的读写速度了，而是需求是否对齐，以及变更历史是否详细可复查。
+
+`oz` 仓库同时维护两个命令：`oz` 负责提案规范、skill 安装、校验和归档；`wo` 负责按这些提案运行自动化工作流。两个命令来自同一个 Go module、同一个源码 checkout 和同一个 release 批次，避免规范工具与执行器版本错位。
+
+`oz` 借鉴 [Openspec](https://github.com/Fission-AI/OpenSpec) 的思路，将每个需求的编码实现过程的关键信息记录下来：
 
 - `proposal.md` 描述需求：用户痛点是什么，为什么想发起这个变更
 - `design.md`：阐述思路：为实现用户需求，计划采取的方案、取舍和风险
@@ -39,7 +43,7 @@ docs/changes
 
 ## 一般使用流程
 
-`oz` 是极简的二进制程序，没有任何依赖，windows/macos/linux 三大操作系统兼容，而且 arm/x64 兼容
+`oz` 和 `wo` 都是 Go 编译的二进制程序，windows/macos/linux 三大操作系统兼容，而且 arm/x64 兼容。
 
 提案的一般使用流程涉及 4 个阶段：
 
@@ -52,7 +56,41 @@ docs/changes
 
 创建阶段的目录编号由 CLI 计算：运行 `oz create` 会输出下一个提案数字，例如已有最大编号 `53` 时输出 `54`。这个命令只提供编号，不创建提案文件；智能体继续按 `oz-create` skill 创建 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`。
 
+`wo config` 会在仓库根目录生成 `wo.yaml`；`wo config --global` 会生成 `~/wo.yaml`：
+
+```yaml
+wo:
+  workflow:
+    max_review_iterations: 30
+    stages:
+      planning:
+        cli: codex
+        reasoning: xhigh
+      execution:
+        cli: codex
+        reasoning: low
+      fix:
+        cli: codex
+        reasoning: low
+      review:
+        cli: codex
+        reasoning: high
+      qa:
+        cli: codex
+        reasoning: high
+      archive:
+        cli: codex
+        reasoning: low
+    validation:
+      max_attempts_per_stage: 3
+      commands: []
+```
+
+配置按 `内置默认 -> ~/wo.yaml -> 仓库 wo.yaml -> run 快照` 合并；`validation.commands` 为空时不运行门禁，填入项目真实命令后，`execution` 和 `fix` 阶段完成时会先执行这些命令。
+
 ## 批注
 
 > Openspec 是一个面向 AI 协作开发的 SDD（Spec-Driven Development，规格驱动开发）工具。它的核心思路是：先把“要改什么、为什么改、验收标准是什么”写成结构化文档，再让编程人员围绕这些规格推进，而不是直接根据一句临时模糊需求随意修改代码。落盘的文档和测试案例都将成为后续工作的可靠依据，也能方便协作
 `plan`、`exec`不再是 CLI 阶段命令；`create` 只作为编号查询接口保留，不负责创建阶段产物。创建、规划、执行阶段由智能体读取内置 skill 后完成。`status`、`validate`、`archive` 虽可直接运行，但定位是下游自动化接口，不作为日常用户入口。
+
+从旧 `wo` 仓库迁移时，请先完成或放弃旧仓库路径下未结束的运行态。`wo` 的用户状态按仓库绝对路径隔离，合并到当前仓库后不会自动迁移旧 run 或 batch。

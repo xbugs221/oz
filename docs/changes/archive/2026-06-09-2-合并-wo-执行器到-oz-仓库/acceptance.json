@@ -1,0 +1,33 @@
+{
+  "summary": "验证 wo 执行器合并进 oz 仓库后，两个 CLI 来自同一源码和发布批次，并且 oz validate 与当前 wo 允许的 acceptance.json 格式保持一致。",
+  "required_tests": [
+    {
+      "id": "monorepo-cli-release-contract",
+      "source": "change_contract",
+      "path": "docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh",
+      "command": "bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh",
+      "purpose": "证明合并后的仓库可以从同一 checkout 构建 oz 和 wo，wo 不再引用旧模块路径，CI/Release 不再下载外部 latest oz。"
+    },
+    {
+      "id": "oz-acceptance-validation-contract",
+      "source": "change_contract",
+      "path": "docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh",
+      "command": "bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh",
+      "purpose": "证明 oz validate 接受当前 wo 允许的 acceptance.json 格式，并拒绝缺失或包含未知字段的验收合同。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "monorepo-cli-release-log",
+      "kind": "runtime_log",
+      "path": "test-results/merge-wo/monorepo-cli-release-contract.log",
+      "purpose": "记录两个 CLI 构建、模块路径和 CI/Release 本地构建约束的验证输出。"
+    },
+    {
+      "id": "oz-acceptance-validation-log",
+      "kind": "runtime_log",
+      "path": "test-results/merge-wo/oz-acceptance-validation-contract.log",
+      "purpose": "记录 oz validate 对有效、缺失和未知字段 acceptance.json 的验证输出。"
+    }
+  ]
+}
