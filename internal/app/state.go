@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"text/template"
 	"time"
@@ -32,6 +33,8 @@ const (
 	errNoInitialCommit      = "首次 git commit 前不能启动 wo run，请创建初始提交后重试"
 )
 
+var stateFileMu sync.Mutex
+
 type lockStatus string
 
 const (
@@ -48,6 +51,7 @@ type State struct {
 	Sealed       bool                            `json:"sealed"`
 	Status       string                          `json:"status"`
 	Stage        string                          `json:"stage"`
+	Engine       string                          `json:"engine,omitempty"`
 	Error        string                          `json:"error"`
 	BatchID      string                          `json:"batch_id,omitempty"`
 	BatchIndex   int                             `json:"batch_index,omitempty"`
@@ -57,9 +61,19 @@ type State struct {
 	Sessions     map[string]string               `json:"sessions"`
 	Stages       map[string]string               `json:"stages"`
 	StageTimings map[string]StageTiming          `json:"stage_timings,omitempty"`
+	DAGNodes     map[string]DAGNodeState         `json:"dag_nodes,omitempty"`
 	Paths        map[string]string               `json:"paths"`
 	Validation   map[string]StageValidationState `json:"validation,omitempty"`
 	Workflow     WorkflowConfig                  `json:"workflow_config"`
+}
+
+// DAGNodeState records observable Go DAG node progress for human status and debugging.
+type DAGNodeState struct {
+	Status     string `json:"status"`
+	Artifact   string `json:"artifact,omitempty"`
+	StartedAt  string `json:"started_at,omitempty"`
+	FinishedAt string `json:"finished_at,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 // StageTiming records the wall-clock interval for one actually executed stage.
@@ -144,27 +158,9 @@ func (e *Engine) Submit(ctx context.Context, changeName string) error {
 	return nil
 }
 
-// StartJSON creates a sealed run, emits its runner DTO, then continues the workflow.
+// StartJSON creates a sealed run, emits its runner DTO, then runs the default Go DAG engine.
 func (e *Engine) StartJSON(ctx context.Context, changeName string, stdout io.Writer) error {
-	state, err := e.createRun(changeName)
-	if err != nil {
-		return err
-	}
-	if err := writeRunnerState(stdout, state); err != nil {
-		return err
-	}
-	flushWriter(stdout)
-	if err := e.run(ctx, state); err != nil {
-		latest, loadErr := loadState(e.Repo, state.RunID)
-		if loadErr == nil {
-			latest = failedState(latest, err)
-			_ = saveState(e.Repo, latest)
-			_ = writeFailedRunnerState(stdout, latest, err)
-			flushWriter(stdout)
-		}
-		return err
-	}
-	return nil
+	return e.StartGoDAGJSON(ctx, changeName, stdout)
 }
 
 // createRun validates a change and persists the initial sealed run state.
@@ -193,6 +189,7 @@ func (e *Engine) createRun(changeName string) (State, error) {
 		Sealed:       true,
 		Status:       statusRunning,
 		Stage:        "execution",
+		Engine:       workflow.Engine,
 		BaselineHead: head,
 		BaselineDiff: diff,
 		Sessions:     map[string]string{},
@@ -334,6 +331,9 @@ func (e *Engine) resumeRun(ctx context.Context, runID string, allowUnknownLock b
 		}
 		flushWriter(startupJSON)
 	}
+	if state.Engine == "go-dag" {
+		return e.runGoDAGLocked(ctx, state)
+	}
 	return e.runLoop(ctx, state)
 }
 
@@ -342,12 +342,15 @@ func (e *Engine) run(ctx context.Context, state State) error {
 	if !hasWorkflowConfig(state) {
 		return fmt.Errorf("run %s 缺少 workflow_config 快照", state.RunID)
 	}
-	unlock, err := acquireLock(e.Repo, state.RunID)
-	if err != nil {
-		return err
+	if state.Engine != "go-dag" {
+		unlock, err := acquireLock(e.Repo, state.RunID)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+		return e.runLoop(ctx, state)
 	}
-	defer unlock()
-	return e.runLoop(ctx, state)
+	return e.runGoDAG(ctx, state)
 }
 
 // runLoop advances stages while the caller holds the run lock.
@@ -1379,6 +1382,8 @@ func parallelGroupConfigured(workflow WorkflowConfig, name string) bool {
 
 // saveState writes durable workflow state as pretty JSON.
 func saveState(repo string, state State) error {
+	stateFileMu.Lock()
+	defer stateFileMu.Unlock()
 	if err := os.MkdirAll(runDir(repo, state.RunID), 0o755); err != nil {
 		return err
 	}
@@ -1392,6 +1397,8 @@ func saveState(repo string, state State) error {
 
 // loadState reads durable workflow state for a run id.
 func loadState(repo, runID string) (State, error) {
+	stateFileMu.Lock()
+	defer stateFileMu.Unlock()
 	data, err := os.ReadFile(filepath.Join(runDir(repo, runID), "state.json"))
 	if err != nil {
 		return State{}, err

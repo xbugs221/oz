@@ -679,7 +679,7 @@ func TestRunJSONBackendFailureWritesFailedDTO(t *testing.T) {
 	chdir(t, repo)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n")
 	installFakeOz(t, "demo")
 	installFailingCodex(t)
 
@@ -731,7 +731,9 @@ func installFailingCodex(t *testing.T) {
 // zeroReviewWorkflow returns a fast workflow that can complete without review artifacts.
 func zeroReviewWorkflow() WorkflowConfig {
 	workflow := DefaultWorkflowConfig()
+	workflow.Engine = "legacy"
 	workflow.MaxReviewIterations = 0
+	workflow.Parallel.Enabled = false
 	return workflow
 }
 

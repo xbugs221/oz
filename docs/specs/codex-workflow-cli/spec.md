@@ -2050,3 +2050,39 @@
 - **当** 用户运行 `wo status --run-id <run-id> --json`
 - **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`
+
+### 需求：默认纯 Go DAG engine
+
+系统必须把默认 `wo run --change <change> --json` 执行路径设为内嵌纯 Go DAG engine。缺少或失败的 `dagu` CLI 不得影响默认运行。
+
+#### 场景：默认 run 不依赖 Dagu CLI
+
+- **当** 用户在真实 active change 上运行 `wo run --change <change> --json`
+- **且** PATH 中的 `dagu` CLI 不可用或会失败
+- **则** 默认运行必须成功推进 workflow
+- **且** run state 必须记录 `engine: go-dag`
+- **且** 默认 workflow 配置必须启用 `parallel.enabled: true`
+- **且** `wo status -wN` 必须展示 `引擎 go-dag` 和并行 group 摘要
+
+### 需求：默认 parallel subagents 与 DAG 图
+
+系统必须默认启用 parallel subagents，并在默认配置、DAG graph 和人类 status 中表达 planning context、implementation context、review 和 QA 的 fan-out/fan-in 语义。
+
+#### 场景：默认配置启用 parallel
+
+- **当** 用户运行 `wo config`
+- **则** 生成的 `wo.yaml` 必须包含 `engine: go-dag`
+- **且** 必须包含 `parallel.enabled: true`
+
+#### 场景：Mermaid 图展示 fan-out/fan-in
+
+- **当** 用户运行 `wo graph --change <change> --format mermaid`
+- **则** Mermaid 输出必须包含 planning context、implementation context、review、QA 的 subagent 节点和 fan-in 节点
+- **且** 图中必须包含 archive gate
+- **且** 默认图不得要求 Dagu CLI
+
+#### 场景：默认 go-dag status 保持 JSON contract 兼容
+
+- **当** 默认 go-dag run 完成后，用户运行 `wo status --run-id <run-id> --json`
+- **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
+- **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`

@@ -111,9 +111,15 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		ChangeName: changeName,
 		Display:    WorkflowDisplay{Title: "wo workflow: " + changeName},
 	}
+	var beforeExecutionPrereqs []WorkflowEdge
+	if planning := addParallelGroup(&spec, workflow, "planning_context", "execution", 0, nil); planning != "" {
+		beforeExecutionPrereqs = append(beforeExecutionPrereqs, WorkflowEdge{From: planning})
+	}
 	spec.addNode(WorkflowNode{ID: "execution", Name: "execution", Type: "main_stage", Stage: "execution"})
-	if before := addParallelGroup(&spec, workflow, "before_execution", "execution", 0, nil); before != "" {
+	if before := addParallelGroup(&spec, workflow, "before_execution", "execution", 0, beforeExecutionPrereqs); before != "" {
 		spec.addEdge(before, "execution", "")
+	} else if len(beforeExecutionPrereqs) > 0 {
+		spec.addEdge(beforeExecutionPrereqs[0].From, "execution", "")
 	}
 	previous := "execution"
 	for i := 1; i <= workflow.MaxReviewIterations; i++ {
@@ -216,7 +222,7 @@ func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, 
 		if iteration > 0 {
 			id = fmt.Sprintf("%s_%d_%d", visualGroup, iteration, i+1)
 		}
-		spec.addNode(WorkflowNode{ID: id, Name: visualGroup + ": " + member.Name, Type: "subagent", Group: visualGroup, Stage: stage, Member: member.Name, Mode: group.Mode, Iteration: iteration})
+		spec.addNode(WorkflowNode{ID: id, Name: groupName + " subagent: " + member.Name, Type: "subagent", Group: visualGroup, Stage: stage, Member: member.Name, Mode: group.Mode, Iteration: iteration})
 		for _, prerequisite := range prerequisites {
 			spec.addEdge(prerequisite.From, id, prerequisite.Label)
 		}
@@ -226,7 +232,7 @@ func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, 
 	if iteration > 0 {
 		fanin = fmt.Sprintf("%s_%d_fanin", visualGroup, iteration)
 	}
-	spec.addNode(WorkflowNode{ID: fanin, Name: visualGroup + " fan-in", Type: "fanin", Group: visualGroup, Stage: stage, Mode: group.Mode, Iteration: iteration})
+	spec.addNode(WorkflowNode{ID: fanin, Name: groupName + " fan-in", Type: "fanin", Group: visualGroup, Stage: stage, Mode: group.Mode, Iteration: iteration})
 	for _, id := range memberIDs {
 		spec.addEdge(id, fanin, "")
 	}

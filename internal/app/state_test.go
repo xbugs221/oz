@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -18,6 +19,15 @@ type fakeRunner struct{}
 
 // Run writes the artifact expected by the current prompt and returns a stable thread id.
 func (fakeRunner) Run(_ context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
+	if output := subagentOutputFromPrompt(prompt); output != "" {
+		name := promptValue(prompt, "SUBAGENT_NAME")
+		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
+		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
+		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+			return "", err
+		}
+		return "subagent-thread", os.WriteFile(output, []byte(body), 0o644)
+	}
 	stage := stageFromPromptOrState(repo, prompt)
 	runID := currentRunID(repo)
 	switch {
@@ -54,9 +64,47 @@ func (fakeRunner) Run(_ context.Context, repo, prompt, threadID string, options 
 	}
 }
 
+func subagentOutputFromPrompt(prompt string) string {
+	return promptValue(prompt, "SUBAGENT_OUTPUT")
+}
+
+func promptValue(prompt string, key string) string {
+	prefix := key + "="
+	for _, line := range strings.Split(prompt, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
+}
+
 type fakeTool struct {
 	name   string
 	runner AgentRunner
+}
+
+type subagentAwareRunner struct {
+	runner AgentRunner
+}
+
+func (r subagentAwareRunner) SetProgress(writer io.Writer) {
+	if runner, ok := r.runner.(progressSetter); ok {
+		runner.SetProgress(writer)
+	}
+}
+
+// Run creates read-only subagent artifacts for tests, then delegates main stages.
+func (r subagentAwareRunner) Run(ctx context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
+	if output := subagentOutputFromPrompt(prompt); output != "" {
+		name := promptValue(prompt, "SUBAGENT_NAME")
+		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
+		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
+		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+			return "", err
+		}
+		return "subagent-thread", os.WriteFile(output, []byte(body), 0o644)
+	}
+	return r.runner.Run(ctx, repo, prompt, threadID, options)
 }
 
 // Name returns the configured backend name used by test workflow snapshots.
@@ -76,8 +124,9 @@ func (t fakeTool) NewRunner() AgentRunner { return t.runner }
 // testRegistry routes codex stages to a deterministic fake runner.
 func testRegistry(runner AgentRunner) *AgentRegistry {
 	registry := &AgentRegistry{}
-	registry.Register(fakeTool{name: "codex", runner: runner})
-	registry.Register(fakeTool{name: "opencode", runner: runner})
+	wrapped := subagentAwareRunner{runner: runner}
+	registry.Register(fakeTool{name: "codex", runner: wrapped})
+	registry.Register(fakeTool{name: "opencode", runner: wrapped})
 	return registry
 }
 
@@ -281,6 +330,41 @@ func (r *validationRunner) Run(_ context.Context, repo, prompt, threadID string,
 	}
 }
 
+type slowSubagentRunner struct {
+	mu      sync.Mutex
+	windows map[string]timeWindow
+}
+
+type timeWindow struct {
+	start  time.Time
+	finish time.Time
+}
+
+// Run records subagent execution windows and writes normal workflow artifacts.
+func (r *slowSubagentRunner) Run(_ context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
+	if output := subagentOutputFromPrompt(prompt); output != "" {
+		name := promptValue(prompt, "SUBAGENT_NAME")
+		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
+		start := time.Now()
+		time.Sleep(120 * time.Millisecond)
+		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"slow fake subagent completed","evidence":["fake-runner"]}` + "\n"
+		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(output, []byte(body), 0o644); err != nil {
+			return "", err
+		}
+		r.mu.Lock()
+		if r.windows == nil {
+			r.windows = map[string]timeWindow{}
+		}
+		r.windows[name] = timeWindow{start: start, finish: time.Now()}
+		r.mu.Unlock()
+		return "subagent-thread", nil
+	}
+	return fakeRunner{}.Run(context.Background(), repo, prompt, threadID, options)
+}
+
 func stageFromPromptOrState(repo, prompt string) string {
 	stage := strings.TrimSpace(strings.Split(prompt, "\n")[0])
 	if _, err := roleForStage(stage); err == nil {
@@ -423,20 +507,47 @@ func TestEngineSupportsZeroReviewIterations(t *testing.T) {
 	}
 }
 
+// TestGoDAGRunsReadySubagentsConcurrently verifies fan-out members overlap before fan-in.
+func TestGoDAGRunsReadySubagentsConcurrently(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "demo")
+	mustPrompts(t, repo)
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n")
+	runner := &slowSubagentRunner{}
+	registry := &AgentRegistry{}
+	registry.Register(fakeTool{name: "codex", runner: runner})
+	registry.Register(fakeTool{name: "opencode", runner: runner})
+	engine := NewEngine(repo, registry)
+	if err := engine.Start(context.Background(), "demo"); err != nil {
+		t.Fatal(err)
+	}
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if len(runner.windows) < 2 {
+		t.Fatalf("subagent windows missing: %#v", runner.windows)
+	}
+	overlapped := false
+	for firstName, first := range runner.windows {
+		for secondName, second := range runner.windows {
+			if firstName == secondName {
+				continue
+			}
+			if first.start.Before(second.finish) && second.start.Before(first.finish) {
+				overlapped = true
+			}
+		}
+	}
+	if !overlapped {
+		t.Fatalf("subagents did not overlap: %#v", runner.windows)
+	}
+}
+
 // TestValidationGateRerunsExecutionBeforeReview verifies failed commands return to executor first.
 func TestValidationGateRerunsExecutionBeforeReview(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `
-wo:
-  workflow:
-    max_review_iterations: 0
-    validation:
-      max_attempts_per_stage: 2
-      commands:
-        - test -f validation-ok
-`)
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 2\n      commands:\n        - test -f validation-ok\n")
 	runner := &validationRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -466,15 +577,7 @@ func TestValidationGateBlocksAtAttemptLimit(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `
-wo:
-  workflow:
-    max_review_iterations: 0
-    validation:
-      max_attempts_per_stage: 1
-      commands:
-        - test -f never-created
-`)
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 1\n      commands:\n        - test -f never-created\n")
 	runner := &scenarioRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -504,15 +607,7 @@ func TestValidationGateRerunsFixWithoutConsumingReview(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "validation-ok"), []byte("ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `
-wo:
-  workflow:
-    max_review_iterations: 2
-    validation:
-      max_attempts_per_stage: 2
-      commands:
-        - test -f validation-ok
-`)
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 2\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 2\n      commands:\n        - test -f validation-ok\n")
 	runner := &validationRunner{decisions: []string{"needs_fix", "clean"}}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -544,7 +639,7 @@ func TestQAArtifactGateRerunsQAInsteadOfFailing(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 1\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    engine: legacy\n    max_review_iterations: 1\n    parallel:\n      enabled: false\n")
 	runner := &qaArtifactRepairRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -810,7 +905,9 @@ func TestResumeUsesStateAndPromptSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflow := DefaultWorkflowConfig()
+	workflow.Engine = "legacy"
 	workflow.MaxReviewIterations = 0
+	workflow.Parallel.Enabled = false
 	workflow.Stages = map[string]StageOptions{
 		"execution": {Reasoning: "low", Fast: false},
 		"archive":   {Reasoning: "low", Fast: false},

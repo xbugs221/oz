@@ -132,11 +132,12 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 	if state.Status != statusRunning || state.Stage != stage {
 		return writeNodeResult(stdout, nodeResult{Status: "skipped", RunID: state.RunID, Stage: stage})
 	}
+	forceRun := shouldForceStageRerun(state)
 	done, err := e.nodeStageDone(state)
 	if err != nil {
 		return e.failNodeState(state, err)
 	}
-	if !done {
+	if !done || forceRun {
 		if err := e.detectManualIntervention(&state); err != nil {
 			return err
 		}

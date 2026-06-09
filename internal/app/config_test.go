@@ -31,8 +31,11 @@ func TestLoadWorkflowConfigUsesDefaults(t *testing.T) {
 	if config.Validation.MaxAttemptsPerStage != 3 {
 		t.Fatalf("validation attempts = %d, want 3", config.Validation.MaxAttemptsPerStage)
 	}
-	if config.Parallel.Enabled {
-		t.Fatal("parallel enabled = true, want disabled by default")
+	if config.Engine != "go-dag" {
+		t.Fatalf("engine = %q, want go-dag", config.Engine)
+	}
+	if !config.Parallel.Enabled {
+		t.Fatal("parallel enabled = false, want enabled by default")
 	}
 	for _, group := range []string{"planning_context", "implementation_context", "review", "qa"} {
 		if _, ok := config.Parallel.Groups[group]; !ok {

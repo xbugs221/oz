@@ -105,6 +105,9 @@ func parallelStatusGroupReached(path string, state State, group string) bool {
 	if _, err := os.Stat(path); err == nil {
 		return true
 	}
+	if state.Status == statusDone || state.Stage == "done" {
+		return false
+	}
 	kind := stageKind(state.Stage)
 	switch group {
 	case "planning_context", "implementation_context":

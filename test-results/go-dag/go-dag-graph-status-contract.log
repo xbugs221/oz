@@ -1,0 +1,1699 @@
+wo config 应生成默认 go-dag 与 parallel enabled 配置
+已创建 wo.yaml
+wo:
+  workflow:
+    engine: go-dag
+    max_review_iterations: 30
+    stages:
+      planning:
+        cli: codex
+        reasoning: xhigh
+      execution:
+        cli: codex
+        reasoning: low
+      fix:
+        cli: codex
+        reasoning: low
+      review:
+        cli: codex
+        reasoning: high
+      qa:
+        cli: codex
+        reasoning: high
+      archive:
+        cli: codex
+        reasoning: low
+    parallel:
+      enabled: true
+      groups:
+        planning_context:
+          mode: advisory
+          members:
+            - name: 需求分析员
+              purpose: 找出需求歧义、风险和遗漏
+              stage: planning
+              tool: opencode
+              subagent: metis
+            - name: 代码库侦察员
+              purpose: 搜索现有模块、测试入口和实现约定
+              stage: planning
+              tool: opencode
+              subagent: explore
+            - name: 外部资料研究员
+              purpose: 查询外部库文档和开源实现
+              stage: planning
+              tool: opencode
+              subagent: librarian
+        implementation_context:
+          mode: advisory
+          members:
+            - name: 代码库侦察员
+              purpose: 汇总 execution 需要读取的文件和测试模式
+              stage: before_execution
+              tool: opencode
+              subagent: explore
+            - name: 外部资料研究员
+              purpose: 查询 execution 依赖的外部库文档和开源实现
+              stage: before_execution
+              tool: opencode
+              subagent: librarian
+        review:
+          mode: gate_input
+          members:
+            - name: 目标核对审核员
+              purpose: 核对 proposal/spec/task 是否满足
+            - name: 代码质量审核员
+              purpose: 检查类型、边界和可维护性
+            - name: 测试有效性审核员
+              purpose: 判断测试是否真实覆盖场景
+            - name: 安全风险审核员
+              purpose: 检查权限、输入、泄漏和破坏性操作
+            - name: 上下文一致性审核员
+              purpose: 检查是否违背现有架构约定
+        qa:
+          mode: gate_input
+          members:
+            - name: CLI/API 测试员
+              purpose: 执行命令行或接口真实路径
+            - name: 浏览器路径测试员
+              purpose: 执行页面真实用户路径
+            - name: 证据采集员
+              purpose: 采集截图、trace、console、network 或 runtime log
+            - name: 回归场景测试员
+              purpose: 覆盖邻近功能回归
+    validation:
+      max_attempts_per_stage: 3
+      commands: []
+  prompts:
+    planning: |
+      当前是讨论规划阶段。调用 `oz-plan` 技能，开始讨论规划。
+      
+      {{if .HasPlanningContext}}
+      并行规划上下文增强已启用：
+      
+      - 如已存在 `{{.PlanningContextPath}}`，先读取其中的成员摘要、证据路径和失败状态，再开始规划。
+      - 如尚不存在该 artifact，先按 `workflow_config.parallel.groups.planning_context` 的成员职责并行收集只读上下文，并写入 `{{.PlanningContextPath}}`。
+      - tool/subagent 只作为提示词角色线索，不作为 CLI 参数；当前主 agent 负责按成员 `name/purpose/stage/tool/subagent` 组织产物。
+      - advisory 成员失败时记录失败摘要并继续主规划；required 成员失败时在规划结论中明确标为 blocked 风险，不得伪造成功。
+      {{end}}
+    execution: |
+      读取 `{{.StatePath}}`，并调用 `oz-exec` 技能开始执行当前 oz change，提案名称见 `state.json.change_name` 字段。
+      
+      {{if .HasPlanningContext}}
+      规划并行上下文 artifact：
+      
+      - 如已存在 `{{.PlanningContextPath}}`，先读取其中的成员摘要、证据路径和失败状态，再开始实现。
+      - 如尚不存在该 artifact，按 `workflow_config.parallel.groups.planning_context` 的成员职责并行收集只读上下文，并写入 `{{.PlanningContextPath}}`。
+      - tool/subagent 只作为提示词角色线索，不作为 CLI 参数；当前主 agent 负责按成员 `name/purpose/stage/tool/subagent` 组织产物。
+      - advisory 成员失败时记录失败摘要并继续主执行；required 成员失败时在实现交付中明确标为 blocked 风险，不得伪造成功。
+      {{end}}
+      
+      {{if .HasParallelContext}}
+      并行上下文增强已启用：
+      
+      - 如已存在 `{{.ParallelContextPath}}`，先读取其中的成员摘要、证据路径和失败状态，再开始实现。
+      - 如尚不存在该 artifact，先按 `workflow_config.parallel.groups.implementation_context` 的成员职责并行收集只读上下文，并写入 `{{.ParallelContextPath}}`。
+      - tool/subagent 只作为提示词角色线索，不作为 CLI 参数；当前主 agent 负责按成员 `name/purpose/stage/tool/subagent` 组织产物。
+      - advisory 成员失败时记录失败摘要并继续主执行；required 成员失败时在实现交付中明确标为 blocked 风险，不得伪造成功。
+      {{end}}
+    review: |
+      读取:
+      
+      - `{{.StatePath}}`
+      - `{{.AcceptancePath}}`
+      
+      审核：
+      
+      - 当前 git 工作区相对 `{{.BaselineHead}}` 的完整变更
+      - 对应 oz change：`{{.ChangePath}}/`
+      - `{{.AcceptancePath}}` 中的测试和证据合同
+      - tasks 是否全部完成且与实现一致
+      - 验收测试、实现代码、文档和 CLI 行为是否满足 proposal/design/spec
+      {{if .HasPlanningContext}}
+      - 规划并行上下文 artifact：`{{.PlanningContextPath}}`
+      {{end}}
+      {{if .HasParallelContext}}
+      - 执行前并行上下文 artifact：`{{.ParallelContextPath}}`
+      {{end}}
+      {{if .HasParallelReview}}
+      - 并行审核输入 artifact：`{{.ParallelReviewPath}}`
+      {{end}}
+      
+      {{if .IsFirstRoleTurn}}
+      严格 JSON 要求：
+      
+      - 第 2 轮及之后必须先验证上一轮 findings 是否已解决，再重新审核完整 diff
+      - 作为一个评审专家，提出问题，并分析根因，如有必要，应先行探索并提供证据，但不要修改源码
+      {{else}}
+      续轮要求：
+      
+      - 复用当前角色会话：`{{.RoleSessionKey}}`
+      - 先验证上一轮 findings 是否已解决，再重新审核完整 diff
+      - 作为一个评审专家，提出问题，并分析根因，如有必要，应先行探索并提供证据，但不要修改源码
+      {{end}}
+      {{if .HasParallelReview}}
+      - 如 `{{.ParallelReviewPath}}` 已存在，必须把其中多视角 findings/evidence 汇总进最终 `{{.ReviewPath}}`。
+      - 如尚不存在该 artifact，先按 `workflow_config.parallel.groups.review` 的职责并行审核，并写入 `{{.ParallelReviewPath}}`。
+      - tool/subagent 只作为提示词角色线索，不作为 CLI 参数；当前主 agent 负责按成员 `name/purpose/stage/tool/subagent` 组织产物。
+      - 任一 gate_input 成员报告 blocker/major finding 时，最终 review `decision` 不得为 `clean`。
+      {{end}}
+      
+      {{if .HasPreviousReview}}
+      上一轮审核修复循环产物：`{{.LatestPreviousReviewPath}}`
+      
+      历史 review 数量：{{.PreviousReviewCount}}
+      
+      {{if .HasPreviousFixSummary}}
+      Fix summary: `{{.LatestPreviousFixSummaryPath}}`
+      {{end}}
+      
+      旧历史只在最新 artifact 引用旧 finding、同类 finding 重复出现、证据矛盾或升级修复原因不清时按需追溯；不要默认读取全部历史 review/fix artifact。
+      {{end}}
+      
+      要求：
+      
+      - 只输出一个 JSON 对象，不得输出 Markdown、注释、代码块或任何 JSON 以外文本。
+      - 不得包含额外字段，不得返回多个 JSON 值。
+      - `decision` 只允许 `clean` 或 `needs_fix`。
+      - `summary` / `findings[].title` / `findings[].evidence` / `findings[].recommendation` 必须可复核。
+      - evidence 必须可复核，不能只写结论。
+      - `clean` 的 evidence 必须引用验证命令 artifact，并引用截图、trace、QA、浏览器控制台、网络或等价运行时证据；Web app 不得只写“代码已检查”。
+      - `clean` 时 `findings` 为空、全部 `checks` 为 true、`evidence` 非空。
+      - `needs_fix` 时 `findings` 至少一项。
+      - `severity` 仅允许 `blocker`、`major`、`minor`（内部会归一化 `high/medium/low/nit/critical`）。
+      - 第 2 轮及之后 `clean` 时 `previous_findings_resolved` 必须为 true。
+      - 第 2 轮及之后，如果连续两轮没有实质变化，且最新 fix summary 明确表达无法完成或缺少继续修复条件，可以设置 `workflow_failure.failed: true` 和 `workflow_failure.reason`，让工作流直接失败停下。
+      
+      - 编写前可先本地复测：`wo validate-review --artifact {{.ReviewPath}} --json`，不符合约束时先修正再提交。
+      
+      写入：
+      
+      ```text
+      {{.ReviewPath}}
+      ```
+      
+      {{if .IsFirstRoleTurn}}
+      JSON schema：
+      
+      ```json
+      {
+        "summary": "一句话总结审核结果",
+        "decision": "clean",
+        "findings": [],
+        "checks": {
+          "oz_aligned": true,
+          "tasks_verified": true,
+          "tests_meaningful": true,
+          "implementation_scoped": true,
+          "runtime_behavior_verified": true,
+          "previous_findings_resolved": true
+        },
+        "evidence": [
+          "validation artifact passed: <run>/validation-execution-1.json",
+          "runtime evidence: Playwright trace/screenshots captured under test-results/<case>/"
+        ]
+      }
+      ```
+      
+      如需修复，使用：
+      
+      ```json
+      {
+        "summary": "一句话总结审核结果",
+        "decision": "needs_fix",
+        "findings": [
+          {
+            "title": "问题标题",
+            "severity": "blocker",
+            "evidence": "可复核证据",
+            "recommendation": "问题根因，以及明确的修复建议"
+          }
+        ],
+        "evidence": [],
+        "workflow_failure": null,
+        "checks": {
+          "oz_aligned": false,
+          "tasks_verified": false,
+          "tests_meaningful": false,
+          "implementation_scoped": true,
+          "runtime_behavior_verified": false,
+          "previous_findings_resolved": false
+        }
+      }
+      ```
+      
+      如需提前终止无效循环，使用：
+      
+      ```json
+      {
+        "summary": "连续两轮修复没有实质变化，且执行智能体报告无法继续可靠修复",
+        "decision": "needs_fix",
+        "workflow_failure": {
+          "failed": true,
+          "reason": "连续两轮 diff 没有实质变化；fix summary 表示缺少必要凭据，无法完成当前 findings"
+        },
+        "findings": [
+          {
+            "title": "问题标题",
+            "severity": "blocker",
+            "evidence": "可复核证据，例如两轮 diff/summary 对比和当前失败行为",
+            "recommendation": "说明无法继续自动修复的根因"
+          }
+        ],
+        "evidence": [
+          "连续两轮 review 指向同类 finding",
+          "最新 fix summary 报告无法完成",
+          "git diff 对比显示没有实质修复"
+        ],
+        "checks": {
+          "oz_aligned": false,
+          "tasks_verified": false,
+          "tests_meaningful": false,
+          "implementation_scoped": true,
+          "runtime_behavior_verified": false,
+          "previous_findings_resolved": false
+        }
+      }
+      ```
+      
+      如果发现任何字段缺失或格式问题，请先修复后重写；不要解释原因，不要拆分输出。
+      {{else}}
+      如果发现任何字段缺失或格式问题，请先修复后重写；不要解释原因，不要拆分输出。
+      {{end}}
+    qa: |
+      读取:
+      
+      - `{{.StatePath}}`
+      - `{{.AcceptancePath}}`
+      - `{{.ReviewPath}}`
+      - 对应 oz change：`{{.ChangePath}}/`
+      {{if .HasPlanningContext}}
+      - 规划并行上下文 artifact：`{{.PlanningContextPath}}`
+      {{end}}
+      {{if .HasParallelContext}}
+      - 执行前并行上下文 artifact：`{{.ParallelContextPath}}`
+      {{end}}
+      {{if .HasParallelQA}}
+      - 并行 QA 输入 artifact：`{{.ParallelQAPath}}`
+      {{end}}
+      
+      验收：
+      
+      - 以真实用户路径复测当前实现，优先运行项目的端到端测试、启动应用并采集截图/trace/控制台证据
+      - 必须逐项执行或核对 `{{.AcceptancePath}}` 中的 `required_tests` 和 `required_evidence`
+      - Web app 必须检查交互状态变化、刷新后状态、加载/空/错误态、控制台错误、网络失败和桌面/移动端基本观感
+      - 不修改源码，不修改 `{{.AcceptancePath}}`；如发现问题，只写入结构化 QA artifact
+      {{if .HasParallelQA}}
+      - 如 `{{.ParallelQAPath}}` 已存在，必须把其中真实路径 QA 结果汇总进最终 `{{.QAPath}}` 的 `evidence` 和 `acceptance_matrix`。
+      - 如尚不存在该 artifact，先按 `workflow_config.parallel.groups.qa` 的职责并行执行 CLI/API、浏览器路径、证据采集和回归场景验证，并写入 `{{.ParallelQAPath}}`。
+      - tool/subagent 只作为提示词角色线索，不作为 CLI 参数；当前主 agent 负责按成员 `name/purpose/stage/tool/subagent` 组织产物。
+      - 任一 gate_input 成员缺少 required evidence 或报告 blocker/major finding 时，最终 QA `decision` 不得为 `clean`。
+      {{end}}
+      
+      写入：
+      
+      ```text
+      {{.QAPath}}
+      ```
+      
+      严格 JSON 要求：
+      
+      - 只输出一个 JSON 对象，不得输出 Markdown、注释、代码块或任何 JSON 以外文本。
+      - `decision` 只允许 `clean` 或 `needs_fix`。
+      - `clean` 时 `findings` 为空，`evidence` 必须包含可复核的测试、截图、trace、控制台或运行时证据。
+      - `clean` 时 `acceptance_matrix` 必须覆盖 `{{.AcceptancePath}}` 中每个 `required_tests[].id` 和 `required_evidence[].id`，且每项 `status` 必须为 `passed`。
+      - `acceptance_matrix[].id` 只能逐字使用 `{{.AcceptancePath}}` 中已经定义的 id，不得新增、概括、合并或改写 id。
+      - `needs_fix` 时 `findings` 至少一项，finding 必须包含 `title`、`severity`、`evidence`、`recommendation`。
+      - `severity` 仅允许 `blocker`、`major`、`minor`（内部会归一化 `high/medium/low/nit/critical`）。
+      - 如果 prompt 追加了 `Stage artifact gate failed`，说明上一次 QA artifact 没通过 schema 或 acceptance 合同门禁；必须先按错误摘要重写 `{{.QAPath}}`，不要修改源码或改 acceptance 合同。
+      {{if .HasRoleSession}}
+      - 复用当前角色会话：`{{.RoleSessionKey}}`，本轮不重复 JSON 示例。
+      {{end}}
+      
+      {{if .IsFirstRoleTurn}}
+      clean 示例：
+      
+      ```json
+      {
+        "summary": "核心业务路径已通过 QA",
+        "decision": "clean",
+        "findings": [],
+        "acceptance_matrix": [
+          {
+            "id": "contract-order-filter",
+            "status": "passed",
+            "artifact": "docs/changes/12-订单筛选/tests/order-filter.acceptance.test.ts",
+            "evidence": "pnpm exec tsx --test docs/changes/12-订单筛选/tests/order-filter.acceptance.test.ts passed"
+          },
+          {
+            "id": "screenshot-filter-after-refresh",
+            "status": "passed",
+            "artifact": "test-results/order-filter/after-refresh.png",
+            "evidence": "screenshot artifact shows the selected filter and matching list after page.reload()"
+          }
+        ],
+        "evidence": [
+          "pnpm exec playwright test passed",
+          "screenshot artifact: test-results/orders-checkout-desktop.png",
+          "console/network check: no browser console errors or failed API calls"
+        ]
+      }
+      ```
+      
+      needs_fix 示例：
+      
+      ```json
+      {
+        "summary": "刷新后订单筛选状态丢失",
+        "decision": "needs_fix",
+        "findings": [
+          {
+            "title": "刷新后筛选状态丢失",
+            "severity": "major",
+            "evidence": "Playwright trace test-results/orders-filter.zip shows filter reset after page.reload()",
+            "recommendation": "将筛选状态持久化到 URL query 或等价可恢复状态，并补刷新后断言"
+          }
+        ],
+        "evidence": [
+          "pnpm exec playwright test tests/e2e/orders.spec.ts failed",
+          "trace artifact: test-results/orders-filter.zip"
+        ]
+      }
+      ```
+      {{end}}
+    fix: |
+      读取:
+      
+      - `{{.StatePath}}`
+      - `{{.AcceptancePath}}`
+      - `{{.ReviewPath}}`
+      - 如存在，`{{.QAPath}}`
+      
+      任务：
+      
+      - 只修复当前 review/QA artifact 中列出的 findings
+      {{if .IsFirstRoleTurn}}
+      - 充分理解评审意见，明晰意图
+      - 根据评审意见列出的问题根因逐项验证并修复
+      - 从根源入手，不能治标不治本
+      - 必须做根因分析，禁止只按错误文本打补丁
+      {{else}}
+      - 复用当前角色会话：`{{.RoleSessionKey}}`
+      - 根据当前 findings 做最小必要修复
+      {{end}}
+      - 改正后，必须运行修复相关的测试先行验证
+      - 不得删除、弱化或绕过 `{{.AcceptancePath}}`；如果 finding 指出验收合同本身缺项，应在 summary 中说明需要回到 oz-create 更新提案，而不是在 sealed run 内临时改合同
+      - 普通修复轮次不需要读取所有旧 review/fix artifact
+      
+      {{if .FixEscalated}}
+      自动升级：
+      
+      - 连续 review 失败次数：{{.ConsecutiveReviewFailures}}
+      - 本轮 reasoning：{{.FixEscalationReasoning}}
+      - 需要说明上一轮为什么没解决，并验证重复 finding 是否来自同一根因
+      {{if .RepeatedFindingTitles}}
+      - 重复 findings：
+      {{range .RepeatedFindingTitles}}
+        - {{.}}
+      {{end}}
+      {{end}}
+      {{end}}
+      
+      完成后写入：
+      
+      ```text
+      {{.FixSummaryPath}}
+      ```
+      
+      summary 内容使用 Markdown，包含：
+      
+      - 修复的问题
+      - 运行的验证命令及结果
+      - 剩余风险；没有则跳过不写
+    archive: |
+      读取当前 run 目录：
+      
+      - `{{.StatePath}}`
+      - `{{.AcceptancePath}}`
+      - `{{.PreviousReviewPaths}}`
+      - `{{.PreviousQAPaths}}`（如存在）
+      - `{{.PreviousFixSummaryPaths}}`（如存在）
+      
+      从 `state.json.change_name` 获取 `<change-name>`。必须调用 `oz-archive` skill，并以该 skill 的说明作为归档流程依据。
+      
+      归档前必须确认：
+      
+      - 最新 review 为 clean，且 evidence 引用了 validation artifact 和运行时/截图/trace/QA 证据
+      - 最新 QA 为 clean，且 `acceptance_matrix` 逐项覆盖 `{{.AcceptancePath}}` 的 `required_tests` / `required_evidence`
+      - 最新 QA evidence 包含可复核的测试、截图、trace、控制台或网络检查结果
+      - 如配置了 validation.commands，execution/fix 阶段均有 passed 记录
+      
+      完成后写入：
+      
+      ```text
+      {{.DeliverySummaryPath}}
+      ```
+      
+      该路径是当前 run 的 `delivery-summary.md`。
+      
+      summary 必须包含 `最终审核` 小节，便于人工快速复核归档质量；至少写清：
+      
+      - 提案目的
+      - 预期效果
+      - 边界
+      - 审核证据
+      - 快速实测
+      - 通过标准
+      
+      **重要约束**
+      
+      - 代码实现通过是否完成 archive 只检查两件事：
+        - `{{.DeliverySummaryPath}}` 存在
+        - `docs/changes/archive/*-<change-name>` 存在
+      - 不要覆盖已有归档目录
+      - git commit 只包含本次 oz 变更相关内容
+wo graph mermaid 应展示默认并行 fan-out/fan-in
+flowchart TD
+  planning_context_1["planning_context subagent: 需求分析员"]
+  planning_context_2["planning_context subagent: 代码库侦察员"]
+  planning_context_3["planning_context subagent: 外部资料研究员"]
+  planning_context_fanin["planning_context fan-in"]
+  execution["execution"]
+  before_execution_1["implementation_context subagent: 代码库侦察员"]
+  before_execution_2["implementation_context subagent: 外部资料研究员"]
+  before_execution_fanin["implementation_context fan-in"]
+  review_1["review_1"]
+  before_review_1_1["review subagent: 目标核对审核员"]
+  before_review_1_2["review subagent: 代码质量审核员"]
+  before_review_1_3["review subagent: 测试有效性审核员"]
+  before_review_1_4["review subagent: 安全风险审核员"]
+  before_review_1_5["review subagent: 上下文一致性审核员"]
+  before_review_1_fanin["review fan-in"]
+  gate_review_1["review gate"]
+  qa_1["qa_1"]
+  before_qa_1_1["qa subagent: CLI/API 测试员"]
+  before_qa_1_2["qa subagent: 浏览器路径测试员"]
+  before_qa_1_3["qa subagent: 证据采集员"]
+  before_qa_1_4["qa subagent: 回归场景测试员"]
+  before_qa_1_fanin["qa fan-in"]
+  gate_qa_1["QA gate"]
+  fix_1["fix_1"]
+  review_2["review_2"]
+  before_review_2_1["review subagent: 目标核对审核员"]
+  before_review_2_2["review subagent: 代码质量审核员"]
+  before_review_2_3["review subagent: 测试有效性审核员"]
+  before_review_2_4["review subagent: 安全风险审核员"]
+  before_review_2_5["review subagent: 上下文一致性审核员"]
+  before_review_2_fanin["review fan-in"]
+  gate_review_2["review gate"]
+  qa_2["qa_2"]
+  before_qa_2_1["qa subagent: CLI/API 测试员"]
+  before_qa_2_2["qa subagent: 浏览器路径测试员"]
+  before_qa_2_3["qa subagent: 证据采集员"]
+  before_qa_2_4["qa subagent: 回归场景测试员"]
+  before_qa_2_fanin["qa fan-in"]
+  gate_qa_2["QA gate"]
+  fix_2["fix_2"]
+  review_3["review_3"]
+  before_review_3_1["review subagent: 目标核对审核员"]
+  before_review_3_2["review subagent: 代码质量审核员"]
+  before_review_3_3["review subagent: 测试有效性审核员"]
+  before_review_3_4["review subagent: 安全风险审核员"]
+  before_review_3_5["review subagent: 上下文一致性审核员"]
+  before_review_3_fanin["review fan-in"]
+  gate_review_3["review gate"]
+  qa_3["qa_3"]
+  before_qa_3_1["qa subagent: CLI/API 测试员"]
+  before_qa_3_2["qa subagent: 浏览器路径测试员"]
+  before_qa_3_3["qa subagent: 证据采集员"]
+  before_qa_3_4["qa subagent: 回归场景测试员"]
+  before_qa_3_fanin["qa fan-in"]
+  gate_qa_3["QA gate"]
+  fix_3["fix_3"]
+  review_4["review_4"]
+  before_review_4_1["review subagent: 目标核对审核员"]
+  before_review_4_2["review subagent: 代码质量审核员"]
+  before_review_4_3["review subagent: 测试有效性审核员"]
+  before_review_4_4["review subagent: 安全风险审核员"]
+  before_review_4_5["review subagent: 上下文一致性审核员"]
+  before_review_4_fanin["review fan-in"]
+  gate_review_4["review gate"]
+  qa_4["qa_4"]
+  before_qa_4_1["qa subagent: CLI/API 测试员"]
+  before_qa_4_2["qa subagent: 浏览器路径测试员"]
+  before_qa_4_3["qa subagent: 证据采集员"]
+  before_qa_4_4["qa subagent: 回归场景测试员"]
+  before_qa_4_fanin["qa fan-in"]
+  gate_qa_4["QA gate"]
+  fix_4["fix_4"]
+  review_5["review_5"]
+  before_review_5_1["review subagent: 目标核对审核员"]
+  before_review_5_2["review subagent: 代码质量审核员"]
+  before_review_5_3["review subagent: 测试有效性审核员"]
+  before_review_5_4["review subagent: 安全风险审核员"]
+  before_review_5_5["review subagent: 上下文一致性审核员"]
+  before_review_5_fanin["review fan-in"]
+  gate_review_5["review gate"]
+  qa_5["qa_5"]
+  before_qa_5_1["qa subagent: CLI/API 测试员"]
+  before_qa_5_2["qa subagent: 浏览器路径测试员"]
+  before_qa_5_3["qa subagent: 证据采集员"]
+  before_qa_5_4["qa subagent: 回归场景测试员"]
+  before_qa_5_fanin["qa fan-in"]
+  gate_qa_5["QA gate"]
+  fix_5["fix_5"]
+  review_6["review_6"]
+  before_review_6_1["review subagent: 目标核对审核员"]
+  before_review_6_2["review subagent: 代码质量审核员"]
+  before_review_6_3["review subagent: 测试有效性审核员"]
+  before_review_6_4["review subagent: 安全风险审核员"]
+  before_review_6_5["review subagent: 上下文一致性审核员"]
+  before_review_6_fanin["review fan-in"]
+  gate_review_6["review gate"]
+  qa_6["qa_6"]
+  before_qa_6_1["qa subagent: CLI/API 测试员"]
+  before_qa_6_2["qa subagent: 浏览器路径测试员"]
+  before_qa_6_3["qa subagent: 证据采集员"]
+  before_qa_6_4["qa subagent: 回归场景测试员"]
+  before_qa_6_fanin["qa fan-in"]
+  gate_qa_6["QA gate"]
+  fix_6["fix_6"]
+  review_7["review_7"]
+  before_review_7_1["review subagent: 目标核对审核员"]
+  before_review_7_2["review subagent: 代码质量审核员"]
+  before_review_7_3["review subagent: 测试有效性审核员"]
+  before_review_7_4["review subagent: 安全风险审核员"]
+  before_review_7_5["review subagent: 上下文一致性审核员"]
+  before_review_7_fanin["review fan-in"]
+  gate_review_7["review gate"]
+  qa_7["qa_7"]
+  before_qa_7_1["qa subagent: CLI/API 测试员"]
+  before_qa_7_2["qa subagent: 浏览器路径测试员"]
+  before_qa_7_3["qa subagent: 证据采集员"]
+  before_qa_7_4["qa subagent: 回归场景测试员"]
+  before_qa_7_fanin["qa fan-in"]
+  gate_qa_7["QA gate"]
+  fix_7["fix_7"]
+  review_8["review_8"]
+  before_review_8_1["review subagent: 目标核对审核员"]
+  before_review_8_2["review subagent: 代码质量审核员"]
+  before_review_8_3["review subagent: 测试有效性审核员"]
+  before_review_8_4["review subagent: 安全风险审核员"]
+  before_review_8_5["review subagent: 上下文一致性审核员"]
+  before_review_8_fanin["review fan-in"]
+  gate_review_8["review gate"]
+  qa_8["qa_8"]
+  before_qa_8_1["qa subagent: CLI/API 测试员"]
+  before_qa_8_2["qa subagent: 浏览器路径测试员"]
+  before_qa_8_3["qa subagent: 证据采集员"]
+  before_qa_8_4["qa subagent: 回归场景测试员"]
+  before_qa_8_fanin["qa fan-in"]
+  gate_qa_8["QA gate"]
+  fix_8["fix_8"]
+  review_9["review_9"]
+  before_review_9_1["review subagent: 目标核对审核员"]
+  before_review_9_2["review subagent: 代码质量审核员"]
+  before_review_9_3["review subagent: 测试有效性审核员"]
+  before_review_9_4["review subagent: 安全风险审核员"]
+  before_review_9_5["review subagent: 上下文一致性审核员"]
+  before_review_9_fanin["review fan-in"]
+  gate_review_9["review gate"]
+  qa_9["qa_9"]
+  before_qa_9_1["qa subagent: CLI/API 测试员"]
+  before_qa_9_2["qa subagent: 浏览器路径测试员"]
+  before_qa_9_3["qa subagent: 证据采集员"]
+  before_qa_9_4["qa subagent: 回归场景测试员"]
+  before_qa_9_fanin["qa fan-in"]
+  gate_qa_9["QA gate"]
+  fix_9["fix_9"]
+  review_10["review_10"]
+  before_review_10_1["review subagent: 目标核对审核员"]
+  before_review_10_2["review subagent: 代码质量审核员"]
+  before_review_10_3["review subagent: 测试有效性审核员"]
+  before_review_10_4["review subagent: 安全风险审核员"]
+  before_review_10_5["review subagent: 上下文一致性审核员"]
+  before_review_10_fanin["review fan-in"]
+  gate_review_10["review gate"]
+  qa_10["qa_10"]
+  before_qa_10_1["qa subagent: CLI/API 测试员"]
+  before_qa_10_2["qa subagent: 浏览器路径测试员"]
+  before_qa_10_3["qa subagent: 证据采集员"]
+  before_qa_10_4["qa subagent: 回归场景测试员"]
+  before_qa_10_fanin["qa fan-in"]
+  gate_qa_10["QA gate"]
+  fix_10["fix_10"]
+  review_11["review_11"]
+  before_review_11_1["review subagent: 目标核对审核员"]
+  before_review_11_2["review subagent: 代码质量审核员"]
+  before_review_11_3["review subagent: 测试有效性审核员"]
+  before_review_11_4["review subagent: 安全风险审核员"]
+  before_review_11_5["review subagent: 上下文一致性审核员"]
+  before_review_11_fanin["review fan-in"]
+  gate_review_11["review gate"]
+  qa_11["qa_11"]
+  before_qa_11_1["qa subagent: CLI/API 测试员"]
+  before_qa_11_2["qa subagent: 浏览器路径测试员"]
+  before_qa_11_3["qa subagent: 证据采集员"]
+  before_qa_11_4["qa subagent: 回归场景测试员"]
+  before_qa_11_fanin["qa fan-in"]
+  gate_qa_11["QA gate"]
+  fix_11["fix_11"]
+  review_12["review_12"]
+  before_review_12_1["review subagent: 目标核对审核员"]
+  before_review_12_2["review subagent: 代码质量审核员"]
+  before_review_12_3["review subagent: 测试有效性审核员"]
+  before_review_12_4["review subagent: 安全风险审核员"]
+  before_review_12_5["review subagent: 上下文一致性审核员"]
+  before_review_12_fanin["review fan-in"]
+  gate_review_12["review gate"]
+  qa_12["qa_12"]
+  before_qa_12_1["qa subagent: CLI/API 测试员"]
+  before_qa_12_2["qa subagent: 浏览器路径测试员"]
+  before_qa_12_3["qa subagent: 证据采集员"]
+  before_qa_12_4["qa subagent: 回归场景测试员"]
+  before_qa_12_fanin["qa fan-in"]
+  gate_qa_12["QA gate"]
+  fix_12["fix_12"]
+  review_13["review_13"]
+  before_review_13_1["review subagent: 目标核对审核员"]
+  before_review_13_2["review subagent: 代码质量审核员"]
+  before_review_13_3["review subagent: 测试有效性审核员"]
+  before_review_13_4["review subagent: 安全风险审核员"]
+  before_review_13_5["review subagent: 上下文一致性审核员"]
+  before_review_13_fanin["review fan-in"]
+  gate_review_13["review gate"]
+  qa_13["qa_13"]
+  before_qa_13_1["qa subagent: CLI/API 测试员"]
+  before_qa_13_2["qa subagent: 浏览器路径测试员"]
+  before_qa_13_3["qa subagent: 证据采集员"]
+  before_qa_13_4["qa subagent: 回归场景测试员"]
+  before_qa_13_fanin["qa fan-in"]
+  gate_qa_13["QA gate"]
+  fix_13["fix_13"]
+  review_14["review_14"]
+  before_review_14_1["review subagent: 目标核对审核员"]
+  before_review_14_2["review subagent: 代码质量审核员"]
+  before_review_14_3["review subagent: 测试有效性审核员"]
+  before_review_14_4["review subagent: 安全风险审核员"]
+  before_review_14_5["review subagent: 上下文一致性审核员"]
+  before_review_14_fanin["review fan-in"]
+  gate_review_14["review gate"]
+  qa_14["qa_14"]
+  before_qa_14_1["qa subagent: CLI/API 测试员"]
+  before_qa_14_2["qa subagent: 浏览器路径测试员"]
+  before_qa_14_3["qa subagent: 证据采集员"]
+  before_qa_14_4["qa subagent: 回归场景测试员"]
+  before_qa_14_fanin["qa fan-in"]
+  gate_qa_14["QA gate"]
+  fix_14["fix_14"]
+  review_15["review_15"]
+  before_review_15_1["review subagent: 目标核对审核员"]
+  before_review_15_2["review subagent: 代码质量审核员"]
+  before_review_15_3["review subagent: 测试有效性审核员"]
+  before_review_15_4["review subagent: 安全风险审核员"]
+  before_review_15_5["review subagent: 上下文一致性审核员"]
+  before_review_15_fanin["review fan-in"]
+  gate_review_15["review gate"]
+  qa_15["qa_15"]
+  before_qa_15_1["qa subagent: CLI/API 测试员"]
+  before_qa_15_2["qa subagent: 浏览器路径测试员"]
+  before_qa_15_3["qa subagent: 证据采集员"]
+  before_qa_15_4["qa subagent: 回归场景测试员"]
+  before_qa_15_fanin["qa fan-in"]
+  gate_qa_15["QA gate"]
+  fix_15["fix_15"]
+  review_16["review_16"]
+  before_review_16_1["review subagent: 目标核对审核员"]
+  before_review_16_2["review subagent: 代码质量审核员"]
+  before_review_16_3["review subagent: 测试有效性审核员"]
+  before_review_16_4["review subagent: 安全风险审核员"]
+  before_review_16_5["review subagent: 上下文一致性审核员"]
+  before_review_16_fanin["review fan-in"]
+  gate_review_16["review gate"]
+  qa_16["qa_16"]
+  before_qa_16_1["qa subagent: CLI/API 测试员"]
+  before_qa_16_2["qa subagent: 浏览器路径测试员"]
+  before_qa_16_3["qa subagent: 证据采集员"]
+  before_qa_16_4["qa subagent: 回归场景测试员"]
+  before_qa_16_fanin["qa fan-in"]
+  gate_qa_16["QA gate"]
+  fix_16["fix_16"]
+  review_17["review_17"]
+  before_review_17_1["review subagent: 目标核对审核员"]
+  before_review_17_2["review subagent: 代码质量审核员"]
+  before_review_17_3["review subagent: 测试有效性审核员"]
+  before_review_17_4["review subagent: 安全风险审核员"]
+  before_review_17_5["review subagent: 上下文一致性审核员"]
+  before_review_17_fanin["review fan-in"]
+  gate_review_17["review gate"]
+  qa_17["qa_17"]
+  before_qa_17_1["qa subagent: CLI/API 测试员"]
+  before_qa_17_2["qa subagent: 浏览器路径测试员"]
+  before_qa_17_3["qa subagent: 证据采集员"]
+  before_qa_17_4["qa subagent: 回归场景测试员"]
+  before_qa_17_fanin["qa fan-in"]
+  gate_qa_17["QA gate"]
+  fix_17["fix_17"]
+  review_18["review_18"]
+  before_review_18_1["review subagent: 目标核对审核员"]
+  before_review_18_2["review subagent: 代码质量审核员"]
+  before_review_18_3["review subagent: 测试有效性审核员"]
+  before_review_18_4["review subagent: 安全风险审核员"]
+  before_review_18_5["review subagent: 上下文一致性审核员"]
+  before_review_18_fanin["review fan-in"]
+  gate_review_18["review gate"]
+  qa_18["qa_18"]
+  before_qa_18_1["qa subagent: CLI/API 测试员"]
+  before_qa_18_2["qa subagent: 浏览器路径测试员"]
+  before_qa_18_3["qa subagent: 证据采集员"]
+  before_qa_18_4["qa subagent: 回归场景测试员"]
+  before_qa_18_fanin["qa fan-in"]
+  gate_qa_18["QA gate"]
+  fix_18["fix_18"]
+  review_19["review_19"]
+  before_review_19_1["review subagent: 目标核对审核员"]
+  before_review_19_2["review subagent: 代码质量审核员"]
+  before_review_19_3["review subagent: 测试有效性审核员"]
+  before_review_19_4["review subagent: 安全风险审核员"]
+  before_review_19_5["review subagent: 上下文一致性审核员"]
+  before_review_19_fanin["review fan-in"]
+  gate_review_19["review gate"]
+  qa_19["qa_19"]
+  before_qa_19_1["qa subagent: CLI/API 测试员"]
+  before_qa_19_2["qa subagent: 浏览器路径测试员"]
+  before_qa_19_3["qa subagent: 证据采集员"]
+  before_qa_19_4["qa subagent: 回归场景测试员"]
+  before_qa_19_fanin["qa fan-in"]
+  gate_qa_19["QA gate"]
+  fix_19["fix_19"]
+  review_20["review_20"]
+  before_review_20_1["review subagent: 目标核对审核员"]
+  before_review_20_2["review subagent: 代码质量审核员"]
+  before_review_20_3["review subagent: 测试有效性审核员"]
+  before_review_20_4["review subagent: 安全风险审核员"]
+  before_review_20_5["review subagent: 上下文一致性审核员"]
+  before_review_20_fanin["review fan-in"]
+  gate_review_20["review gate"]
+  qa_20["qa_20"]
+  before_qa_20_1["qa subagent: CLI/API 测试员"]
+  before_qa_20_2["qa subagent: 浏览器路径测试员"]
+  before_qa_20_3["qa subagent: 证据采集员"]
+  before_qa_20_4["qa subagent: 回归场景测试员"]
+  before_qa_20_fanin["qa fan-in"]
+  gate_qa_20["QA gate"]
+  fix_20["fix_20"]
+  review_21["review_21"]
+  before_review_21_1["review subagent: 目标核对审核员"]
+  before_review_21_2["review subagent: 代码质量审核员"]
+  before_review_21_3["review subagent: 测试有效性审核员"]
+  before_review_21_4["review subagent: 安全风险审核员"]
+  before_review_21_5["review subagent: 上下文一致性审核员"]
+  before_review_21_fanin["review fan-in"]
+  gate_review_21["review gate"]
+  qa_21["qa_21"]
+  before_qa_21_1["qa subagent: CLI/API 测试员"]
+  before_qa_21_2["qa subagent: 浏览器路径测试员"]
+  before_qa_21_3["qa subagent: 证据采集员"]
+  before_qa_21_4["qa subagent: 回归场景测试员"]
+  before_qa_21_fanin["qa fan-in"]
+  gate_qa_21["QA gate"]
+  fix_21["fix_21"]
+  review_22["review_22"]
+  before_review_22_1["review subagent: 目标核对审核员"]
+  before_review_22_2["review subagent: 代码质量审核员"]
+  before_review_22_3["review subagent: 测试有效性审核员"]
+  before_review_22_4["review subagent: 安全风险审核员"]
+  before_review_22_5["review subagent: 上下文一致性审核员"]
+  before_review_22_fanin["review fan-in"]
+  gate_review_22["review gate"]
+  qa_22["qa_22"]
+  before_qa_22_1["qa subagent: CLI/API 测试员"]
+  before_qa_22_2["qa subagent: 浏览器路径测试员"]
+  before_qa_22_3["qa subagent: 证据采集员"]
+  before_qa_22_4["qa subagent: 回归场景测试员"]
+  before_qa_22_fanin["qa fan-in"]
+  gate_qa_22["QA gate"]
+  fix_22["fix_22"]
+  review_23["review_23"]
+  before_review_23_1["review subagent: 目标核对审核员"]
+  before_review_23_2["review subagent: 代码质量审核员"]
+  before_review_23_3["review subagent: 测试有效性审核员"]
+  before_review_23_4["review subagent: 安全风险审核员"]
+  before_review_23_5["review subagent: 上下文一致性审核员"]
+  before_review_23_fanin["review fan-in"]
+  gate_review_23["review gate"]
+  qa_23["qa_23"]
+  before_qa_23_1["qa subagent: CLI/API 测试员"]
+  before_qa_23_2["qa subagent: 浏览器路径测试员"]
+  before_qa_23_3["qa subagent: 证据采集员"]
+  before_qa_23_4["qa subagent: 回归场景测试员"]
+  before_qa_23_fanin["qa fan-in"]
+  gate_qa_23["QA gate"]
+  fix_23["fix_23"]
+  review_24["review_24"]
+  before_review_24_1["review subagent: 目标核对审核员"]
+  before_review_24_2["review subagent: 代码质量审核员"]
+  before_review_24_3["review subagent: 测试有效性审核员"]
+  before_review_24_4["review subagent: 安全风险审核员"]
+  before_review_24_5["review subagent: 上下文一致性审核员"]
+  before_review_24_fanin["review fan-in"]
+  gate_review_24["review gate"]
+  qa_24["qa_24"]
+  before_qa_24_1["qa subagent: CLI/API 测试员"]
+  before_qa_24_2["qa subagent: 浏览器路径测试员"]
+  before_qa_24_3["qa subagent: 证据采集员"]
+  before_qa_24_4["qa subagent: 回归场景测试员"]
+  before_qa_24_fanin["qa fan-in"]
+  gate_qa_24["QA gate"]
+  fix_24["fix_24"]
+  review_25["review_25"]
+  before_review_25_1["review subagent: 目标核对审核员"]
+  before_review_25_2["review subagent: 代码质量审核员"]
+  before_review_25_3["review subagent: 测试有效性审核员"]
+  before_review_25_4["review subagent: 安全风险审核员"]
+  before_review_25_5["review subagent: 上下文一致性审核员"]
+  before_review_25_fanin["review fan-in"]
+  gate_review_25["review gate"]
+  qa_25["qa_25"]
+  before_qa_25_1["qa subagent: CLI/API 测试员"]
+  before_qa_25_2["qa subagent: 浏览器路径测试员"]
+  before_qa_25_3["qa subagent: 证据采集员"]
+  before_qa_25_4["qa subagent: 回归场景测试员"]
+  before_qa_25_fanin["qa fan-in"]
+  gate_qa_25["QA gate"]
+  fix_25["fix_25"]
+  review_26["review_26"]
+  before_review_26_1["review subagent: 目标核对审核员"]
+  before_review_26_2["review subagent: 代码质量审核员"]
+  before_review_26_3["review subagent: 测试有效性审核员"]
+  before_review_26_4["review subagent: 安全风险审核员"]
+  before_review_26_5["review subagent: 上下文一致性审核员"]
+  before_review_26_fanin["review fan-in"]
+  gate_review_26["review gate"]
+  qa_26["qa_26"]
+  before_qa_26_1["qa subagent: CLI/API 测试员"]
+  before_qa_26_2["qa subagent: 浏览器路径测试员"]
+  before_qa_26_3["qa subagent: 证据采集员"]
+  before_qa_26_4["qa subagent: 回归场景测试员"]
+  before_qa_26_fanin["qa fan-in"]
+  gate_qa_26["QA gate"]
+  fix_26["fix_26"]
+  review_27["review_27"]
+  before_review_27_1["review subagent: 目标核对审核员"]
+  before_review_27_2["review subagent: 代码质量审核员"]
+  before_review_27_3["review subagent: 测试有效性审核员"]
+  before_review_27_4["review subagent: 安全风险审核员"]
+  before_review_27_5["review subagent: 上下文一致性审核员"]
+  before_review_27_fanin["review fan-in"]
+  gate_review_27["review gate"]
+  qa_27["qa_27"]
+  before_qa_27_1["qa subagent: CLI/API 测试员"]
+  before_qa_27_2["qa subagent: 浏览器路径测试员"]
+  before_qa_27_3["qa subagent: 证据采集员"]
+  before_qa_27_4["qa subagent: 回归场景测试员"]
+  before_qa_27_fanin["qa fan-in"]
+  gate_qa_27["QA gate"]
+  fix_27["fix_27"]
+  review_28["review_28"]
+  before_review_28_1["review subagent: 目标核对审核员"]
+  before_review_28_2["review subagent: 代码质量审核员"]
+  before_review_28_3["review subagent: 测试有效性审核员"]
+  before_review_28_4["review subagent: 安全风险审核员"]
+  before_review_28_5["review subagent: 上下文一致性审核员"]
+  before_review_28_fanin["review fan-in"]
+  gate_review_28["review gate"]
+  qa_28["qa_28"]
+  before_qa_28_1["qa subagent: CLI/API 测试员"]
+  before_qa_28_2["qa subagent: 浏览器路径测试员"]
+  before_qa_28_3["qa subagent: 证据采集员"]
+  before_qa_28_4["qa subagent: 回归场景测试员"]
+  before_qa_28_fanin["qa fan-in"]
+  gate_qa_28["QA gate"]
+  fix_28["fix_28"]
+  review_29["review_29"]
+  before_review_29_1["review subagent: 目标核对审核员"]
+  before_review_29_2["review subagent: 代码质量审核员"]
+  before_review_29_3["review subagent: 测试有效性审核员"]
+  before_review_29_4["review subagent: 安全风险审核员"]
+  before_review_29_5["review subagent: 上下文一致性审核员"]
+  before_review_29_fanin["review fan-in"]
+  gate_review_29["review gate"]
+  qa_29["qa_29"]
+  before_qa_29_1["qa subagent: CLI/API 测试员"]
+  before_qa_29_2["qa subagent: 浏览器路径测试员"]
+  before_qa_29_3["qa subagent: 证据采集员"]
+  before_qa_29_4["qa subagent: 回归场景测试员"]
+  before_qa_29_fanin["qa fan-in"]
+  gate_qa_29["QA gate"]
+  fix_29["fix_29"]
+  review_30["review_30"]
+  before_review_30_1["review subagent: 目标核对审核员"]
+  before_review_30_2["review subagent: 代码质量审核员"]
+  before_review_30_3["review subagent: 测试有效性审核员"]
+  before_review_30_4["review subagent: 安全风险审核员"]
+  before_review_30_5["review subagent: 上下文一致性审核员"]
+  before_review_30_fanin["review fan-in"]
+  gate_review_30["review gate"]
+  qa_30["qa_30"]
+  before_qa_30_1["qa subagent: CLI/API 测试员"]
+  before_qa_30_2["qa subagent: 浏览器路径测试员"]
+  before_qa_30_3["qa subagent: 证据采集员"]
+  before_qa_30_4["qa subagent: 回归场景测试员"]
+  before_qa_30_fanin["qa fan-in"]
+  gate_qa_30["QA gate"]
+  fix_30["fix_30"]
+  archive["archive"]
+  gate_archive["archive gate"]
+  planning_context_1 --> planning_context_fanin
+  planning_context_2 --> planning_context_fanin
+  planning_context_3 --> planning_context_fanin
+  planning_context_fanin --> before_execution_1
+  planning_context_fanin --> before_execution_2
+  before_execution_1 --> before_execution_fanin
+  before_execution_2 --> before_execution_fanin
+  before_execution_fanin --> execution
+  execution --> before_review_1_1
+  execution --> before_review_1_2
+  execution --> before_review_1_3
+  execution --> before_review_1_4
+  execution --> before_review_1_5
+  before_review_1_1 --> before_review_1_fanin
+  before_review_1_2 --> before_review_1_fanin
+  before_review_1_3 --> before_review_1_fanin
+  before_review_1_4 --> before_review_1_fanin
+  before_review_1_5 --> before_review_1_fanin
+  before_review_1_fanin --> review_1
+  review_1 --> gate_review_1
+  gate_review_1 -->|review clean| before_qa_1_1
+  gate_review_1 -->|review clean| before_qa_1_2
+  gate_review_1 -->|review clean| before_qa_1_3
+  gate_review_1 -->|review clean| before_qa_1_4
+  before_qa_1_1 --> before_qa_1_fanin
+  before_qa_1_2 --> before_qa_1_fanin
+  before_qa_1_3 --> before_qa_1_fanin
+  before_qa_1_4 --> before_qa_1_fanin
+  before_qa_1_fanin --> qa_1
+  qa_1 --> gate_qa_1
+  gate_review_1 -->|review needs_fix| fix_1
+  gate_qa_1 -->|QA needs_fix| fix_1
+  fix_1 --> before_review_2_1
+  fix_1 --> before_review_2_2
+  fix_1 --> before_review_2_3
+  fix_1 --> before_review_2_4
+  fix_1 --> before_review_2_5
+  before_review_2_1 --> before_review_2_fanin
+  before_review_2_2 --> before_review_2_fanin
+  before_review_2_3 --> before_review_2_fanin
+  before_review_2_4 --> before_review_2_fanin
+  before_review_2_5 --> before_review_2_fanin
+  before_review_2_fanin --> review_2
+  review_2 --> gate_review_2
+  gate_review_2 -->|review clean| before_qa_2_1
+  gate_review_2 -->|review clean| before_qa_2_2
+  gate_review_2 -->|review clean| before_qa_2_3
+  gate_review_2 -->|review clean| before_qa_2_4
+  before_qa_2_1 --> before_qa_2_fanin
+  before_qa_2_2 --> before_qa_2_fanin
+  before_qa_2_3 --> before_qa_2_fanin
+  before_qa_2_4 --> before_qa_2_fanin
+  before_qa_2_fanin --> qa_2
+  qa_2 --> gate_qa_2
+  gate_review_2 -->|review needs_fix| fix_2
+  gate_qa_2 -->|QA needs_fix| fix_2
+  fix_2 --> before_review_3_1
+  fix_2 --> before_review_3_2
+  fix_2 --> before_review_3_3
+  fix_2 --> before_review_3_4
+  fix_2 --> before_review_3_5
+  before_review_3_1 --> before_review_3_fanin
+  before_review_3_2 --> before_review_3_fanin
+  before_review_3_3 --> before_review_3_fanin
+  before_review_3_4 --> before_review_3_fanin
+  before_review_3_5 --> before_review_3_fanin
+  before_review_3_fanin --> review_3
+  review_3 --> gate_review_3
+  gate_review_3 -->|review clean| before_qa_3_1
+  gate_review_3 -->|review clean| before_qa_3_2
+  gate_review_3 -->|review clean| before_qa_3_3
+  gate_review_3 -->|review clean| before_qa_3_4
+  before_qa_3_1 --> before_qa_3_fanin
+  before_qa_3_2 --> before_qa_3_fanin
+  before_qa_3_3 --> before_qa_3_fanin
+  before_qa_3_4 --> before_qa_3_fanin
+  before_qa_3_fanin --> qa_3
+  qa_3 --> gate_qa_3
+  gate_review_3 -->|review needs_fix| fix_3
+  gate_qa_3 -->|QA needs_fix| fix_3
+  fix_3 --> before_review_4_1
+  fix_3 --> before_review_4_2
+  fix_3 --> before_review_4_3
+  fix_3 --> before_review_4_4
+  fix_3 --> before_review_4_5
+  before_review_4_1 --> before_review_4_fanin
+  before_review_4_2 --> before_review_4_fanin
+  before_review_4_3 --> before_review_4_fanin
+  before_review_4_4 --> before_review_4_fanin
+  before_review_4_5 --> before_review_4_fanin
+  before_review_4_fanin --> review_4
+  review_4 --> gate_review_4
+  gate_review_4 -->|review clean| before_qa_4_1
+  gate_review_4 -->|review clean| before_qa_4_2
+  gate_review_4 -->|review clean| before_qa_4_3
+  gate_review_4 -->|review clean| before_qa_4_4
+  before_qa_4_1 --> before_qa_4_fanin
+  before_qa_4_2 --> before_qa_4_fanin
+  before_qa_4_3 --> before_qa_4_fanin
+  before_qa_4_4 --> before_qa_4_fanin
+  before_qa_4_fanin --> qa_4
+  qa_4 --> gate_qa_4
+  gate_review_4 -->|review needs_fix| fix_4
+  gate_qa_4 -->|QA needs_fix| fix_4
+  fix_4 --> before_review_5_1
+  fix_4 --> before_review_5_2
+  fix_4 --> before_review_5_3
+  fix_4 --> before_review_5_4
+  fix_4 --> before_review_5_5
+  before_review_5_1 --> before_review_5_fanin
+  before_review_5_2 --> before_review_5_fanin
+  before_review_5_3 --> before_review_5_fanin
+  before_review_5_4 --> before_review_5_fanin
+  before_review_5_5 --> before_review_5_fanin
+  before_review_5_fanin --> review_5
+  review_5 --> gate_review_5
+  gate_review_5 -->|review clean| before_qa_5_1
+  gate_review_5 -->|review clean| before_qa_5_2
+  gate_review_5 -->|review clean| before_qa_5_3
+  gate_review_5 -->|review clean| before_qa_5_4
+  before_qa_5_1 --> before_qa_5_fanin
+  before_qa_5_2 --> before_qa_5_fanin
+  before_qa_5_3 --> before_qa_5_fanin
+  before_qa_5_4 --> before_qa_5_fanin
+  before_qa_5_fanin --> qa_5
+  qa_5 --> gate_qa_5
+  gate_review_5 -->|review needs_fix| fix_5
+  gate_qa_5 -->|QA needs_fix| fix_5
+  fix_5 --> before_review_6_1
+  fix_5 --> before_review_6_2
+  fix_5 --> before_review_6_3
+  fix_5 --> before_review_6_4
+  fix_5 --> before_review_6_5
+  before_review_6_1 --> before_review_6_fanin
+  before_review_6_2 --> before_review_6_fanin
+  before_review_6_3 --> before_review_6_fanin
+  before_review_6_4 --> before_review_6_fanin
+  before_review_6_5 --> before_review_6_fanin
+  before_review_6_fanin --> review_6
+  review_6 --> gate_review_6
+  gate_review_6 -->|review clean| before_qa_6_1
+  gate_review_6 -->|review clean| before_qa_6_2
+  gate_review_6 -->|review clean| before_qa_6_3
+  gate_review_6 -->|review clean| before_qa_6_4
+  before_qa_6_1 --> before_qa_6_fanin
+  before_qa_6_2 --> before_qa_6_fanin
+  before_qa_6_3 --> before_qa_6_fanin
+  before_qa_6_4 --> before_qa_6_fanin
+  before_qa_6_fanin --> qa_6
+  qa_6 --> gate_qa_6
+  gate_review_6 -->|review needs_fix| fix_6
+  gate_qa_6 -->|QA needs_fix| fix_6
+  fix_6 --> before_review_7_1
+  fix_6 --> before_review_7_2
+  fix_6 --> before_review_7_3
+  fix_6 --> before_review_7_4
+  fix_6 --> before_review_7_5
+  before_review_7_1 --> before_review_7_fanin
+  before_review_7_2 --> before_review_7_fanin
+  before_review_7_3 --> before_review_7_fanin
+  before_review_7_4 --> before_review_7_fanin
+  before_review_7_5 --> before_review_7_fanin
+  before_review_7_fanin --> review_7
+  review_7 --> gate_review_7
+  gate_review_7 -->|review clean| before_qa_7_1
+  gate_review_7 -->|review clean| before_qa_7_2
+  gate_review_7 -->|review clean| before_qa_7_3
+  gate_review_7 -->|review clean| before_qa_7_4
+  before_qa_7_1 --> before_qa_7_fanin
+  before_qa_7_2 --> before_qa_7_fanin
+  before_qa_7_3 --> before_qa_7_fanin
+  before_qa_7_4 --> before_qa_7_fanin
+  before_qa_7_fanin --> qa_7
+  qa_7 --> gate_qa_7
+  gate_review_7 -->|review needs_fix| fix_7
+  gate_qa_7 -->|QA needs_fix| fix_7
+  fix_7 --> before_review_8_1
+  fix_7 --> before_review_8_2
+  fix_7 --> before_review_8_3
+  fix_7 --> before_review_8_4
+  fix_7 --> before_review_8_5
+  before_review_8_1 --> before_review_8_fanin
+  before_review_8_2 --> before_review_8_fanin
+  before_review_8_3 --> before_review_8_fanin
+  before_review_8_4 --> before_review_8_fanin
+  before_review_8_5 --> before_review_8_fanin
+  before_review_8_fanin --> review_8
+  review_8 --> gate_review_8
+  gate_review_8 -->|review clean| before_qa_8_1
+  gate_review_8 -->|review clean| before_qa_8_2
+  gate_review_8 -->|review clean| before_qa_8_3
+  gate_review_8 -->|review clean| before_qa_8_4
+  before_qa_8_1 --> before_qa_8_fanin
+  before_qa_8_2 --> before_qa_8_fanin
+  before_qa_8_3 --> before_qa_8_fanin
+  before_qa_8_4 --> before_qa_8_fanin
+  before_qa_8_fanin --> qa_8
+  qa_8 --> gate_qa_8
+  gate_review_8 -->|review needs_fix| fix_8
+  gate_qa_8 -->|QA needs_fix| fix_8
+  fix_8 --> before_review_9_1
+  fix_8 --> before_review_9_2
+  fix_8 --> before_review_9_3
+  fix_8 --> before_review_9_4
+  fix_8 --> before_review_9_5
+  before_review_9_1 --> before_review_9_fanin
+  before_review_9_2 --> before_review_9_fanin
+  before_review_9_3 --> before_review_9_fanin
+  before_review_9_4 --> before_review_9_fanin
+  before_review_9_5 --> before_review_9_fanin
+  before_review_9_fanin --> review_9
+  review_9 --> gate_review_9
+  gate_review_9 -->|review clean| before_qa_9_1
+  gate_review_9 -->|review clean| before_qa_9_2
+  gate_review_9 -->|review clean| before_qa_9_3
+  gate_review_9 -->|review clean| before_qa_9_4
+  before_qa_9_1 --> before_qa_9_fanin
+  before_qa_9_2 --> before_qa_9_fanin
+  before_qa_9_3 --> before_qa_9_fanin
+  before_qa_9_4 --> before_qa_9_fanin
+  before_qa_9_fanin --> qa_9
+  qa_9 --> gate_qa_9
+  gate_review_9 -->|review needs_fix| fix_9
+  gate_qa_9 -->|QA needs_fix| fix_9
+  fix_9 --> before_review_10_1
+  fix_9 --> before_review_10_2
+  fix_9 --> before_review_10_3
+  fix_9 --> before_review_10_4
+  fix_9 --> before_review_10_5
+  before_review_10_1 --> before_review_10_fanin
+  before_review_10_2 --> before_review_10_fanin
+  before_review_10_3 --> before_review_10_fanin
+  before_review_10_4 --> before_review_10_fanin
+  before_review_10_5 --> before_review_10_fanin
+  before_review_10_fanin --> review_10
+  review_10 --> gate_review_10
+  gate_review_10 -->|review clean| before_qa_10_1
+  gate_review_10 -->|review clean| before_qa_10_2
+  gate_review_10 -->|review clean| before_qa_10_3
+  gate_review_10 -->|review clean| before_qa_10_4
+  before_qa_10_1 --> before_qa_10_fanin
+  before_qa_10_2 --> before_qa_10_fanin
+  before_qa_10_3 --> before_qa_10_fanin
+  before_qa_10_4 --> before_qa_10_fanin
+  before_qa_10_fanin --> qa_10
+  qa_10 --> gate_qa_10
+  gate_review_10 -->|review needs_fix| fix_10
+  gate_qa_10 -->|QA needs_fix| fix_10
+  fix_10 --> before_review_11_1
+  fix_10 --> before_review_11_2
+  fix_10 --> before_review_11_3
+  fix_10 --> before_review_11_4
+  fix_10 --> before_review_11_5
+  before_review_11_1 --> before_review_11_fanin
+  before_review_11_2 --> before_review_11_fanin
+  before_review_11_3 --> before_review_11_fanin
+  before_review_11_4 --> before_review_11_fanin
+  before_review_11_5 --> before_review_11_fanin
+  before_review_11_fanin --> review_11
+  review_11 --> gate_review_11
+  gate_review_11 -->|review clean| before_qa_11_1
+  gate_review_11 -->|review clean| before_qa_11_2
+  gate_review_11 -->|review clean| before_qa_11_3
+  gate_review_11 -->|review clean| before_qa_11_4
+  before_qa_11_1 --> before_qa_11_fanin
+  before_qa_11_2 --> before_qa_11_fanin
+  before_qa_11_3 --> before_qa_11_fanin
+  before_qa_11_4 --> before_qa_11_fanin
+  before_qa_11_fanin --> qa_11
+  qa_11 --> gate_qa_11
+  gate_review_11 -->|review needs_fix| fix_11
+  gate_qa_11 -->|QA needs_fix| fix_11
+  fix_11 --> before_review_12_1
+  fix_11 --> before_review_12_2
+  fix_11 --> before_review_12_3
+  fix_11 --> before_review_12_4
+  fix_11 --> before_review_12_5
+  before_review_12_1 --> before_review_12_fanin
+  before_review_12_2 --> before_review_12_fanin
+  before_review_12_3 --> before_review_12_fanin
+  before_review_12_4 --> before_review_12_fanin
+  before_review_12_5 --> before_review_12_fanin
+  before_review_12_fanin --> review_12
+  review_12 --> gate_review_12
+  gate_review_12 -->|review clean| before_qa_12_1
+  gate_review_12 -->|review clean| before_qa_12_2
+  gate_review_12 -->|review clean| before_qa_12_3
+  gate_review_12 -->|review clean| before_qa_12_4
+  before_qa_12_1 --> before_qa_12_fanin
+  before_qa_12_2 --> before_qa_12_fanin
+  before_qa_12_3 --> before_qa_12_fanin
+  before_qa_12_4 --> before_qa_12_fanin
+  before_qa_12_fanin --> qa_12
+  qa_12 --> gate_qa_12
+  gate_review_12 -->|review needs_fix| fix_12
+  gate_qa_12 -->|QA needs_fix| fix_12
+  fix_12 --> before_review_13_1
+  fix_12 --> before_review_13_2
+  fix_12 --> before_review_13_3
+  fix_12 --> before_review_13_4
+  fix_12 --> before_review_13_5
+  before_review_13_1 --> before_review_13_fanin
+  before_review_13_2 --> before_review_13_fanin
+  before_review_13_3 --> before_review_13_fanin
+  before_review_13_4 --> before_review_13_fanin
+  before_review_13_5 --> before_review_13_fanin
+  before_review_13_fanin --> review_13
+  review_13 --> gate_review_13
+  gate_review_13 -->|review clean| before_qa_13_1
+  gate_review_13 -->|review clean| before_qa_13_2
+  gate_review_13 -->|review clean| before_qa_13_3
+  gate_review_13 -->|review clean| before_qa_13_4
+  before_qa_13_1 --> before_qa_13_fanin
+  before_qa_13_2 --> before_qa_13_fanin
+  before_qa_13_3 --> before_qa_13_fanin
+  before_qa_13_4 --> before_qa_13_fanin
+  before_qa_13_fanin --> qa_13
+  qa_13 --> gate_qa_13
+  gate_review_13 -->|review needs_fix| fix_13
+  gate_qa_13 -->|QA needs_fix| fix_13
+  fix_13 --> before_review_14_1
+  fix_13 --> before_review_14_2
+  fix_13 --> before_review_14_3
+  fix_13 --> before_review_14_4
+  fix_13 --> before_review_14_5
+  before_review_14_1 --> before_review_14_fanin
+  before_review_14_2 --> before_review_14_fanin
+  before_review_14_3 --> before_review_14_fanin
+  before_review_14_4 --> before_review_14_fanin
+  before_review_14_5 --> before_review_14_fanin
+  before_review_14_fanin --> review_14
+  review_14 --> gate_review_14
+  gate_review_14 -->|review clean| before_qa_14_1
+  gate_review_14 -->|review clean| before_qa_14_2
+  gate_review_14 -->|review clean| before_qa_14_3
+  gate_review_14 -->|review clean| before_qa_14_4
+  before_qa_14_1 --> before_qa_14_fanin
+  before_qa_14_2 --> before_qa_14_fanin
+  before_qa_14_3 --> before_qa_14_fanin
+  before_qa_14_4 --> before_qa_14_fanin
+  before_qa_14_fanin --> qa_14
+  qa_14 --> gate_qa_14
+  gate_review_14 -->|review needs_fix| fix_14
+  gate_qa_14 -->|QA needs_fix| fix_14
+  fix_14 --> before_review_15_1
+  fix_14 --> before_review_15_2
+  fix_14 --> before_review_15_3
+  fix_14 --> before_review_15_4
+  fix_14 --> before_review_15_5
+  before_review_15_1 --> before_review_15_fanin
+  before_review_15_2 --> before_review_15_fanin
+  before_review_15_3 --> before_review_15_fanin
+  before_review_15_4 --> before_review_15_fanin
+  before_review_15_5 --> before_review_15_fanin
+  before_review_15_fanin --> review_15
+  review_15 --> gate_review_15
+  gate_review_15 -->|review clean| before_qa_15_1
+  gate_review_15 -->|review clean| before_qa_15_2
+  gate_review_15 -->|review clean| before_qa_15_3
+  gate_review_15 -->|review clean| before_qa_15_4
+  before_qa_15_1 --> before_qa_15_fanin
+  before_qa_15_2 --> before_qa_15_fanin
+  before_qa_15_3 --> before_qa_15_fanin
+  before_qa_15_4 --> before_qa_15_fanin
+  before_qa_15_fanin --> qa_15
+  qa_15 --> gate_qa_15
+  gate_review_15 -->|review needs_fix| fix_15
+  gate_qa_15 -->|QA needs_fix| fix_15
+  fix_15 --> before_review_16_1
+  fix_15 --> before_review_16_2
+  fix_15 --> before_review_16_3
+  fix_15 --> before_review_16_4
+  fix_15 --> before_review_16_5
+  before_review_16_1 --> before_review_16_fanin
+  before_review_16_2 --> before_review_16_fanin
+  before_review_16_3 --> before_review_16_fanin
+  before_review_16_4 --> before_review_16_fanin
+  before_review_16_5 --> before_review_16_fanin
+  before_review_16_fanin --> review_16
+  review_16 --> gate_review_16
+  gate_review_16 -->|review clean| before_qa_16_1
+  gate_review_16 -->|review clean| before_qa_16_2
+  gate_review_16 -->|review clean| before_qa_16_3
+  gate_review_16 -->|review clean| before_qa_16_4
+  before_qa_16_1 --> before_qa_16_fanin
+  before_qa_16_2 --> before_qa_16_fanin
+  before_qa_16_3 --> before_qa_16_fanin
+  before_qa_16_4 --> before_qa_16_fanin
+  before_qa_16_fanin --> qa_16
+  qa_16 --> gate_qa_16
+  gate_review_16 -->|review needs_fix| fix_16
+  gate_qa_16 -->|QA needs_fix| fix_16
+  fix_16 --> before_review_17_1
+  fix_16 --> before_review_17_2
+  fix_16 --> before_review_17_3
+  fix_16 --> before_review_17_4
+  fix_16 --> before_review_17_5
+  before_review_17_1 --> before_review_17_fanin
+  before_review_17_2 --> before_review_17_fanin
+  before_review_17_3 --> before_review_17_fanin
+  before_review_17_4 --> before_review_17_fanin
+  before_review_17_5 --> before_review_17_fanin
+  before_review_17_fanin --> review_17
+  review_17 --> gate_review_17
+  gate_review_17 -->|review clean| before_qa_17_1
+  gate_review_17 -->|review clean| before_qa_17_2
+  gate_review_17 -->|review clean| before_qa_17_3
+  gate_review_17 -->|review clean| before_qa_17_4
+  before_qa_17_1 --> before_qa_17_fanin
+  before_qa_17_2 --> before_qa_17_fanin
+  before_qa_17_3 --> before_qa_17_fanin
+  before_qa_17_4 --> before_qa_17_fanin
+  before_qa_17_fanin --> qa_17
+  qa_17 --> gate_qa_17
+  gate_review_17 -->|review needs_fix| fix_17
+  gate_qa_17 -->|QA needs_fix| fix_17
+  fix_17 --> before_review_18_1
+  fix_17 --> before_review_18_2
+  fix_17 --> before_review_18_3
+  fix_17 --> before_review_18_4
+  fix_17 --> before_review_18_5
+  before_review_18_1 --> before_review_18_fanin
+  before_review_18_2 --> before_review_18_fanin
+  before_review_18_3 --> before_review_18_fanin
+  before_review_18_4 --> before_review_18_fanin
+  before_review_18_5 --> before_review_18_fanin
+  before_review_18_fanin --> review_18
+  review_18 --> gate_review_18
+  gate_review_18 -->|review clean| before_qa_18_1
+  gate_review_18 -->|review clean| before_qa_18_2
+  gate_review_18 -->|review clean| before_qa_18_3
+  gate_review_18 -->|review clean| before_qa_18_4
+  before_qa_18_1 --> before_qa_18_fanin
+  before_qa_18_2 --> before_qa_18_fanin
+  before_qa_18_3 --> before_qa_18_fanin
+  before_qa_18_4 --> before_qa_18_fanin
+  before_qa_18_fanin --> qa_18
+  qa_18 --> gate_qa_18
+  gate_review_18 -->|review needs_fix| fix_18
+  gate_qa_18 -->|QA needs_fix| fix_18
+  fix_18 --> before_review_19_1
+  fix_18 --> before_review_19_2
+  fix_18 --> before_review_19_3
+  fix_18 --> before_review_19_4
+  fix_18 --> before_review_19_5
+  before_review_19_1 --> before_review_19_fanin
+  before_review_19_2 --> before_review_19_fanin
+  before_review_19_3 --> before_review_19_fanin
+  before_review_19_4 --> before_review_19_fanin
+  before_review_19_5 --> before_review_19_fanin
+  before_review_19_fanin --> review_19
+  review_19 --> gate_review_19
+  gate_review_19 -->|review clean| before_qa_19_1
+  gate_review_19 -->|review clean| before_qa_19_2
+  gate_review_19 -->|review clean| before_qa_19_3
+  gate_review_19 -->|review clean| before_qa_19_4
+  before_qa_19_1 --> before_qa_19_fanin
+  before_qa_19_2 --> before_qa_19_fanin
+  before_qa_19_3 --> before_qa_19_fanin
+  before_qa_19_4 --> before_qa_19_fanin
+  before_qa_19_fanin --> qa_19
+  qa_19 --> gate_qa_19
+  gate_review_19 -->|review needs_fix| fix_19
+  gate_qa_19 -->|QA needs_fix| fix_19
+  fix_19 --> before_review_20_1
+  fix_19 --> before_review_20_2
+  fix_19 --> before_review_20_3
+  fix_19 --> before_review_20_4
+  fix_19 --> before_review_20_5
+  before_review_20_1 --> before_review_20_fanin
+  before_review_20_2 --> before_review_20_fanin
+  before_review_20_3 --> before_review_20_fanin
+  before_review_20_4 --> before_review_20_fanin
+  before_review_20_5 --> before_review_20_fanin
+  before_review_20_fanin --> review_20
+  review_20 --> gate_review_20
+  gate_review_20 -->|review clean| before_qa_20_1
+  gate_review_20 -->|review clean| before_qa_20_2
+  gate_review_20 -->|review clean| before_qa_20_3
+  gate_review_20 -->|review clean| before_qa_20_4
+  before_qa_20_1 --> before_qa_20_fanin
+  before_qa_20_2 --> before_qa_20_fanin
+  before_qa_20_3 --> before_qa_20_fanin
+  before_qa_20_4 --> before_qa_20_fanin
+  before_qa_20_fanin --> qa_20
+  qa_20 --> gate_qa_20
+  gate_review_20 -->|review needs_fix| fix_20
+  gate_qa_20 -->|QA needs_fix| fix_20
+  fix_20 --> before_review_21_1
+  fix_20 --> before_review_21_2
+  fix_20 --> before_review_21_3
+  fix_20 --> before_review_21_4
+  fix_20 --> before_review_21_5
+  before_review_21_1 --> before_review_21_fanin
+  before_review_21_2 --> before_review_21_fanin
+  before_review_21_3 --> before_review_21_fanin
+  before_review_21_4 --> before_review_21_fanin
+  before_review_21_5 --> before_review_21_fanin
+  before_review_21_fanin --> review_21
+  review_21 --> gate_review_21
+  gate_review_21 -->|review clean| before_qa_21_1
+  gate_review_21 -->|review clean| before_qa_21_2
+  gate_review_21 -->|review clean| before_qa_21_3
+  gate_review_21 -->|review clean| before_qa_21_4
+  before_qa_21_1 --> before_qa_21_fanin
+  before_qa_21_2 --> before_qa_21_fanin
+  before_qa_21_3 --> before_qa_21_fanin
+  before_qa_21_4 --> before_qa_21_fanin
+  before_qa_21_fanin --> qa_21
+  qa_21 --> gate_qa_21
+  gate_review_21 -->|review needs_fix| fix_21
+  gate_qa_21 -->|QA needs_fix| fix_21
+  fix_21 --> before_review_22_1
+  fix_21 --> before_review_22_2
+  fix_21 --> before_review_22_3
+  fix_21 --> before_review_22_4
+  fix_21 --> before_review_22_5
+  before_review_22_1 --> before_review_22_fanin
+  before_review_22_2 --> before_review_22_fanin
+  before_review_22_3 --> before_review_22_fanin
+  before_review_22_4 --> before_review_22_fanin
+  before_review_22_5 --> before_review_22_fanin
+  before_review_22_fanin --> review_22
+  review_22 --> gate_review_22
+  gate_review_22 -->|review clean| before_qa_22_1
+  gate_review_22 -->|review clean| before_qa_22_2
+  gate_review_22 -->|review clean| before_qa_22_3
+  gate_review_22 -->|review clean| before_qa_22_4
+  before_qa_22_1 --> before_qa_22_fanin
+  before_qa_22_2 --> before_qa_22_fanin
+  before_qa_22_3 --> before_qa_22_fanin
+  before_qa_22_4 --> before_qa_22_fanin
+  before_qa_22_fanin --> qa_22
+  qa_22 --> gate_qa_22
+  gate_review_22 -->|review needs_fix| fix_22
+  gate_qa_22 -->|QA needs_fix| fix_22
+  fix_22 --> before_review_23_1
+  fix_22 --> before_review_23_2
+  fix_22 --> before_review_23_3
+  fix_22 --> before_review_23_4
+  fix_22 --> before_review_23_5
+  before_review_23_1 --> before_review_23_fanin
+  before_review_23_2 --> before_review_23_fanin
+  before_review_23_3 --> before_review_23_fanin
+  before_review_23_4 --> before_review_23_fanin
+  before_review_23_5 --> before_review_23_fanin
+  before_review_23_fanin --> review_23
+  review_23 --> gate_review_23
+  gate_review_23 -->|review clean| before_qa_23_1
+  gate_review_23 -->|review clean| before_qa_23_2
+  gate_review_23 -->|review clean| before_qa_23_3
+  gate_review_23 -->|review clean| before_qa_23_4
+  before_qa_23_1 --> before_qa_23_fanin
+  before_qa_23_2 --> before_qa_23_fanin
+  before_qa_23_3 --> before_qa_23_fanin
+  before_qa_23_4 --> before_qa_23_fanin
+  before_qa_23_fanin --> qa_23
+  qa_23 --> gate_qa_23
+  gate_review_23 -->|review needs_fix| fix_23
+  gate_qa_23 -->|QA needs_fix| fix_23
+  fix_23 --> before_review_24_1
+  fix_23 --> before_review_24_2
+  fix_23 --> before_review_24_3
+  fix_23 --> before_review_24_4
+  fix_23 --> before_review_24_5
+  before_review_24_1 --> before_review_24_fanin
+  before_review_24_2 --> before_review_24_fanin
+  before_review_24_3 --> before_review_24_fanin
+  before_review_24_4 --> before_review_24_fanin
+  before_review_24_5 --> before_review_24_fanin
+  before_review_24_fanin --> review_24
+  review_24 --> gate_review_24
+  gate_review_24 -->|review clean| before_qa_24_1
+  gate_review_24 -->|review clean| before_qa_24_2
+  gate_review_24 -->|review clean| before_qa_24_3
+  gate_review_24 -->|review clean| before_qa_24_4
+  before_qa_24_1 --> before_qa_24_fanin
+  before_qa_24_2 --> before_qa_24_fanin
+  before_qa_24_3 --> before_qa_24_fanin
+  before_qa_24_4 --> before_qa_24_fanin
+  before_qa_24_fanin --> qa_24
+  qa_24 --> gate_qa_24
+  gate_review_24 -->|review needs_fix| fix_24
+  gate_qa_24 -->|QA needs_fix| fix_24
+  fix_24 --> before_review_25_1
+  fix_24 --> before_review_25_2
+  fix_24 --> before_review_25_3
+  fix_24 --> before_review_25_4
+  fix_24 --> before_review_25_5
+  before_review_25_1 --> before_review_25_fanin
+  before_review_25_2 --> before_review_25_fanin
+  before_review_25_3 --> before_review_25_fanin
+  before_review_25_4 --> before_review_25_fanin
+  before_review_25_5 --> before_review_25_fanin
+  before_review_25_fanin --> review_25
+  review_25 --> gate_review_25
+  gate_review_25 -->|review clean| before_qa_25_1
+  gate_review_25 -->|review clean| before_qa_25_2
+  gate_review_25 -->|review clean| before_qa_25_3
+  gate_review_25 -->|review clean| before_qa_25_4
+  before_qa_25_1 --> before_qa_25_fanin
+  before_qa_25_2 --> before_qa_25_fanin
+  before_qa_25_3 --> before_qa_25_fanin
+  before_qa_25_4 --> before_qa_25_fanin
+  before_qa_25_fanin --> qa_25
+  qa_25 --> gate_qa_25
+  gate_review_25 -->|review needs_fix| fix_25
+  gate_qa_25 -->|QA needs_fix| fix_25
+  fix_25 --> before_review_26_1
+  fix_25 --> before_review_26_2
+  fix_25 --> before_review_26_3
+  fix_25 --> before_review_26_4
+  fix_25 --> before_review_26_5
+  before_review_26_1 --> before_review_26_fanin
+  before_review_26_2 --> before_review_26_fanin
+  before_review_26_3 --> before_review_26_fanin
+  before_review_26_4 --> before_review_26_fanin
+  before_review_26_5 --> before_review_26_fanin
+  before_review_26_fanin --> review_26
+  review_26 --> gate_review_26
+  gate_review_26 -->|review clean| before_qa_26_1
+  gate_review_26 -->|review clean| before_qa_26_2
+  gate_review_26 -->|review clean| before_qa_26_3
+  gate_review_26 -->|review clean| before_qa_26_4
+  before_qa_26_1 --> before_qa_26_fanin
+  before_qa_26_2 --> before_qa_26_fanin
+  before_qa_26_3 --> before_qa_26_fanin
+  before_qa_26_4 --> before_qa_26_fanin
+  before_qa_26_fanin --> qa_26
+  qa_26 --> gate_qa_26
+  gate_review_26 -->|review needs_fix| fix_26
+  gate_qa_26 -->|QA needs_fix| fix_26
+  fix_26 --> before_review_27_1
+  fix_26 --> before_review_27_2
+  fix_26 --> before_review_27_3
+  fix_26 --> before_review_27_4
+  fix_26 --> before_review_27_5
+  before_review_27_1 --> before_review_27_fanin
+  before_review_27_2 --> before_review_27_fanin
+  before_review_27_3 --> before_review_27_fanin
+  before_review_27_4 --> before_review_27_fanin
+  before_review_27_5 --> before_review_27_fanin
+  before_review_27_fanin --> review_27
+  review_27 --> gate_review_27
+  gate_review_27 -->|review clean| before_qa_27_1
+  gate_review_27 -->|review clean| before_qa_27_2
+  gate_review_27 -->|review clean| before_qa_27_3
+  gate_review_27 -->|review clean| before_qa_27_4
+  before_qa_27_1 --> before_qa_27_fanin
+  before_qa_27_2 --> before_qa_27_fanin
+  before_qa_27_3 --> before_qa_27_fanin
+  before_qa_27_4 --> before_qa_27_fanin
+  before_qa_27_fanin --> qa_27
+  qa_27 --> gate_qa_27
+  gate_review_27 -->|review needs_fix| fix_27
+  gate_qa_27 -->|QA needs_fix| fix_27
+  fix_27 --> before_review_28_1
+  fix_27 --> before_review_28_2
+  fix_27 --> before_review_28_3
+  fix_27 --> before_review_28_4
+  fix_27 --> before_review_28_5
+  before_review_28_1 --> before_review_28_fanin
+  before_review_28_2 --> before_review_28_fanin
+  before_review_28_3 --> before_review_28_fanin
+  before_review_28_4 --> before_review_28_fanin
+  before_review_28_5 --> before_review_28_fanin
+  before_review_28_fanin --> review_28
+  review_28 --> gate_review_28
+  gate_review_28 -->|review clean| before_qa_28_1
+  gate_review_28 -->|review clean| before_qa_28_2
+  gate_review_28 -->|review clean| before_qa_28_3
+  gate_review_28 -->|review clean| before_qa_28_4
+  before_qa_28_1 --> before_qa_28_fanin
+  before_qa_28_2 --> before_qa_28_fanin
+  before_qa_28_3 --> before_qa_28_fanin
+  before_qa_28_4 --> before_qa_28_fanin
+  before_qa_28_fanin --> qa_28
+  qa_28 --> gate_qa_28
+  gate_review_28 -->|review needs_fix| fix_28
+  gate_qa_28 -->|QA needs_fix| fix_28
+  fix_28 --> before_review_29_1
+  fix_28 --> before_review_29_2
+  fix_28 --> before_review_29_3
+  fix_28 --> before_review_29_4
+  fix_28 --> before_review_29_5
+  before_review_29_1 --> before_review_29_fanin
+  before_review_29_2 --> before_review_29_fanin
+  before_review_29_3 --> before_review_29_fanin
+  before_review_29_4 --> before_review_29_fanin
+  before_review_29_5 --> before_review_29_fanin
+  before_review_29_fanin --> review_29
+  review_29 --> gate_review_29
+  gate_review_29 -->|review clean| before_qa_29_1
+  gate_review_29 -->|review clean| before_qa_29_2
+  gate_review_29 -->|review clean| before_qa_29_3
+  gate_review_29 -->|review clean| before_qa_29_4
+  before_qa_29_1 --> before_qa_29_fanin
+  before_qa_29_2 --> before_qa_29_fanin
+  before_qa_29_3 --> before_qa_29_fanin
+  before_qa_29_4 --> before_qa_29_fanin
+  before_qa_29_fanin --> qa_29
+  qa_29 --> gate_qa_29
+  gate_review_29 -->|review needs_fix| fix_29
+  gate_qa_29 -->|QA needs_fix| fix_29
+  fix_29 --> before_review_30_1
+  fix_29 --> before_review_30_2
+  fix_29 --> before_review_30_3
+  fix_29 --> before_review_30_4
+  fix_29 --> before_review_30_5
+  before_review_30_1 --> before_review_30_fanin
+  before_review_30_2 --> before_review_30_fanin
+  before_review_30_3 --> before_review_30_fanin
+  before_review_30_4 --> before_review_30_fanin
+  before_review_30_5 --> before_review_30_fanin
+  before_review_30_fanin --> review_30
+  review_30 --> gate_review_30
+  gate_review_30 -->|review clean| before_qa_30_1
+  gate_review_30 -->|review clean| before_qa_30_2
+  gate_review_30 -->|review clean| before_qa_30_3
+  gate_review_30 -->|review clean| before_qa_30_4
+  before_qa_30_1 --> before_qa_30_fanin
+  before_qa_30_2 --> before_qa_30_fanin
+  before_qa_30_3 --> before_qa_30_fanin
+  before_qa_30_4 --> before_qa_30_fanin
+  before_qa_30_fanin --> qa_30
+  qa_30 --> gate_qa_30
+  gate_review_30 -->|review needs_fix| fix_30
+  gate_qa_30 -->|QA needs_fix| fix_30
+  gate_qa_30 -->|QA clean| gate_archive
+  gate_archive --> archive
+用 run-local state 验证 status 能展示 engine 和并行成员明细
+ok  	github.com/xbugs221/oz/internal/app	0.021s
+PASS

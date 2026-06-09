@@ -32,6 +32,7 @@ type StageOptions struct {
 
 // WorkflowConfig is the effective sealed-run workflow snapshot stored in state.json.
 type WorkflowConfig struct {
+	Engine              string                  `json:"engine,omitempty" yaml:"engine"`
 	MaxReviewIterations int                     `json:"max_review_iterations" yaml:"max_review_iterations"`
 	Stages              map[string]StageOptions `json:"stages" yaml:"stages"`
 	Parallel            ParallelConfig          `json:"parallel,omitempty" yaml:"parallel"`
@@ -77,6 +78,7 @@ type woConfig struct {
 }
 
 type workflowConfigInput struct {
+	Engine              string                       `yaml:"engine"`
 	MaxReviewIterations *int                         `yaml:"max_review_iterations"`
 	Defaults            stageOptionsInput            `yaml:"defaults"`
 	Stages              map[string]stageOptionsInput `yaml:"stages"`
@@ -269,11 +271,13 @@ func WriteWorkflowConfig(repo string, global bool) (string, error) {
 
 func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
 	maxIterations := defaultMaxReviewIterations
+	engine := "go-dag"
 	var basePrompts map[string]string
 	byKind := defaultStageOptionsByKind()
 	validation := ValidationConfig{MaxAttemptsPerStage: 3}
 	parallel := defaultParallelConfig()
 	if baseConfig != nil {
+		engine = baseConfig.Engine
 		maxIterations = baseConfig.MaxReviewIterations
 		basePrompts = clonePrompts(baseConfig.Prompts)
 		validation = baseConfig.Validation
@@ -306,6 +310,12 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		maxIterations = *input.MaxReviewIterations
 	}
+	if strings.TrimSpace(input.Engine) != "" {
+		if input.Engine != "go-dag" && input.Engine != "legacy" && input.Engine != "dagu" {
+			return WorkflowConfig{}, fmt.Errorf("未知 engine %q", input.Engine)
+		}
+		engine = input.Engine
+	}
 	for _, kind := range stageKinds {
 		base := byKind[kind]
 		if err := mergeStageOptions(&base, input.Defaults); err != nil {
@@ -336,7 +346,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 			byKind["fix"] = writing
 		}
 	}
-	config := WorkflowConfig{MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
+	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
 		"planning":  byKind["planning"],
 		"execution": byKind["execution"],
 		"archive":   byKind["archive"],
@@ -473,6 +483,9 @@ func normalizeWorkflowConfig(config *WorkflowConfig) {
 		}
 		config.Stages[stage] = options
 	}
+	if config.Engine == "" {
+		config.Engine = "go-dag"
+	}
 	normalizeValidationConfig(&config.Validation)
 	if len(config.Parallel.Groups) == 0 {
 		config.Parallel = defaultParallelConfig()
@@ -539,7 +552,7 @@ func cloneParallelConfig(config ParallelConfig) ParallelConfig {
 
 func defaultParallelConfig() ParallelConfig {
 	return ParallelConfig{
-		Enabled: false,
+		Enabled: true,
 		Groups: map[string]ParallelGroupConfig{
 			"planning_context": {
 				Mode: "advisory",
@@ -625,6 +638,7 @@ func mustDefaultWorkflowConfigYAML() string {
 	return strings.Join([]string{
 		"wo:",
 		"  workflow:",
+		"    engine: go-dag",
 		"    max_review_iterations: 30",
 		"    stages:",
 		"      planning:",
@@ -646,7 +660,7 @@ func mustDefaultWorkflowConfigYAML() string {
 		"        cli: codex",
 		"        reasoning: low",
 		"    parallel:",
-		"      enabled: false",
+		"      enabled: true",
 		"      groups:",
 		"        planning_context:",
 		"          mode: advisory",
