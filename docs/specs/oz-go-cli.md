@@ -32,20 +32,27 @@
 - **则** 命令保持稳定 JSON 输出
 - **并且** JSON 内容包含 `valid`、`change`、`errors`、`warnings` 和 `artifacts`
 
-### 场景：下游校验接口要求验收合同
+### 场景：下游校验接口要求验收硬合同
 
-- **给定** 一个活动提案包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `wo` 允许的 `acceptance.json`
+- **给定** 一个活动提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `wo` 允许的 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
-- **则** 命令成功并在 artifacts 中返回 `acceptance.json`
+- **则** 命令成功并在 artifacts 中返回 `brief.md` 和 `acceptance.json`
 - **并且** `acceptance.json` 支持 `coverage`、`required_tests[].assertions` 和 `required_tests[].expected_initial_failure`
+- **并且** `required_tests[].assertions` 必须至少包含一条业务级断言
 - **并且** `coverage[].tests` 必须引用真实存在的 `required_tests[].id`
 - **并且** `coverage[].evidence` 必须引用真实存在的 `required_evidence[].id`
 
-### 场景：下游校验接口拒绝无效验收合同
+### 场景：下游校验接口拒绝弱验收合同
 
 - **给定** 一个活动提案缺少 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令失败并指出 acceptance 合同问题
+- **给定** 一个活动提案缺少 `brief.md`
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令失败并指出 active change artifact 问题
+- **给定** 一个活动提案的 `required_tests[]` 缺少 `assertions` 或只包含 `HTTP 200` 这类弱表面断言
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令失败并指出断言或弱验收合同问题
 - **给定** 一个活动提案的 `acceptance.json` 包含真正未知的字段
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令失败并指出 schema 或 acceptance 合同问题
@@ -57,6 +64,8 @@
 
 - **当** 下游工具运行 `oz status 1-需求 --json`
 - **则** 命令保持稳定 JSON 输出并包含提案产物状态
+- **并且** artifacts 必须包含 `brief.md`
+- **并且** acceptance 摘要必须暴露 `required_tests`、`required_evidence` 和 `coverage` 的数量
 - **当** 下游工具运行 `oz archive 1-需求 --yes`
 - **则** 命令继续按既有规则校验任务完成状态并归档提案
 - **并且** 命令不得机械移动、改写或合并提案测试文件

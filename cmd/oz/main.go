@@ -444,7 +444,7 @@ func statusPayload(root, change string) map[string]any {
 	// statusPayload summarizes fixed oz artifacts without dynamic workflow configuration.
 	changeDir := filepath.Join(root, "changes", change)
 	artifacts := []map[string]any{}
-	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"} {
+	for _, name := range changeArtifactNames() {
 		path := filepath.Join(changeDir, name)
 		exists := false
 		if info, err := os.Stat(path); err == nil {
@@ -466,14 +466,37 @@ func statusPayload(root, change string) map[string]any {
 		status = "ready"
 	}
 	return map[string]any{
-		"change":    change,
-		"status":    status,
-		"artifacts": artifacts,
+		"change":     change,
+		"status":     status,
+		"artifacts":  artifacts,
+		"acceptance": acceptanceSummary(filepath.Join(changeDir, "acceptance.json")),
 		"tasks": map[string]int{
 			"total": taskTotal,
 			"done":  taskDone,
 		},
 	}
+}
+
+func changeArtifactNames() []string {
+	// changeArtifactNames lists the active change artifacts that gate readiness.
+	return []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"}
+}
+
+func acceptanceSummary(path string) map[string]map[string]int {
+	// acceptanceSummary exposes the hard contract size for status JSON consumers.
+	summary := map[string]map[string]int{
+		"coverage":          {"total": 0},
+		"required_tests":    {"total": 0},
+		"required_evidence": {"total": 0},
+	}
+	contract, err := acceptance.Read(path)
+	if err != nil {
+		return summary
+	}
+	summary["coverage"]["total"] = len(contract.Coverage)
+	summary["required_tests"]["total"] = len(contract.RequiredTests)
+	summary["required_evidence"]["total"] = len(contract.RequiredEvidence)
+	return summary
 }
 
 func allArtifactsPresent(artifacts []map[string]any) bool {
@@ -518,8 +541,7 @@ func validateChange(root, change string) validationResult {
 		result.Errors = append(result.Errors, err.Error())
 	}
 	changeDir := filepath.Join(root, "changes", change)
-	required := []string{"proposal.md", "design.md", "spec.md", "task.md", "acceptance.json"}
-	for _, name := range required {
+	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json"} {
 		path := filepath.Join(changeDir, name)
 		result.Artifacts[name] = path
 		if info, err := os.Stat(path); err != nil || info.IsDir() {
@@ -549,12 +571,39 @@ func validateChange(root, change string) validationResult {
 		result.Errors = append(result.Errors, "task.md 必须包含任务项")
 	}
 	acceptancePath := filepath.Join(changeDir, "acceptance.json")
-	if _, err := acceptance.Read(acceptancePath); err != nil {
+	if contract, err := acceptance.Read(acceptancePath); err != nil {
 		result.Errors = append(result.Errors, "acceptance.json 无效："+err.Error())
+	} else {
+		result.Errors = append(result.Errors, validateAcceptanceFiles(root, contract)...)
 	}
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0
 	return result
+}
+
+func validateAcceptanceFiles(root string, contract acceptance.Contract) []string {
+	// validateAcceptanceFiles binds acceptance.json entries to real tests and evidence references.
+	errs := []string{}
+	projectRoot := filepath.Dir(root)
+	for i, test := range contract.RequiredTests {
+		if filepath.IsAbs(test.Path) || strings.TrimSpace(test.Path) == "." {
+			errs = append(errs, fmt.Sprintf("required_tests[%d].path 必须是相对测试路径：%s", i, test.Path))
+			continue
+		}
+		testPath := filepath.Join(projectRoot, filepath.Clean(test.Path))
+		if info, err := os.Stat(testPath); err != nil || info.IsDir() {
+			errs = append(errs, fmt.Sprintf("required_tests[%d].path 指向的测试不存在：%s", i, test.Path))
+		}
+		if !strings.Contains(test.Command, test.Path) {
+			errs = append(errs, fmt.Sprintf("required_tests[%d].command 必须引用 path：%s", i, test.Path))
+		}
+	}
+	for i, evidence := range contract.RequiredEvidence {
+		if filepath.IsAbs(evidence.Path) || strings.TrimSpace(evidence.Path) == "." {
+			errs = append(errs, fmt.Sprintf("required_evidence[%d].path 必须是相对产物路径：%s", i, evidence.Path))
+		}
+	}
+	return errs
 }
 
 func validateSpecText(text string) []string {

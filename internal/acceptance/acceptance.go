@@ -7,8 +7,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 )
+
+var weakAssertionPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^\s*http\s*200\s*$`),
+	regexp.MustCompile(`(?i)^\s*(status\s*)?(code\s*)?200\s*$`),
+	regexp.MustCompile(`(?i)^\s*2xx\s*$`),
+	regexp.MustCompile(`^\s*元素存在\s*$`),
+	regexp.MustCompile(`^\s*组件渲染成功\s*$`),
+	regexp.MustCompile(`^\s*页面能打开\s*$`),
+}
 
 // Contract is the JSON contract produced before implementation starts.
 type Contract struct {
@@ -95,9 +105,15 @@ func Validate(contract Contract) error {
 		if testIDs[test.ID] {
 			return fmt.Errorf("required_tests[%d].id 重复：%q", i, test.ID)
 		}
+		if len(test.Assertions) == 0 {
+			return fmt.Errorf("required_tests[%d].assertions 至少包含一个业务级断言", i)
+		}
 		for j, assertion := range test.Assertions {
 			if strings.TrimSpace(assertion) == "" {
 				return fmt.Errorf("required_tests[%d].assertions[%d] 不能为空", i, j)
+			}
+			if weakAssertion(assertion) {
+				return fmt.Errorf("required_tests[%d].assertions[%d] 是弱验收断言：%q", i, j, assertion)
 			}
 		}
 		testIDs[test.ID] = true
@@ -143,6 +159,17 @@ func Validate(contract Contract) error {
 		}
 	}
 	return nil
+}
+
+func weakAssertion(assertion string) bool {
+	// weakAssertion rejects clear surface checks that do not describe business behavior.
+	trimmed := strings.TrimSpace(assertion)
+	for _, pattern := range weakAssertionPatterns {
+		if pattern.MatchString(trimmed) {
+			return true
+		}
+	}
+	return false
 }
 
 func validTestSource(source string) bool {

@@ -2480,7 +2480,7 @@ func cleanReviewJSON() string {
 
 // acceptanceJSON returns a valid strict acceptance contract for test stages.
 func acceptanceJSON() string {
-	return `{"summary":"demo acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"pnpm exec tsx --test docs/changes/demo/tests/demo.acceptance.test.ts","purpose":"cover the demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove the demo runtime path"}]}` + "\n"
+	return `{"summary":"demo acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"pnpm exec tsx --test docs/changes/demo/tests/demo.acceptance.test.ts","purpose":"cover the demo contract","assertions":["demo workflow persists the user-visible result after execution"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove the demo runtime path"}]}` + "\n"
 }
 
 // fixReviewJSON returns a valid strict needs_fix artifact for test stages.

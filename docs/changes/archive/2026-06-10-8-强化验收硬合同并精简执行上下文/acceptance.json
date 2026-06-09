@@ -1,0 +1,83 @@
+{
+  "summary": "强化 oz 提案验收硬合同，让执行阶段默认聚焦 brief、acceptance 和 tests，并让 status 暴露合同摘要",
+  "coverage": [
+    {
+      "spec": "需求：验收硬合同 / 场景：弱验收合同被 `oz validate` 拒绝",
+      "tests": ["strict-acceptance-contract-validation"],
+      "evidence": ["strict-acceptance-contract-log"],
+      "risk": "弱断言识别只覆盖明确反模式，不能替代 review 对硬编码和绕过合同的审查"
+    },
+    {
+      "spec": "需求：执行上下文聚焦硬合同 / 场景：execution prompt 默认只读硬合同和用户简报",
+      "tests": ["execution-hard-contract-prompt"],
+      "evidence": ["execution-hard-contract-prompt-log"],
+      "risk": "prompt 仍可在按需读取规则中提到长文档名称，本合同只禁止旧的全量默认必读句式"
+    },
+    {
+      "spec": "需求：状态暴露合同门槛 / 场景：`oz status --json` 暴露 `brief.md` 和验收合同摘要",
+      "tests": ["status-hard-contract-summary"],
+      "evidence": ["status-hard-contract-summary-log"],
+      "risk": "status 只报告合同规模，不证明测试已经通过"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "strict-acceptance-contract-validation",
+      "source": "change_contract",
+      "path": "docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_strict_acceptance_contract_validation.sh",
+      "command": "bash docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_strict_acceptance_contract_validation.sh",
+      "purpose": "证明 oz validate 会拒绝缺少业务级断言或只包含弱表面断言的验收合同，并接受强合同",
+      "assertions": [
+        "缺少 required_tests[].assertions 的 acceptance.json 被 oz validate 拒绝",
+        "只包含 HTTP 200 这类弱表面断言的 acceptance.json 被 oz validate 拒绝",
+        "包含业务级断言、真实测试路径、覆盖矩阵和证据引用的 acceptance.json 被 oz validate 接受"
+      ],
+      "expected_initial_failure": "当前 oz validate 仍接受缺少 assertions 的 required_tests，因此测试应失败于目标行为缺失"
+    },
+    {
+      "id": "execution-hard-contract-prompt",
+      "source": "change_contract",
+      "path": "docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_execution_prompt_hard_contract_focus.sh",
+      "command": "bash docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_execution_prompt_hard_contract_focus.sh",
+      "purpose": "证明 execution prompt 默认聚焦 brief、acceptance 和 tests，不再要求读取所有长文档",
+      "assertions": [
+        "渲染后的 execution prompt 包含 brief.md、acceptance.json、tests/ 和 required_tests[].command",
+        "渲染后的 execution prompt 不再包含旧的 proposal/design/spec/task/acceptance/tests 全量必读句式"
+      ],
+      "expected_initial_failure": "当前 wo-start.md 仍要求读取 proposal.md、design.md、spec.md、task.md、acceptance.json 和 tests/"
+    },
+    {
+      "id": "status-hard-contract-summary",
+      "source": "change_contract",
+      "path": "docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_status_hard_contract_summary.sh",
+      "command": "bash docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_status_hard_contract_summary.sh",
+      "purpose": "证明 oz status --json 暴露 brief.md artifact 和验收合同摘要",
+      "assertions": [
+        "status artifacts 包含 brief.md 且状态为 present",
+        "status JSON 暴露 acceptance.required_tests.total",
+        "status JSON 暴露 acceptance.required_evidence.total 和 acceptance.coverage.total"
+      ],
+      "expected_initial_failure": "当前 oz status --json 未列出 brief.md，也未输出 acceptance 合同摘要"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "strict-acceptance-contract-log",
+      "kind": "runtime_log",
+      "path": "test-results/8-强化验收硬合同/strict-acceptance-contract.log",
+      "purpose": "记录严格验收合同校验测试的运行输出"
+    },
+    {
+      "id": "execution-hard-contract-prompt-log",
+      "kind": "runtime_log",
+      "path": "test-results/8-强化验收硬合同/execution-hard-contract-prompt.log",
+      "purpose": "记录 execution prompt 硬合同聚焦测试的运行输出"
+    },
+    {
+      "id": "status-hard-contract-summary-log",
+      "kind": "runtime_log",
+      "path": "test-results/8-强化验收硬合同/status-hard-contract-summary.log",
+      "purpose": "记录 status 合同摘要测试的运行输出"
+    }
+  ]
+}

@@ -13,6 +13,9 @@ func TestValidateAcceptanceRequiresExecutableContracts(t *testing.T) {
 			Path:    "docs/changes/demo/tests/checkout.acceptance.test.ts",
 			Command: "pnpm exec tsx --test docs/changes/demo/tests/checkout.acceptance.test.ts",
 			Purpose: "cover the checkout contract",
+			Assertions: []string{
+				"submitted checkout order remains visible after reload",
+			},
 		}},
 		RequiredEvidence: []AcceptanceEvidence{{
 			ID:      "screenshot-checkout",
@@ -40,6 +43,9 @@ func TestValidateQAAgainstAcceptanceRequiresEveryMatrixItem(t *testing.T) {
 			Path:    "docs/changes/demo/tests/checkout.acceptance.test.ts",
 			Command: "pnpm exec tsx --test docs/changes/demo/tests/checkout.acceptance.test.ts",
 			Purpose: "cover the checkout contract",
+			Assertions: []string{
+				"submitted checkout order remains visible after reload",
+			},
 		}},
 		RequiredEvidence: []AcceptanceEvidence{{
 			ID:      "screenshot-checkout",

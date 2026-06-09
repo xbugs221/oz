@@ -122,11 +122,20 @@
 #### 场景：提案验收合同先行
 
 - **当** 用户启动 sealed run
-- **则** 对应 `docs/changes/<change>/acceptance.json` 必须存在并通过严格 JSON 校验
+- **则** 对应 `docs/changes/<change>/brief.md`、`acceptance.json` 和 `tests/` 必须存在并通过严格 JSON 校验
 - **且** `required_tests` 至少包含一项测试
 - **且** `required_tests` 必须复用 oz-create 写入 `docs/changes/<change>/tests/` 的契约测试，必要时补充根目录端到端或回归测试
 - **且** `required_evidence` 必须记录 QA 需要采集的截图、trace、network、console、runtime log 或等价证据
+- **且** `required_tests[].assertions` 必须包含业务级断言，不能只写 `HTTP 200`、页面存在或组件渲染等弱表面信号
 - **且** 系统不得接受 Markdown-only 的验收说明作为 sealed run 前置合同
+
+#### 场景：执行阶段默认聚焦硬合同
+
+- **当** execution prompt 发给执行智能体
+- **则** prompt 默认要求读取 `brief.md`、`acceptance.json` 和 `tests/`
+- **且** prompt 必须要求先运行 `acceptance.json.required_tests[].command`
+- **且** `proposal.md`、`design.md`、`spec.md` 和 `task.md` 只能作为冲突排查、架构分歧或历史测试更新时的按需上下文
+- **且** prompt 不得继续把所有长文档列为 execution 默认必读上下文
 
 #### 场景：审核提前通过
 

@@ -1,6 +1,6 @@
 ---
 name: oz-exec
-description: 当用户提到 oz exec，或要求执行一个活动 oz 提案时使用；用于读取提案产物、编写真实测试、按新意图更新过期历史测试并实现变更
+description: 当用户提到 oz exec，或要求执行一个活动 oz 提案时使用；用于读取 brief.md、acceptance.json 和 tests/ 硬合同，编写真实测试，按新意图更新过期历史测试并实现变更
 ---
 
 # oz Exec
@@ -15,14 +15,13 @@ git log --oneline -- docs/changes/<change>/
 
 若未提交，先 `git add docs/changes/<change>/ && git commit -m "提案草稿: <change>"`。
 
-先读取：
+默认先读取硬合同：
 
-- `proposal.md`
-- `design.md`
-- `spec.md`
-- `task.md`
+- `brief.md`
 - `acceptance.json`
 - `tests/` 中创建阶段已经写好的契约测试
+
+`proposal.md`、`design.md`、`spec.md`、`task.md` 只在验收合同冲突、用户最新意图冲突、历史测试需要更新或实现路径存在架构分歧时按需读取；读取后只提取解决当前冲突所需的信息。
 
 实现时：
 

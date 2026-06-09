@@ -62,6 +62,7 @@ func writeValidChange(t *testing.T, project, change string) {
 		t.Fatal(err)
 	}
 	files := map[string]string{
+		"brief.md":    "# 归档测试\n\n用户简报说明归档测试随提案保留。\n",
 		"proposal.md": "## 背景\n需要可追溯变更。\n\n## 变更内容\n- 实现 oz。\n",
 		"design.md":   "## 背景\n固定工作流。\n\n## 决策\nCLI 先归档，智能体再合并主规格。\n",
 		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留\n",
@@ -73,8 +74,9 @@ func writeValidChange(t *testing.T, project, change string) {
       "id": "archive-test",
       "source": "change_contract",
       "path": "docs/changes/` + change + `/tests/archive_test.go",
-      "command": "go test ./...",
-      "purpose": "证明提案包含真实测试入口"
+      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
+      "purpose": "证明提案包含真实测试入口",
+      "assertions": ["归档后提案测试文件仍随 active change 保留"]
     }
   ],
   "required_evidence": [
@@ -228,6 +230,17 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 			Total int `json:"total"`
 			Done  int `json:"done"`
 		} `json:"tasks"`
+		Acceptance struct {
+			RequiredTests struct {
+				Total int `json:"total"`
+			} `json:"required_tests"`
+			RequiredEvidence struct {
+				Total int `json:"total"`
+			} `json:"required_evidence"`
+			Coverage struct {
+				Total int `json:"total"`
+			} `json:"coverage"`
+		} `json:"acceptance"`
 	}
 	if err := json.Unmarshal([]byte(status.stdout), &statusPayload); err != nil {
 		t.Fatalf("invalid status JSON: %v\n%s", err, status.stdout)
@@ -242,10 +255,13 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	for _, artifact := range statusPayload.Artifacts {
 		seen[artifact.Name] = artifact.Status
 	}
-	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"} {
+	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"} {
 		if seen[name] != "present" {
 			t.Fatalf("artifact %s not present in status: %#v", name, seen)
 		}
+	}
+	if statusPayload.Acceptance.RequiredTests.Total != 1 || statusPayload.Acceptance.RequiredEvidence.Total != 1 {
+		t.Fatalf("unexpected acceptance summary: %#v", statusPayload.Acceptance)
 	}
 }
 
@@ -391,8 +407,8 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
     {
       "id": "archive-test",
       "source": "change_contract",
-      "path": "x",
-      "command": "go test ./...",
+      "path": "docs/changes/` + change + `/tests/archive_test.go",
+      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
       "purpose": "覆盖契约",
       "assertions": ["归档后测试文件仍保留"],
       "expected_initial_failure": "未实现归档时测试文件缺失"
@@ -416,7 +432,7 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
     {"spec": "需求：归档测试 / 场景：归档包含测试", "tests": ["missing-test"], "evidence": [], "risk": "缺少证据"}
   ],
   "required_tests": [
-    {"id": "archive-test", "source": "change_contract", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
+    {"id": "archive-test", "source": "change_contract", "path": "docs/changes/` + change + `/tests/archive_test.go", "command": "go test docs/changes/` + change + `/tests/archive_test.go", "purpose": "覆盖契约", "assertions": ["归档后提案测试文件仍随 active change 保留"]}
   ],
   "required_evidence": []
 }
@@ -435,7 +451,7 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
   "summary": "未知字段必须失败",
   "unexpected": true,
   "required_tests": [
-    {"id": "archive-test", "source": "change_contract", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
+    {"id": "archive-test", "source": "change_contract", "path": "docs/changes/` + change + `/tests/archive_test.go", "command": "go test docs/changes/` + change + `/tests/archive_test.go", "purpose": "覆盖契约", "assertions": ["归档后提案测试文件仍随 active change 保留"]}
   ],
   "required_evidence": []
 }
@@ -453,7 +469,7 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
 	body = `{
   "summary": "无效 source 必须失败",
   "required_tests": [
-    {"id": "archive-test", "source": "fake", "path": "x", "command": "go test ./...", "purpose": "覆盖契约"}
+    {"id": "archive-test", "source": "fake", "path": "docs/changes/` + change + `/tests/archive_test.go", "command": "go test docs/changes/` + change + `/tests/archive_test.go", "purpose": "覆盖契约", "assertions": ["归档后提案测试文件仍随 active change 保留"]}
   ],
   "required_evidence": [
     {"id": "archive-log", "kind": "runtime_log", "path": "test-results/archive.log", "purpose": "记录测试结果"}

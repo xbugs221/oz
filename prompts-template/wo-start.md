@@ -8,7 +8,7 @@
 
 - 调用 `oz-exec` 技能开始执行当前 oz change，提案名称见 `state.json.change_name` 字段。
 - 先确认 `{{.ChangePath}}/` 已提交到 git；如果提案目录尚未提交，先只提交该提案目录，避免执行阶段误删或改弱合同。
-- 读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/` 中创建阶段写好的契约测试。
+- 默认读取 `brief.md`、`acceptance.json` 和 `tests/` 中创建阶段写好的契约测试；`proposal.md`、`design.md`、`spec.md`、`task.md` 只在验收合同冲突、用户最新意图冲突、历史测试需要更新或实现路径存在架构分歧时按需读取。
 - 以当前提案和用户最新意图为准；如果历史测试与新意图冲突，更新历史测试并在提案文档或任务中记录原因。
 - 先运行 `{{.AcceptancePath}}` 中 `required_tests[].command` 指向的创建阶段契约测试；功能尚未实现时，失败原因应指向目标行为缺失，而不是测试语法、路径或环境配置错误。
 - 不得删除、弱化、跳过或改写创建阶段的契约测试和 `{{.AcceptancePath}}` 来让实现过关。
