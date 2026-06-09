@@ -1,0 +1,146 @@
+{
+  "summary": "验证 wo 当前工作流彻底移除 Dagu 和备份 legacy prompt 兼容路径，并让 review/fix 续轮提示词只保留增量上下文。",
+  "coverage": [
+    {
+      "spec": "需求：wo 工作流彻底移除 Dagu 运行时残留 / 场景：wo 运行时代码不再保留 Dagu 残留",
+      "tests": [
+        "contract-no-dagu-runtime-residue"
+      ],
+      "evidence": [
+        "runtime-no-dagu-runtime-residue"
+      ],
+      "risk": "只扫描当前维护面，历史归档目录不参与清理。"
+    },
+    {
+      "spec": "需求：wo 工作流彻底移除 Dagu 运行时残留 / 场景：wo node 入口随 Dagu 执行器移除",
+      "tests": [
+        "contract-no-dagu-runtime-residue"
+      ],
+      "evidence": [
+        "runtime-no-dagu-runtime-residue"
+      ],
+      "risk": "只约束 CLI 入口，go-dag 内部仍可直接调用 Go helper。"
+    },
+    {
+      "spec": "需求：prompt legacy 兼容路径全部移除 / 场景：prompt 配置拒绝 writing 兼容键",
+      "tests": [
+        "contract-prompt-legacy-removed"
+      ],
+      "evidence": [
+        "runtime-prompt-legacy-removed"
+      ],
+      "risk": "配置读取层直接覆盖该行为，不单独覆盖 wo config 生成默认配置。"
+    },
+    {
+      "spec": "需求：prompt legacy 兼容路径全部移除 / 场景：sealed run 不再读取 legacy prompt 快照",
+      "tests": [
+        "contract-prompt-legacy-removed"
+      ],
+      "evidence": [
+        "runtime-prompt-legacy-removed"
+      ],
+      "risk": "旧 sealed run 不能继续靠历史 prompt 文件恢复，这是本提案接受的破坏性清理。"
+    },
+    {
+      "spec": "需求：review/fix 续轮提示词只保留增量上下文 / 场景：review/fix 续轮提示词只保留增量上下文",
+      "tests": [
+        "contract-review-fix-resumed-prompt-compact"
+      ],
+      "evidence": [
+        "runtime-review-fix-resumed-prompt-compact"
+      ],
+      "risk": "测试验证关键文本片段和续轮边界，不冻结所有自然语言措辞。"
+    },
+    {
+      "spec": "需求：清理后保持现有 Go 回归通过 / 场景：全仓库 Go 回归保持通过",
+      "tests": [
+        "root-go-test-regression"
+      ],
+      "evidence": [
+        "runtime-root-go-tests"
+      ],
+      "risk": "Go 回归不替代本提案 shell 契约测试。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-no-dagu-runtime-residue",
+      "source": "change_contract",
+      "path": "docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh",
+      "command": "bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh",
+      "purpose": "证明 wo 当前运行时、当前规格和长期测试不再保留 Dagu executor、Dagu YAML、Dagu CLI 或隐藏 node 入口。",
+      "assertions": [
+        "真实 wo 二进制仍能输出 json 和 mermaid graph",
+        "当前 runtime/spec/tests 扫描不到 Dagu 相关残留文本",
+        "wo node run-stage 返回未知或已移除命令，而不是进入 run-node 状态读取"
+      ],
+      "expected_initial_failure": "当前实现仍存在 internal/app/dagu.go、graph Dagu exporter、Dagu 长期测试和隐藏 wo node 入口。"
+    },
+    {
+      "id": "contract-prompt-legacy-removed",
+      "source": "change_contract",
+      "path": "docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh",
+      "command": "bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh",
+      "purpose": "证明 prompt/stage 配置不再接受 writing，sealed run 恢复不再读取 legacy prompt 文件或 writing 快照。",
+      "assertions": [
+        "wo.prompts.writing 被配置读取拒绝",
+        "wo.workflow.stages.writing 被配置读取拒绝",
+        "sealed run 缺少 prompt-snapshot.yaml 时不读取 runs/<id>/prompts/*.md",
+        "prompt-snapshot.yaml 只有 prompts.writing 时不能用于 execution 或 fix"
+      ],
+      "expected_initial_failure": "当前实现仍把 writing 映射到 execution/fix，并且会读取历史 runs/<id>/prompts/*.md。"
+    },
+    {
+      "id": "contract-review-fix-resumed-prompt-compact",
+      "source": "change_contract",
+      "path": "docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh",
+      "command": "bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh",
+      "purpose": "证明 review/fix 首轮保留完整提示，续轮不再重复首轮方法论、长 checklist 和示例。",
+      "assertions": [
+        "review_1 包含完整 schema、示例和审核方法论",
+        "review_2 保留当前 artifact 和上一轮 artifact 路径，但省略首轮方法论、长 checklist 和示例",
+        "fix_1 包含根因分析方法论",
+        "fix_2 保留当前 review/QA/fix summary 路径，但省略首轮根因分析方法论和通用长约束"
+      ],
+      "expected_initial_failure": "当前 wo-review.md 续轮仍重复审核专家方法论和大量静态规则；wo-fix.md 续轮仍重复部分首轮通用约束。"
+    },
+    {
+      "id": "root-go-test-regression",
+      "source": "existing_regression",
+      "path": "go test ./...",
+      "command": "go test ./...",
+      "purpose": "证明清理 Dagu/legacy 兼容和提示词后，现有 Go 包行为保持通过。",
+      "assertions": [
+        "所有 Go 包测试通过",
+        "与新意图冲突的旧 legacy 测试被更新为拒绝路径"
+      ],
+      "expected_initial_failure": "实现清理前可能仍有旧测试要求 legacy 行为，执行阶段需要按新意图更新。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "runtime-no-dagu-runtime-residue",
+      "kind": "runtime_log",
+      "path": "test-results/5-clean-wo-legacy/no-dagu-runtime-residue/contract.log",
+      "purpose": "记录 Dagu 运行时残留清理契约测试的真实构建、CLI 和源码扫描结果。"
+    },
+    {
+      "id": "runtime-prompt-legacy-removed",
+      "kind": "runtime_log",
+      "path": "test-results/5-clean-wo-legacy/prompt-legacy-removed/contract.log",
+      "purpose": "记录 prompt legacy 清理契约测试的真实配置读取和 sealed prompt 渲染结果。"
+    },
+    {
+      "id": "runtime-review-fix-resumed-prompt-compact",
+      "kind": "runtime_log",
+      "path": "test-results/5-clean-wo-legacy/review-fix-resumed-prompt-compact/contract.log",
+      "purpose": "记录 review/fix 首轮与续轮提示词渲染差异的契约测试结果。"
+    },
+    {
+      "id": "runtime-root-go-tests",
+      "kind": "runtime_log",
+      "path": "test-results/5-clean-wo-legacy/go-test.log",
+      "purpose": "记录 go test ./... 的完整回归结果。"
+    }
+  ]
+}

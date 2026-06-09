@@ -31,11 +31,6 @@ func (fakeRunner) Run(_ context.Context, repo, prompt, threadID string, options 
 	stage := stageFromPromptOrState(repo, prompt)
 	runID := currentRunID(repo)
 	switch {
-	case stage == "acceptance":
-		if options.Reasoning != "high" || options.Fast {
-			return "", os.ErrInvalid
-		}
-		return "acceptance-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "acceptance.json"), []byte(acceptanceJSON()), 0o644)
 	case stage == "execution":
 		if options.Reasoning != "low" || options.Fast {
 			return "", os.ErrInvalid
@@ -151,8 +146,6 @@ func (r *scenarioRunner) Run(_ context.Context, repo, prompt, threadID string, o
 	r.fast = append(r.fast, options.Fast)
 	runID := currentRunID(repo)
 	switch {
-	case stage == "acceptance":
-		return "acceptance-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "acceptance.json"), []byte(acceptanceJSON()), 0o644)
 	case stage == "execution":
 		return "executor-thread", os.WriteFile(filepath.Join(repo, "docs", "changes", "demo", "task.md"), []byte("- [x] task\n"), 0o644)
 	case strings.HasPrefix(stage, "review_"):
@@ -252,8 +245,6 @@ func (r *sessionCaptureRunner) Run(_ context.Context, repo, prompt, sessionID st
 	r.seen = append(r.seen, options.Tool+":"+stage+":"+sessionID)
 	runID := currentRunID(repo)
 	switch {
-	case stage == "acceptance":
-		return options.Tool + "-acceptance-session", os.WriteFile(filepath.Join(runDir(repo, runID), "acceptance.json"), []byte(acceptanceJSON()), 0o644)
 	case stage == "execution":
 		return options.Tool + "-executor-session", os.WriteFile(filepath.Join(repo, "docs", "changes", "demo", "task.md"), []byte("- [x] task\n"), 0o644)
 	case strings.HasPrefix(stage, "fix_"):
@@ -287,8 +278,6 @@ func (r *validationRunner) Run(_ context.Context, repo, prompt, threadID string,
 	r.attempts[stage]++
 	runID := currentRunID(repo)
 	switch {
-	case stage == "acceptance":
-		return "acceptance-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "acceptance.json"), []byte(acceptanceJSON()), 0o644)
 	case stage == "execution":
 		if err := os.WriteFile(filepath.Join(repo, "docs", "changes", "demo", "task.md"), []byte("- [x] task\n"), 0o644); err != nil {
 			return "", err
@@ -1065,7 +1054,7 @@ func TestSnapshotRunPromptsWritesYAMLOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(data)
-	for _, key := range []string{"planning:", "execution:", "review:", "fix:", "archive:"} {
+	for _, key := range []string{"planning:", "execution:", "review:", "qa:", "fix:", "archive:"} {
 		if !strings.Contains(body, key) {
 			t.Fatalf("snapshot missing %s:\n%s", key, body)
 		}
@@ -1082,18 +1071,22 @@ func TestPromptSnapshotPreservesCustomYAML(t *testing.T) {
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `wo:
   prompts:
     planning: planning {{.Stage}}
-    writing: |
-      snapshot writing {{.Stage}}
+    execution: |
+      snapshot execution {{.Stage}}
       line two
     review: review {{.Stage}}
+    fix: fix {{.Stage}}
+    qa: qa {{.Stage}}
     archive: archive {{.Stage}}
 `)
 	mustSnapshotPrompts(t, repo, runID)
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `wo:
   prompts:
     planning: planning
-    writing: changed current {{.Stage}}
+    execution: changed current {{.Stage}}
     review: changed review
+    fix: changed fix
+    qa: changed qa
     archive: changed archive
 `)
 
@@ -1101,51 +1094,55 @@ func TestPromptSnapshotPreservesCustomYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "snapshot writing execution\nline two\n"
+	want := "snapshot execution execution\nline two\n"
 	if got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }
 
-// TestPromptSnapshotWritingCoversExecutionAndFix verifies old writing snapshots still resume.
-func TestPromptSnapshotWritingCoversExecutionAndFix(t *testing.T) {
+// TestPromptSnapshotUsesCurrentKeys verifies execution and fix snapshots are independent current keys.
+func TestPromptSnapshotUsesCurrentKeys(t *testing.T) {
 	repo := gitRepo(t)
-	runID := "writing-map-run"
+	runID := "current-key-run"
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `wo:
   prompts:
     planning: planning
-    writing: "write {{.Stage}}\n"
+    execution: "execution {{.Stage}}\n"
     review: "review {{.Stage}}\n"
+    fix: "fix {{.Stage}}\n"
+    qa: "qa {{.Stage}}\n"
     archive: archive
 `)
 	mustSnapshotPrompts(t, repo, runID)
 
-	for _, stage := range []string{"execution", "fix_1"} {
-		got, err := promptForStage(repo, State{RunID: runID, Stage: stage, Sealed: true})
+	for _, tc := range []struct {
+		stage string
+		want  string
+	}{
+		{stage: "execution", want: "execution execution\n"},
+		{stage: "fix_1", want: "fix fix_1\n"},
+	} {
+		got, err := promptForStage(repo, State{RunID: runID, Stage: tc.stage, Sealed: true})
 		if err != nil {
-			t.Fatalf("%s: %v", stage, err)
+			t.Fatalf("%s: %v", tc.stage, err)
 		}
-		want := "write " + stage + "\n"
-		if got != want {
-			t.Fatalf("%s prompt = %q, want %q", stage, got, want)
+		if got != tc.want {
+			t.Fatalf("%s prompt = %q, want %q", tc.stage, got, tc.want)
 		}
 	}
 }
 
-// TestPromptSnapshotLegacyWritingFallback verifies historical YAML snapshots keep working.
-func TestPromptSnapshotLegacyWritingFallback(t *testing.T) {
+// TestPromptSnapshotRejectsWritingOnlySnapshot verifies old YAML snapshots fail closed.
+func TestPromptSnapshotRejectsWritingOnlySnapshot(t *testing.T) {
 	repo := gitRepo(t)
-	runID := "legacy-writing-yaml-run"
+	runID := "writing-only-yaml-run"
 	mustWritePrompt(t, filepath.Join(runDir(repo, runID), "prompt-snapshot.yaml"), "prompts:\n  writing: \"legacy {{.Stage}}\\n\"\n")
 
-	for _, stage := range []string{"execution", "fix_1"} {
-		got, err := promptForStage(repo, State{RunID: runID, Stage: stage, Sealed: true})
-		if err != nil {
-			t.Fatalf("%s: %v", stage, err)
-		}
-		want := "legacy " + stage + "\n"
-		if got != want {
-			t.Fatalf("%s prompt = %q, want %q", stage, got, want)
+	for _, stage := range []string{"execution", "qa_1", "fix_1"} {
+		if got, err := promptForStage(repo, State{RunID: runID, Stage: stage, Sealed: true}); err == nil {
+			t.Fatalf("%s: expected writing-only snapshot to fail, got %q", stage, got)
+		} else if !strings.Contains(err.Error(), "prompts.") {
+			t.Fatalf("%s: err = %v, want missing current prompt key", stage, err)
 		}
 	}
 }
@@ -1158,9 +1155,9 @@ func TestPromptSnapshotFixPrefersFixKey(t *testing.T) {
   prompts:
     planning: planning
     execution: "execution {{.Stage}}\n"
-    writing: "old writing {{.Stage}}\n"
     review: "review {{.Stage}}\n"
     fix: "fix {{.Stage}} {{.FixSummaryPath}}\n"
+    qa: "qa {{.Stage}}\n"
     archive: archive
 `)
 	mustSnapshotPrompts(t, repo, runID)
@@ -1174,23 +1171,23 @@ func TestPromptSnapshotFixPrefersFixKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, "fix fix_2 ") || strings.Contains(got, "old writing") || strings.Contains(got, "changed") {
+	if !strings.Contains(got, "fix fix_2 ") || strings.Contains(got, "changed") {
 		t.Fatalf("fix prompt = %q, want frozen prompts.fix", got)
 	}
 }
 
-// TestPromptForStageReadsLegacySnapshot verifies historical run directories still resume.
-func TestPromptForStageReadsLegacySnapshot(t *testing.T) {
+// TestPromptForStageRejectsLegacySnapshotDir verifies historical prompt files are not read.
+func TestPromptForStageRejectsLegacySnapshotDir(t *testing.T) {
 	repo := t.TempDir()
 	runID := "legacy-run"
 	mustWritePrompt(t, filepath.Join(runDir(repo, runID), "prompts", "wo-start.md"), "legacy {{.Stage}}\n")
 
 	got, err := promptForStage(repo, State{RunID: runID, Stage: "execution", Sealed: true})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatalf("expected missing prompt-snapshot.yaml to fail, got %q", got)
 	}
-	if got != "legacy execution\n" {
-		t.Fatalf("prompt = %q, want legacy snapshot", got)
+	if strings.Contains(got, "legacy") || !strings.Contains(err.Error(), "prompt-snapshot.yaml") {
+		t.Fatalf("prompt=%q err=%v, want YAML snapshot failure without legacy prompt", got, err)
 	}
 }
 
@@ -1200,7 +1197,7 @@ func TestSealedPromptMissingAllSnapshotsDoesNotReadCurrentYAML(t *testing.T) {
 	runID := "missing-snapshot-run"
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `wo:
   prompts:
-    writing: "current {{.Stage}}\n"
+    execution: "current {{.Stage}}\n"
 `)
 
 	_, err := promptForStage(repo, State{RunID: runID, Stage: "execution", Sealed: true})
@@ -1617,6 +1614,19 @@ func TestStageDurationSummaryLinesSkipsInvalidTimings(t *testing.T) {
 	}
 }
 
+// TestLegacyAcceptanceStageIsUnknown verifies the state machine no longer keeps the old acceptance stage.
+func TestLegacyAcceptanceStageIsUnknown(t *testing.T) {
+	engine := &Engine{Repo: t.TempDir()}
+	state := State{Stage: "acceptance", Workflow: DefaultWorkflowConfig()}
+
+	if done, err := engine.artifactDone(state); err == nil || done || !strings.Contains(err.Error(), `未知阶段 "acceptance"`) {
+		t.Fatalf("artifactDone acceptance = done %v err %v, want unknown stage", done, err)
+	}
+	if err := engine.advance(&state); err == nil || !strings.Contains(err.Error(), `未知阶段 "acceptance"`) {
+		t.Fatalf("advance acceptance err = %v, want unknown stage", err)
+	}
+}
+
 // TestResumeSkipsExistingExecutionArtifact verifies resume advances when current artifact already exists.
 func TestResumeSkipsExistingExecutionArtifact(t *testing.T) {
 	repo := gitRepo(t)
@@ -1795,7 +1805,7 @@ func TestResumeMarksInterruptedStageCompletedWhenArtifactExists(t *testing.T) {
 func TestPromptForStageReadsExactPromptFile(t *testing.T) {
 	repo := t.TempDir()
 	want := "custom prompt\nwith exact bytes\n"
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    writing: |\n      custom prompt\n      with exact bytes\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    execution: |\n      custom prompt\n      with exact bytes\n")
 	got, err := promptForStage(repo, State{Stage: "execution"})
 	if err != nil {
 		t.Fatal(err)
@@ -1812,12 +1822,12 @@ func TestPromptForStageReadsREADMETemplateNames(t *testing.T) {
 		stage string
 		key   string
 	}{
-		{stage: "execution", key: "writing"},
+		{stage: "execution", key: "execution"},
 		{stage: "review_1", key: "review"},
-		{stage: "fix_1", key: "writing"},
+		{stage: "fix_1", key: "fix"},
 		{stage: "archive", key: "archive"},
 	}
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    writing: \"writing {{.Stage}}\\n\"\n    review: \"review {{.Stage}}\\n\"\n    archive: \"archive {{.Stage}}\\n\"\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    execution: \"execution {{.Stage}}\\n\"\n    review: \"review {{.Stage}}\\n\"\n    fix: \"fix {{.Stage}}\\n\"\n    archive: \"archive {{.Stage}}\\n\"\n")
 	for _, tc := range cases {
 		got, err := promptForStage(repo, State{Stage: tc.stage})
 		if err != nil {
@@ -1835,8 +1845,8 @@ func TestPromptForStagePrefersLocalPrompt(t *testing.T) {
 	repo := t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	mustWritePrompt(t, filepath.Join(home, "wo.yaml"), "wo:\n  prompts:\n    writing: \"global\\n\"\n")
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    writing: \"local\\n\"\n")
+	mustWritePrompt(t, filepath.Join(home, "wo.yaml"), "wo:\n  prompts:\n    execution: \"global\\n\"\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    execution: \"local\\n\"\n")
 	mustWritePrompt(t, filepath.Join(repo, ".wo", "cmd", "wo-start.md"), "legacy\n")
 	got, err := promptForStage(repo, State{Stage: "execution"})
 	if err != nil {
@@ -1852,7 +1862,7 @@ func TestPromptForStageFallsBackToGlobalPrompt(t *testing.T) {
 	repo := t.TempDir()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	mustWritePrompt(t, filepath.Join(home, "wo.yaml"), "wo:\n  prompts:\n    writing: \"global\\n\"\n")
+	mustWritePrompt(t, filepath.Join(home, "wo.yaml"), "wo:\n  prompts:\n    execution: \"global\\n\"\n")
 	got, err := promptForStage(repo, State{Stage: "execution"})
 	if err != nil {
 		t.Fatal(err)
@@ -2124,7 +2134,7 @@ func TestBundledFixPromptRequiresRootCauseAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"自动升级", "根因分析", "禁止只按错误文本打补丁", "上一轮为什么没解决"} {
+	for _, want := range []string{"升级轮次", "根因分析", "禁止只按错误文本打补丁", "上一轮未解决原因"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("fix prompt missing %q:\n%s", want, got)
 		}
@@ -2208,12 +2218,12 @@ func TestBundledFixPromptFocusesCurrentReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"review-2.json", "只修复当前 review/QA artifact 中列出的 findings", "普通修复轮次不需要读取所有旧 review/fix artifact"} {
+	for _, want := range []string{"review-2.json", "fix-2-summary.md", "只修复当前 review/QA artifact 中列出的 findings"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("fix prompt missing %q:\n%s", want, got)
 		}
 	}
-	for _, reject := range []string{"review-1.json", "fix-1-summary.md", "自动升级", "上一轮为什么没解决"} {
+	for _, reject := range []string{"review-1.json", "fix-1-summary.md", "自动升级", "普通修复轮次不需要读取所有旧 review/fix artifact"} {
 		if strings.Contains(got, reject) {
 			t.Fatalf("normal fix prompt included escalation/history %q:\n%s", reject, got)
 		}
@@ -2367,19 +2377,19 @@ func mustPrompts(t *testing.T, repo string) {
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `wo:
   prompts:
     planning: planning
-    acceptance: "{{.Stage}}"
-    writing: "{{.Stage}}"
+    execution: "{{.Stage}}"
     review: "{{.Stage}}"
     qa: "{{.Stage}}"
+    fix: "{{.Stage}}"
     archive: "{{.Stage}}"
 `)
 	mustWritePrompt(t, filepath.Join(home, "wo.yaml"), `wo:
   prompts:
     planning: planning
-    acceptance: "{{.Stage}}"
-    writing: "{{.Stage}}"
+    execution: "{{.Stage}}"
     review: "{{.Stage}}"
     qa: "{{.Stage}}"
+    fix: "{{.Stage}}"
     archive: "{{.Stage}}"
 `)
 }

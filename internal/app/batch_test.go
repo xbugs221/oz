@@ -28,8 +28,6 @@ func (r *batchRunner) Run(_ context.Context, repo, prompt, threadID string, _ St
 	r.stages = append(r.stages, stage)
 	r.changes = append(r.changes, state.ChangeName)
 	switch stage {
-	case "acceptance":
-		return "acceptance-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "acceptance.json"), []byte(acceptanceJSON()), 0o644)
 	case "execution":
 		task := filepath.Join(repo, "docs", "changes", state.ChangeName, "task.md")
 		return "executor-thread", os.WriteFile(task, []byte("- [x] task\n"), 0o644)
@@ -1576,8 +1574,6 @@ func (r *slowAppendRunner) Run(_ context.Context, repo, prompt, threadID string,
 	r.stages = append(r.stages, stage)
 	r.changes = append(r.changes, state.ChangeName)
 	switch stage {
-	case "acceptance":
-		return "acceptance-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "acceptance.json"), []byte(acceptanceJSON()), 0o644)
 	case "execution":
 		// Pause on first change to simulate running batch.
 		if state.ChangeName == "1-a" {

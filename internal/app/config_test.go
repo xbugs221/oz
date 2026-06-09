@@ -158,7 +158,7 @@ wo:
         model: review-model
         reasoning: high
         fast: false
-      writing:
+      fix:
         fast: true
       archive:
         tool: pi
@@ -272,7 +272,7 @@ func TestRequiredAgentToolsIgnoresPromptOnlyParallelMembers(t *testing.T) {
 	}
 }
 
-// TestLoadWorkflowConfigSeparatesExecutionAndFixStages verifies new stage keys override writing fallback.
+// TestLoadWorkflowConfigSeparatesExecutionAndFixStages verifies current stage keys configure runtime independently.
 func TestLoadWorkflowConfigSeparatesExecutionAndFixStages(t *testing.T) {
 	repo := t.TempDir()
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `
@@ -280,8 +280,6 @@ wo:
   workflow:
     max_review_iterations: 2
     stages:
-      writing:
-        model: legacy-model
       execution:
         model: execution-model
       fix:
@@ -347,6 +345,9 @@ func TestLoadWorkflowConfigRejectsInvalidInput(t *testing.T) {
 		{name: "bad parallel mode", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: swarm\n          members:\n            - name: 审核员\n              purpose: 审核\n"},
 		{name: "empty parallel member name", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: gate_input\n          members:\n            - name: ''\n              purpose: 审核\n"},
 		{name: "bad parallel member tool", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: gate_input\n          members:\n            - name: 审核员\n              purpose: 审核\n              tool: unknown\n"},
+		{name: "legacy acceptance stage", body: "wo:\n  workflow:\n    stages:\n      acceptance:\n        cli: codex\n"},
+		{name: "legacy writing stage", body: "wo:\n  workflow:\n    stages:\n      writing:\n        cli: codex\n"},
+		{name: "legacy writing prompt", body: "wo:\n  prompts:\n    writing: old\n"},
 		{name: "unknown field", body: "wo:\n  workflow:\n    surprise: true\n"},
 	}
 	for _, tc := range cases {

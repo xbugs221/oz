@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 go-dag subagent 正常退出但 artifact 字段类型错误时会 resume 原会话修正，且不依赖 Dagu。
+# 文件功能目的：验证 go-dag subagent 正常退出但 artifact 字段类型错误时会 resume 原会话修正。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-RESULT_DIR="$ROOT/test-results/4-clean-dagu/subagent-artifact-retry"
+RESULT_DIR="$ROOT/test-results/go-dag/subagent-artifact-retry"
 TMP="$(mktemp -d)"
 
 cleanup() {
@@ -29,14 +29,6 @@ note "build real wo binary"
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
-
-cat >"$FAKEBIN/dagu" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'dagu was called unexpectedly\n' >"${DAGU_CALLED_FILE:?}"
-exit 90
-SH
-chmod +x "$FAKEBIN/dagu"
 
 cat >"$FAKEBIN/codex" <<'SH'
 #!/usr/bin/env bash
@@ -239,7 +231,6 @@ cp -a "$PROJECT" "$PROJECT_READONLY"
 
 note "run default go-dag workflow and expect subagent artifact retry"
 set +e
-DAGU_CALLED_FILE="$TMP/dagu.called" \
 PI_PROMPT_LOG="$RESULT_DIR/pi-prompts.log" \
 PI_ATTEMPT_FILE="$TMP/pi-attempts" \
 WO_TEST_REPO="$PROJECT" \
@@ -252,7 +243,6 @@ set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/test.log"
 cat "$RESULT_DIR/run.err" >>"$RESULT_DIR/test.log"
 [[ "$run_code" -eq 0 ]] || fail "go-dag run should repair malformed subagent artifact instead of failing"
-test ! -e "$TMP/dagu.called" || fail "go-dag subagent retry must not call Dagu"
 
 attempts="$(cat "$TMP/pi-attempts")"
 [[ "$attempts" == "2" ]] || fail "expected exactly two pi subagent attempts, got $attempts"
@@ -281,7 +271,6 @@ note "contract passed: go-dag subagent artifact schema retry resumes the same se
 
 note "run go-dag workflow and expect read-only boundary failure before artifact retry"
 set +e
-DAGU_CALLED_FILE="$TMP/dagu-readonly.called" \
 PI_PROMPT_LOG="$RESULT_DIR/pi-readonly-prompts.log" \
 PI_ATTEMPT_FILE="$TMP/pi-readonly-attempts" \
 PI_MUTATE_FIRST_FILE="$PROJECT_READONLY/unexpected-source-change.txt" \
@@ -295,7 +284,6 @@ set -e
 cat "$RESULT_DIR/readonly-run.jsonl" >>"$RESULT_DIR/test.log"
 cat "$RESULT_DIR/readonly-run.err" >>"$RESULT_DIR/test.log"
 [[ "$readonly_code" -ne 0 ]] || fail "go-dag run should fail when subagent mutates the worktree"
-test ! -e "$TMP/dagu-readonly.called" || fail "read-only boundary failure must not call Dagu"
 readonly_attempts="$(cat "$TMP/pi-readonly-attempts")"
 [[ "$readonly_attempts" == "1" ]] || fail "read-only boundary must stop before artifact retry, got $readonly_attempts attempts"
 grep -q '只读边界' "$RESULT_DIR/readonly-run.jsonl" "$RESULT_DIR/readonly-run.err" || fail "failure output must mention read-only boundary"

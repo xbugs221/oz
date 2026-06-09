@@ -1,14 +1,12 @@
-// Package app keeps legacy Dagu helpers for historical run-node compatibility.
+// Package app contains node helpers used by the built-in Go DAG scheduler.
 package app
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -20,105 +18,6 @@ type nodeResult struct {
 	Group    string `json:"group,omitempty"`
 	Member   string `json:"member,omitempty"`
 	Artifact string `json:"artifact,omitempty"`
-}
-
-// StartDaguJSON creates a sealed run and delegates node scheduling to Dagu.
-func (e *Engine) StartDaguJSON(ctx context.Context, changeName string, stdout io.Writer) error {
-	daguPath, err := exec.LookPath("dagu")
-	if err != nil {
-		return fmt.Errorf("缺少 Dagu CLI：请安装 dagu 后再运行 --engine dagu")
-	}
-	state, err := e.createRun(changeName)
-	if err != nil {
-		return err
-	}
-	if err := writeRunnerState(stdout, state); err != nil {
-		return err
-	}
-	flushWriter(stdout)
-	workflowPath, err := e.writeRunDaguWorkflow(state)
-	if err != nil {
-		return err
-	}
-	if err := e.runDaguProcess(ctx, daguPath, workflowPath, state.RunID); err != nil {
-		latest, loadErr := loadState(e.Repo, state.RunID)
-		if loadErr != nil {
-			latest = state
-		}
-		latest = failedState(latest, err)
-		_ = saveState(e.Repo, latest)
-		_ = writeFailedRunnerState(stdout, latest, err)
-		return err
-	}
-	latest, err := loadState(e.Repo, state.RunID)
-	if err != nil {
-		return err
-	}
-	return writeRunnerState(stdout, latest)
-}
-
-// RunNode dispatches one Dagu node subcommand.
-func (e *Engine) RunNode(ctx context.Context, args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("用法：wo node run-subagent|fanin|run-stage|gate --run-id <run-id> --json")
-	}
-	if !hasFlag(args[1:], "--json") {
-		return fmt.Errorf("wo node 必须使用 --json")
-	}
-	runID, err := requireFlagValue(args[1:], "--run-id")
-	if err != nil {
-		return err
-	}
-	state, err := loadState(e.Repo, runID)
-	if err != nil {
-		return err
-	}
-	if !hasWorkflowConfig(state) {
-		return fmt.Errorf("run %s 缺少 workflow_config 快照", runID)
-	}
-	normalizeWorkflowConfig(&state.Workflow)
-	switch args[0] {
-	case "run-subagent":
-		return e.nodeRunSubagent(ctx, state, args[1:], stdout)
-	case "fanin":
-		return e.nodeFanin(state, args[1:], stdout)
-	case "run-stage":
-		return e.nodeRunStage(ctx, state, args[1:], stdout)
-	case "gate":
-		return e.nodeGate(state, args[1:], stdout)
-	default:
-		return fmt.Errorf("未知 wo node 子命令 %q", args[0])
-	}
-}
-
-// writeRunDaguWorkflow stores executable YAML under the run directory.
-func (e *Engine) writeRunDaguWorkflow(state State) (string, error) {
-	spec := BuildWorkflowSpec(state.ChangeName, state.Workflow)
-	path := filepath.Join(runDir(e.Repo, state.RunID), "dagu", "workflow.yaml")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(path, []byte(ExportRunWorkflowDaguYAML(spec, state.RunID)), 0o644); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-// runDaguProcess invokes the external Dagu process and persists its logs.
-func (e *Engine) runDaguProcess(ctx context.Context, daguPath, workflowPath, runID string) error {
-	cmd := commandContext(ctx, daguPath, "start", workflowPath)
-	cmd.Dir = e.Repo
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	err := cmd.Run()
-	logPath := filepath.Join(runDir(e.Repo, runID), "dagu", "dagu.log")
-	_ = os.MkdirAll(filepath.Dir(logPath), 0o755)
-	_ = os.WriteFile(logPath, out.Bytes(), 0o644)
-	if err != nil {
-		return fmt.Errorf("Dagu 执行失败：%w\n%s", err, limitAgentDiagnostics(out.String()))
-	}
-	return nil
 }
 
 // nodeRunStage runs one activated main stage and validates its artifact.
@@ -184,7 +83,7 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage})
 }
 
-// nodeStageDone checks stage-local output without consuming Dagu gate decisions.
+// nodeStageDone checks stage-local output before advancing scheduler gates.
 func (e *Engine) nodeStageDone(state State) (bool, error) {
 	base := runDir(e.Repo, state.RunID)
 	switch {

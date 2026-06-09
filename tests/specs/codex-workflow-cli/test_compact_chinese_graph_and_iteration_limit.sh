@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-RESULT_DIR="$ROOT/test-results/4-clean-dagu/compact-chinese-graph"
+RESULT_DIR="$ROOT/test-results/go-dag/compact-chinese-graph"
 TMP="$(mktemp -d)"
 
 cleanup() {

@@ -227,12 +227,12 @@
 - **且** 仓库根目录不存在 `wo.yaml` 或 `wo.yml`
 - **则** 系统创建默认 `wo.yaml`
 - **且** 默认配置包含 `max_review_iterations: 5`
-- **且** 默认配置包含 `workflow.stages.planning/execution/review/fix/archive`
+- **且** 默认配置包含 `workflow.stages.planning/execution/review/qa/fix/archive`
 - **且** 每类会话配置包含 `cli` 和 `reasoning`
-- **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
+- **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`qa.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
 - **且** 默认配置写入 `validation.max_attempts_per_stage: 3`
 - **且** 默认配置写入空的 `validation.commands: []`
-- **且** 默认配置写入 `prompts.planning/execution/review/fix/archive`
+- **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
 - **且** 不创建 `.wo/`
 - **且** 后续规划或 sealed run 能读取其中的 `wo.workflow` 配置
 
@@ -290,7 +290,7 @@
 
 - **当** 用户运行 `wo config`
 - **则** 生成的 `wo.yaml` 包含 `wo.workflow.parallel`
-- **且** `enabled` 默认为 `false`
+- **且** `enabled` 默认为 `true`
 - **且** 包含 `planning_context`、`implementation_context`、`review`、`qa` 四类 groups
 - **且** 默认成员名称包含“需求分析员”“代码库侦察员”“外部资料研究员”“目标核对审核员”“CLI/API 测试员”等直观职责名
 - **且** 不把 Sisyphus、Prometheus、Metis、Momus、Oracle 或 Explore 等内部 agent 名称作为主要用户可见成员名称
@@ -311,8 +311,8 @@
 - **且** 包含 `main_stage`、`subagent`、`fanin` 和 `gate` 节点
 - **当** 用户运行 `wo graph --change demo --format mermaid`
 - **则** 输出必须显示 fan-out/fan-in、review clean/needs_fix、QA clean/needs_fix 和 archive gate
-- **且** `dagu` 不再是可选 graph format
-- **且** step command 只能调用 `wo node run-subagent`、`wo node fanin`、`wo node run-stage` 或 `wo node gate`
+- **且** 可选 graph format 只有 `json` 和 `mermaid`
+- **且** 图只描述 workflow spec，不暴露内部调度命令
 - **且** 不得直接拼接 `codex exec`、`pi --mode json` 或 `opencode run`
 - **且** 导出图时不得创建 run、batch 或 agent session
 
@@ -320,13 +320,13 @@
 
 - **给定** 当前仓库存在 active change 和合法 `acceptance.json`
 - **当** 用户运行 `wo run --change demo --json`
-- **则** 默认 engine 必须是内嵌 `go-dag`，不依赖外部 Dagu CLI
-- **且** `wo run --change demo --engine dagu --json` 必须被拒绝，并引导用户使用 `go-dag`
-- **且** `workflow.engine: legacy` 或 `workflow.engine: dagu` 必须在配置读取阶段被拒绝
+- **则** 默认 engine 必须是内嵌 `go-dag`
+- **且** `wo run --change demo --engine unknown --json` 必须被拒绝，并引导用户使用 `go-dag`
+- **且** `workflow.engine` 只允许为空或 `go-dag`
 
 #### 场景：go-dag subagent artifact schema retry
 
-- **给定** go-dag 执行 `wo node run-subagent --run-id <run-id> --group before_review --member <name> --stage review_1 --iteration 1 --json`
+- **给定** go-dag 在进程内调度 `before_review` 的 subagent 节点，参数包含 run id、member name、stage 和 iteration
 - **当** subagent 正常退出但写出的 member artifact 中 `evidence` 为对象数组而非字符串数组
 - **则** 系统必须 resume 同一 subagent session 要求只重写 `SUBAGENT_OUTPUT`
 - **且** 修正 prompt 必须包含字段名、期望类型和 artifact 路径
@@ -334,9 +334,9 @@
 - **且** 修正通过后 fan-in 才能继续读取该成员产物
 - **则** `wo` 必须渲染只读 subagent prompt，包含 `SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE` 和 `SUBAGENT_OUTPUT`
 - **且** subagent 必须写出单成员 JSON artifact，不能修改源码或 worktree
-- **当** go-dag 执行 `wo node fanin`
+- **当** go-dag 在进程内执行 fan-in 节点
 - **则** `wo` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
-- **当** go-dag 执行 `wo node gate`
+- **当** go-dag 在进程内执行 gate 节点
 - **则** review/QA clean 不得忽略 gate_input subagent 的 blocker/major finding 或成员失败
 - **且** clean review/QA 必须跳过未激活 fix 分支，needs_fix 必须激活下一轮 fix/review/QA 分支
 
@@ -415,7 +415,7 @@
 
 ### 需求：阶段级 reasoning 和 fast mode
 
-系统必须允许用户配置 planning、execution、review、fix、archive 五类会话的 reasoning depth；旧 writing 配置作为 execution 和 fix 的兼容回退。
+系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 reasoning depth；未知阶段键必须在配置读取阶段被拒绝。
 
 #### 场景：传递 reasoning depth
 
@@ -434,7 +434,7 @@
 
 ### 需求：阶段级 agent tool 和模型
 
-系统必须允许用户配置 planning、execution、review、fix、archive 五类会话的 agent CLI 和模型，且未配置时默认使用 Codex。旧 writing 配置作为 execution 和 fix 的兼容回退。内置 agent tool 包含 `codex`、`opencode` 和 `pi`，不支持把 `pi-ai` 作为 `pi` 的别名。
+系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 agent CLI 和模型，且未配置时默认使用 Codex。未知阶段键必须在配置读取阶段被拒绝。内置 agent tool 包含 `codex`、`opencode` 和 `pi`，不支持把 `pi-ai` 作为 `pi` 的别名。
 
 #### 场景：配置工具和模型
 
@@ -556,7 +556,7 @@
 
 ### 需求：命名 prompt 模板
 
-系统必须从 YAML 的 `wo.prompts.planning/execution/review/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `.wo/cmd` 或 `~/.wo/cmd`。旧 `wo.prompts.writing` 仅作为 execution 和 fix 的兼容回退。
+系统必须从 YAML 的 `wo.prompts.planning/execution/review/qa/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `.wo/cmd` 或 `~/.wo/cmd`。未知 prompt 键必须在配置读取阶段被拒绝。
 
 #### 场景：review prompt 只默认暴露必要历史
 
@@ -632,22 +632,23 @@
 #### 场景：sealed run 快照模板
 
 - **当** sealed run 开始
-- **则** 系统将 planning、execution、review、fix、archive 的有效 prompt 快照到用户状态目录中的 `runs/<run-id>/prompt-snapshot.yaml`
-- **且** `prompt-snapshot.yaml` 必须包含 `prompts.planning`、`prompts.execution`、`prompts.review`、`prompts.fix` 和 `prompts.archive`
+- **则** 系统将 planning、execution、review、qa、fix、archive 的有效 prompt 快照到用户状态目录中的 `runs/<run-id>/prompt-snapshot.yaml`
+- **且** `prompt-snapshot.yaml` 必须包含 `prompts.planning`、`prompts.execution`、`prompts.review`、`prompts.qa`、`prompts.fix` 和 `prompts.archive`
 - **且** 新 run 不创建 `runs/<run-id>/prompts/` 目录
 - **当** 用户恢复该 run
 - **则** 系统优先使用 `prompt-snapshot.yaml` 中的 run 快照
 - **且** 不重新读取当前 `wo.yaml`、`~/wo.yaml`、`.wo/cmd` 或 `~/.wo/cmd`
-- **且** 当 `prompt-snapshot.yaml` 缺失时，系统仍兼容历史 run 的 legacy `prompts/*.md` 快照
-- **且** 当 YAML 快照和 legacy 快照都缺失时，系统必须报错而不是回退当前配置
+- **且** 当 `prompt-snapshot.yaml` 缺失时，系统必须报错而不是回退当前配置或历史 prompt 文件
 
-#### 场景：历史 sealed run 写作阶段快照
+#### 场景：历史 sealed run 旧写作阶段快照失败关闭
 
 - **给定** `prompt-snapshot.yaml` 中存在 `prompts.writing`
 - **当** 系统渲染 `execution` 阶段 prompt
-- **则** 必须使用 `prompts.writing`
+- **则** 必须报错提示缺少当前 `prompts.execution` 快照
+- **当** 系统渲染任意 `qa_N` 阶段 prompt
+- **则** 必须报错提示缺少当前 `prompts.qa` 快照
 - **当** 系统渲染任意 `fix_N` 阶段 prompt
-- **则** 也必须使用同一个 `prompts.writing`
+- **则** 必须报错提示缺少当前 `prompts.fix` 快照
 
 ### 需求：严格 review artifact
 
@@ -2044,12 +2045,11 @@
 
 ### 需求：默认纯 Go DAG engine
 
-系统必须把默认 `wo run --change <change> --json` 执行路径设为内嵌纯 Go DAG engine。缺少或失败的 `dagu` CLI 不得影响默认运行。
+系统必须把默认 `wo run --change <change> --json` 执行路径设为内嵌纯 Go DAG engine。
 
-#### 场景：默认 run 不依赖 Dagu CLI
+#### 场景：默认 run 使用 go-dag
 
 - **当** 用户在真实 active change 上运行 `wo run --change <change> --json`
-- **且** PATH 中的 `dagu` CLI 不可用或会失败
 - **则** 默认运行必须成功推进 workflow
 - **且** run state 必须记录 `engine: go-dag`
 - **且** 默认 workflow 配置必须启用 `parallel.enabled: true`
@@ -2070,7 +2070,7 @@
 - **当** 用户运行 `wo graph --change <change> --format mermaid`
 - **则** Mermaid 输出必须包含 planning context、implementation context、review、QA 的 subagent 节点和 fan-in 节点
 - **且** 图中必须包含 archive gate
-- **且** 默认图不得要求 Dagu CLI
+- **且** 默认图不得要求任何外部 workflow scheduler
 
 #### 场景：默认 go-dag status 保持 JSON contract 兼容
 

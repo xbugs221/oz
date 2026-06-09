@@ -25,13 +25,6 @@
 
 - 第 2 轮及之后必须先验证上一轮 findings 是否已解决，再重新审核完整 diff
 - 作为一个评审专家，提出问题，并分析根因，如有必要，应先行探索并提供证据，但不要修改源码
-{{else}}
-续轮要求：
-
-- 复用当前角色会话：`{{.RoleSessionKey}}`
-- 先验证上一轮 findings 是否已解决，再重新审核完整 diff
-- 作为一个评审专家，提出问题，并分析根因，如有必要，应先行探索并提供证据，但不要修改源码
-{{end}}
 {{if .HasParallelReview}}
 - 如 `{{.ParallelReviewPath}}` 已存在，必须把其中多视角 findings/evidence 汇总进最终 `{{.ReviewPath}}`。
 - 如尚不存在该 artifact，先按 `workflow_config.parallel.groups.review` 的职责并行审核，并写入 `{{.ParallelReviewPath}}`。
@@ -73,7 +66,6 @@ Fix summary: `{{.LatestPreviousFixSummaryPath}}`
 {{.ReviewPath}}
 ```
 
-{{if .IsFirstRoleTurn}}
 JSON schema：
 
 ```json
@@ -159,5 +151,18 @@ JSON schema：
 
 如果发现任何字段缺失或格式问题，请先修复后重写；不要解释原因，不要拆分输出。
 {{else}}
-如果发现任何字段缺失或格式问题，请先修复后重写；不要解释原因，不要拆分输出。
+续轮要求：
+
+- 复用当前角色会话：`{{.RoleSessionKey}}`
+- 读取本轮目标：`{{.ReviewPath}}`
+{{if .HasPreviousReview}}
+- 核对上一轮审核：`{{.LatestPreviousReviewPath}}`
+{{end}}
+{{if .HasPreviousFixSummary}}
+- 核对上一轮修复摘要：`{{.LatestPreviousFixSummaryPath}}`
+{{end}}
+{{if .HasParallelReview}}
+- 汇总本轮并行审核输入：`{{.ParallelReviewPath}}`
+{{end}}
+- 只输出一个 JSON 对象，schema 与首轮 review artifact 相同；发现字段缺失或格式问题时直接重写 `{{.ReviewPath}}`。
 {{end}}

@@ -106,7 +106,7 @@ type goDAGNodeResult struct {
 	err    error
 }
 
-// runGoDAGNode executes one graph node through the same business methods used by wo node.
+// runGoDAGNode executes one graph node by directly invoking the embedded Go helpers.
 func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNode) error {
 	state, err := loadState(e.Repo, runID)
 	if err != nil {

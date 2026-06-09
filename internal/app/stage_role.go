@@ -16,12 +16,10 @@ type stageRole struct {
 	Iterated   bool
 	OptionsKey string
 	Default    StageOptions
-	Legacy     bool
 }
 
 var workflowRoles = []stageRole{
 	{Name: "planning", PromptKey: "planning", PromptName: "wo-discuss", Session: "planner", Label: "规", OptionsKey: "planning", Default: StageOptions{Tool: "codex", Reasoning: "xhigh", Fast: true}},
-	{Name: "acceptance", PromptKey: "acceptance", PromptName: "wo-acceptance", Session: "acceptance", Label: "验", OptionsKey: "acceptance", Default: StageOptions{Tool: "codex", Reasoning: "high", Fast: false}, Legacy: true},
 	{Name: "execution", PromptKey: "execution", PromptName: "wo-start", Session: "executor", Label: "写", OptionsKey: "execution", Default: StageOptions{Tool: "codex", Reasoning: "low", Fast: false}},
 	{Name: "review", PromptKey: "review", PromptName: "wo-review", Session: "reviewer", Label: "审", Iterated: true, OptionsKey: "review", Default: StageOptions{Tool: "codex", Reasoning: "high", Fast: false}},
 	{Name: "qa", PromptKey: "qa", PromptName: "wo-qa", Session: "qa", Label: "测", Iterated: true, OptionsKey: "qa", Default: StageOptions{Tool: "codex", Reasoning: "high", Fast: false}},
@@ -63,28 +61,19 @@ func roleByPromptName(name string) (stageRole, bool) {
 func rolePromptKeys() []string {
 	keys := make([]string, 0, len(workflowRoles))
 	for _, role := range workflowRoles {
-		if role.Legacy {
-			continue
-		}
 		keys = append(keys, role.PromptKey)
 	}
 	return keys
 }
 
 func roleStageKinds() []string {
-	kinds := make([]string, 0, len(workflowRoles)+1)
+	kinds := make([]string, 0, len(workflowRoles))
 	for _, role := range workflowRoles {
 		kinds = append(kinds, role.OptionsKey)
 	}
-	return append(kinds, "writing")
+	return kinds
 }
 
 func statusRoles() []stageRole {
-	roles := make([]stageRole, 0, len(workflowRoles))
-	for _, role := range workflowRoles {
-		if !role.Legacy {
-			roles = append(roles, role)
-		}
-	}
-	return roles
+	return append([]stageRole(nil), workflowRoles...)
 }

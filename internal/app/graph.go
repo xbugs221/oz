@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // WorkflowSpec is the stable graph representation behind every graph exporter.
@@ -59,18 +57,6 @@ type WorkflowGate struct {
 // WorkflowDisplay carries human-facing graph metadata.
 type WorkflowDisplay struct {
 	Title string `json:"title" yaml:"title"`
-}
-
-type daguWorkflow struct {
-	Name  string     `yaml:"name"`
-	Steps []daguStep `yaml:"steps"`
-}
-
-type daguStep struct {
-	Name        string   `yaml:"name"`
-	Command     string   `yaml:"command"`
-	Depends     []string `yaml:"depends,omitempty"`
-	Description string   `yaml:"description,omitempty"`
 }
 
 // runGraph loads effective workflow config and writes one graph representation.
@@ -156,34 +142,6 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 	}
 	spec.addEdge(archiveGate, "archive", "")
 	return spec
-}
-
-// ExportWorkflowDaguYAML renders Dagu YAML that calls stable wo node subcommands.
-func ExportWorkflowDaguYAML(spec WorkflowSpec) string {
-	return exportWorkflowDaguYAML(spec, "")
-}
-
-// ExportRunWorkflowDaguYAML renders executable run-local Dagu YAML.
-func ExportRunWorkflowDaguYAML(spec WorkflowSpec, runID string) string {
-	return exportWorkflowDaguYAML(spec, runID)
-}
-
-func exportWorkflowDaguYAML(spec WorkflowSpec, runID string) string {
-	workflow := daguWorkflow{Name: "wo-" + slug(spec.ChangeName)}
-	for _, node := range spec.Nodes {
-		step := daguStep{Name: node.ID, Command: nodeCommand(spec.ChangeName, runID, node), Description: node.Name}
-		for _, edge := range spec.Edges {
-			if edge.To == node.ID {
-				step.Depends = append(step.Depends, edge.From)
-			}
-		}
-		workflow.Steps = append(workflow.Steps, step)
-	}
-	data, err := yaml.Marshal(workflow)
-	if err != nil {
-		return ""
-	}
-	return string(data)
 }
 
 // buildCompactMermaid renders a compact Chinese state-machine graph for human review.
@@ -280,37 +238,6 @@ func (spec *WorkflowSpec) addNode(node WorkflowNode) {
 
 func (spec *WorkflowSpec) addEdge(from, to, label string) {
 	spec.Edges = append(spec.Edges, WorkflowEdge{From: from, To: to, Label: label})
-}
-
-func nodeCommand(changeName, runID string, node WorkflowNode) string {
-	target := fmt.Sprintf("--change %s", nodeArg(changeName))
-	if runID != "" {
-		target = fmt.Sprintf("--run-id %s", nodeArg(runID))
-	}
-	switch node.Type {
-	case "subagent":
-		return fmt.Sprintf("wo node run-subagent %s --group %s --member %s --stage %s%s --json", target, nodeArg(node.Group), nodeArg(node.Member), nodeArg(node.Stage), iterationFlag(node.Iteration))
-	case "fanin":
-		return fmt.Sprintf("wo node fanin %s --group %s --stage %s%s --json", target, nodeArg(node.Group), nodeArg(node.Stage), iterationFlag(node.Iteration))
-	case "gate":
-		return fmt.Sprintf("wo node gate %s --stage %s%s --json", target, nodeArg(node.Stage), iterationFlag(node.Iteration))
-	default:
-		return fmt.Sprintf("wo node run-stage %s --stage %s%s --json", target, nodeArg(node.Stage), iterationFlag(node.Iteration))
-	}
-}
-
-func nodeArg(value string) string {
-	if regexp.MustCompile(`^[A-Za-z0-9_./:-]+$`).MatchString(value) {
-		return value
-	}
-	return shellQuote(value)
-}
-
-func iterationFlag(iteration int) string {
-	if iteration <= 0 {
-		return ""
-	}
-	return fmt.Sprintf(" --iteration %d", iteration)
 }
 
 func configGroupName(visualGroup string) string {

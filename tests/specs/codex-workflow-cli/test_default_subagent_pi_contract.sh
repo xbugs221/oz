@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-RESULT_DIR="$ROOT/test-results/4-clean-dagu/default-subagent-pi"
+RESULT_DIR="$ROOT/test-results/go-dag/default-subagent-pi"
 TMP="$(mktemp -d)"
 
 cleanup() {

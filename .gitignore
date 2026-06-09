@@ -1,5 +1,3 @@
-/.wo/runs
-/.ccflow
-/wo.yaml
-/test-results
-/wo
+wo.yaml
+test-results
+wo

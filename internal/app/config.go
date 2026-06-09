@@ -206,18 +206,10 @@ func mergeWorkflowConfigFile(config *WorkflowConfig, path string) error {
 			next.Prompts = map[string]string{}
 		}
 		for key, body := range file.MC.Prompts {
-			if !slices.Contains(stageKinds, key) {
+			if !slices.Contains(rolePromptKeys(), key) {
 				return fmt.Errorf("%s 无效：未知 prompt %q", filepath.Base(path), key)
 			}
 			next.Prompts[key] = body
-		}
-		if writing := file.MC.Prompts["writing"]; writing != "" {
-			if file.MC.Prompts["execution"] == "" {
-				next.Prompts["execution"] = writing
-			}
-			if file.MC.Prompts["fix"] == "" {
-				next.Prompts["fix"] = writing
-			}
 		}
 	}
 	normalizePromptConfig(next.Prompts)
@@ -288,9 +280,6 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		if option, ok := baseConfig.Stages["execution"]; ok {
 			byKind["execution"] = option
 		}
-		if option, ok := baseConfig.Stages["acceptance"]; ok {
-			byKind["acceptance"] = option
-		}
 		if option, ok := baseConfig.Stages["fix_1"]; ok {
 			byKind["fix"] = option
 		}
@@ -334,17 +323,6 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 			}
 		}
 		byKind[kind] = base
-	}
-	if input.Stages != nil {
-		writing, hasWriting := byKind["writing"]
-		_, explicitExecution := input.Stages["execution"]
-		_, explicitFix := input.Stages["fix"]
-		if hasWriting && input.Stages["writing"].hasValues() && !explicitExecution {
-			byKind["execution"] = writing
-		}
-		if hasWriting && input.Stages["writing"].hasValues() && !explicitFix {
-			byKind["fix"] = writing
-		}
 	}
 	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
 		"planning":  byKind["planning"],
@@ -530,14 +508,12 @@ func mergeStageOptions(base *StageOptions, override stageOptionsInput) error {
 func clonePrompts(prompts map[string]string) map[string]string {
 	if prompts == nil {
 		cloned := defaultPromptSet()
-		normalizePromptConfig(cloned)
 		return cloned
 	}
 	cloned := map[string]string{}
 	for key, body := range prompts {
 		cloned[key] = body
 	}
-	normalizePromptConfig(cloned)
 	return cloned
 }
 
@@ -593,15 +569,6 @@ func defaultParallelConfig() ParallelConfig {
 }
 
 func normalizePromptConfig(prompts map[string]string) {
-	if prompts == nil || prompts["writing"] == "" {
-		return
-	}
-	if prompts["execution"] == "" {
-		prompts["execution"] = prompts["writing"]
-	}
-	if prompts["fix"] == "" {
-		prompts["fix"] = prompts["writing"]
-	}
 }
 
 func defaultStageOptionsByKind() map[string]StageOptions {
@@ -609,7 +576,6 @@ func defaultStageOptionsByKind() map[string]StageOptions {
 	for _, role := range workflowRoles {
 		options[role.OptionsKey] = role.Default
 	}
-	options["writing"] = options["execution"]
 	return options
 }
 

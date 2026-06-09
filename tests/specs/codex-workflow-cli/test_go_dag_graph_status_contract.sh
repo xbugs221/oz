@@ -74,10 +74,6 @@ do
     fail "Mermaid graph 不应暴露旧内部标签 $forbidden"
   fi
 done
-if grep -qi "dagu" "$tmp/graph.mmd"; then
-  fail "默认 Mermaid graph 不应要求 Dagu CLI"
-fi
-
 note "用 run-local state 验证 status 能展示 engine 和并行成员明细"
 test_file="$repo_root/internal/app/go_dag_status_contract_test.go"
 trap 'rm -rf "$tmp"; rm -f "$test_file"' EXIT
@@ -130,9 +126,6 @@ func TestGoDAGHumanStatusContract(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("status output missing %q:\n%s", want, text)
 		}
-	}
-	if strings.Contains(text, "dagu") {
-		t.Fatalf("go-dag status should not expose Dagu CLI details:\n%s", text)
 	}
 	_ = os.RemoveAll(repo)
 }

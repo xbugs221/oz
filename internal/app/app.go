@@ -53,17 +53,6 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 				return err
 			}
 			return runGraph(repo, args[1:], stdout)
-		case "node":
-			repo, err := GitRoot(".")
-			if err != nil {
-				return err
-			}
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-			defer stop()
-			registry := NewAgentRegistry()
-			engine := NewEngine(repo, registry)
-			engine.Output = nil
-			return engine.RunNode(ctx, args[1:], stdout)
 		}
 	}
 	repo, err := GitRoot(".")
@@ -276,7 +265,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			}
 			return engine.SubmitBatch(ctx, []Change{{Name: args[1]}})
 		default:
-			return fmt.Errorf("未知参数 %q", args[0])
+			return fmt.Errorf("未知命令 %q", args[0])
 		}
 	}
 

@@ -873,15 +873,6 @@ func findingKey(title string) string {
 func (e *Engine) artifactDone(state State) (bool, error) {
 	base := runDir(e.Repo, state.RunID)
 	switch {
-	case state.Stage == "acceptance":
-		_, err := readAcceptanceForState(e.Repo, state)
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		return true, nil
 	case state.Stage == "execution":
 		done, err := ChangeTasksDone(e.Repo, state.ChangeName)
 		if err != nil || !done {
@@ -939,12 +930,6 @@ func (e *Engine) artifactDone(state State) (bool, error) {
 func (e *Engine) advance(state *State) error {
 	ensureWorkflowConfig(state)
 	switch {
-	case state.Stage == "acceptance":
-		if _, err := readAcceptanceForState(e.Repo, *state); err != nil {
-			return newStageArtifactGateError(err)
-		}
-		clearStageValidationFailure(state)
-		state.Stage = "execution"
 	case state.Stage == "execution":
 		if err := ValidateParallelContextGate(runDir(e.Repo, state.RunID), state.Workflow); err != nil {
 			return newStageArtifactGateError(err)
@@ -1141,7 +1126,6 @@ func promptForName(config WorkflowConfig, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	normalizePromptConfig(config.Prompts)
 	body := config.Prompts[key]
 	if body == "" {
 		return "", fmt.Errorf("配置缺少 prompts.%s", key)
@@ -1179,7 +1163,6 @@ func runPromptTemplate(repo, runID, name string) (string, error) {
 		if err := yaml.Unmarshal(data, &snapshot); err != nil {
 			return "", fmt.Errorf("读取 prompt 快照 %s 失败: %w", snapshotPath, err)
 		}
-		normalizePromptConfig(snapshot.Prompts)
 		body := snapshot.Prompts[key]
 		if body == "" {
 			return "", fmt.Errorf("prompt 快照缺少 prompts.%s", key)
@@ -1189,14 +1172,7 @@ func runPromptTemplate(repo, runID, name string) (string, error) {
 	if !os.IsNotExist(err) {
 		return "", err
 	}
-	legacyData, legacyErr := os.ReadFile(filepath.Join(runDir(repo, runID), "prompts", name+".md"))
-	if legacyErr != nil {
-		if os.IsNotExist(legacyErr) {
-			return "", fmt.Errorf("run %s 缺少 prompt 快照 prompt-snapshot.yaml 或 legacy prompts/%s.md", runID, name)
-		}
-		return "", legacyErr
-	}
-	return string(legacyData), nil
+	return "", fmt.Errorf("run %s 缺少 prompt 快照 prompt-snapshot.yaml", runID)
 }
 
 // snapshotRunPrompts freezes sealed-run prompts so resume cannot drift.

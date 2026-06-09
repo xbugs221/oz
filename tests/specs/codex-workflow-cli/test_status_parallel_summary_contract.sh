@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo status 人类输出能展示 parallel/Dagu 并行成员摘要，并且 success 不能只由子会话记录推断。
+# 文件功能目的：验证 wo status 人类输出能展示 parallel 并行成员摘要，并且 success 不能只由子会话记录推断。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
