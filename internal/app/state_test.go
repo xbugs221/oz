@@ -127,6 +127,7 @@ func testRegistry(runner AgentRunner) *AgentRegistry {
 	wrapped := subagentAwareRunner{runner: runner}
 	registry.Register(fakeTool{name: "codex", runner: wrapped})
 	registry.Register(fakeTool{name: "opencode", runner: wrapped})
+	registry.Register(fakeTool{name: "pi", runner: wrapped})
 	return registry
 }
 
@@ -517,6 +518,7 @@ func TestGoDAGRunsReadySubagentsConcurrently(t *testing.T) {
 	registry := &AgentRegistry{}
 	registry.Register(fakeTool{name: "codex", runner: runner})
 	registry.Register(fakeTool{name: "opencode", runner: runner})
+	registry.Register(fakeTool{name: "pi", runner: runner})
 	engine := NewEngine(repo, registry)
 	if err := engine.Start(context.Background(), "demo"); err != nil {
 		t.Fatal(err)
@@ -639,7 +641,7 @@ func TestQAArtifactGateRerunsQAInsteadOfFailing(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    engine: legacy\n    max_review_iterations: 1\n    parallel:\n      enabled: false\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    engine: go-dag\n    max_review_iterations: 1\n    parallel:\n      enabled: false\n")
 	runner := &qaArtifactRepairRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -1868,7 +1870,7 @@ func TestPlanningPromptReadsDiscussTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "stage=planning max=30\n" {
+	if got != "stage=planning max=5\n" {
 		t.Fatalf("prompt = %q, want rendered wo-discuss prompt", got)
 	}
 	if options.Tool != "codex" || options.Reasoning != "xhigh" || !options.Fast {

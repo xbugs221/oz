@@ -61,7 +61,7 @@ docs/changes
 ```yaml
 wo:
   workflow:
-    max_review_iterations: 30
+    max_review_iterations: 5
     stages:
       planning:
         cli: codex

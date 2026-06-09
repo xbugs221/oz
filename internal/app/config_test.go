@@ -15,10 +15,10 @@ func TestLoadWorkflowConfigUsesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.MaxReviewIterations != 30 {
-		t.Fatalf("max iterations = %d, want 30", config.MaxReviewIterations)
+	if config.MaxReviewIterations != 5 {
+		t.Fatalf("max iterations = %d, want 5", config.MaxReviewIterations)
 	}
-	if _, err := config.StageOption("review_30"); err != nil {
+	if _, err := config.StageOption("review_5"); err != nil {
 		t.Fatal(err)
 	}
 	planning, err := config.StageOption("planning")
@@ -97,7 +97,7 @@ func TestInitWorkflowConfigWritesDefaultMCYAML(t *testing.T) {
 // TestDefaultWorkflowConfigMatchesUserDocs verifies audited defaults do not drift.
 func TestDefaultWorkflowConfigMatchesUserDocs(t *testing.T) {
 	defaults := []string{
-		"max_review_iterations: 30",
+		"max_review_iterations: 5",
 		"reasoning: xhigh",
 		"reasoning: high",
 		"max_attempts_per_stage: 3",

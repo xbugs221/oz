@@ -1,4 +1,4 @@
-// Package app exports read-only workflow graphs for Dagu, Mermaid, and tests.
+// Package app exports read-only workflow graphs for JSON, Mermaid, and tests.
 package app
 
 import (
@@ -77,11 +77,11 @@ type daguStep struct {
 func runGraph(repo string, args []string, stdout io.Writer) error {
 	changeName, err := requireFlagValue(args, "--change")
 	if err != nil {
-		return fmt.Errorf("用法：wo graph --change <change-name> --format json|mermaid|dagu")
+		return fmt.Errorf("用法：wo graph --change <change-name> --format json|mermaid")
 	}
 	format, err := requireFlagValue(args, "--format")
 	if err != nil {
-		return fmt.Errorf("用法：wo graph --change <change-name> --format json|mermaid|dagu")
+		return fmt.Errorf("用法：wo graph --change <change-name> --format json|mermaid")
 	}
 	workflow, err := LoadWorkflowConfig(repo)
 	if err != nil {
@@ -94,13 +94,10 @@ func runGraph(repo string, args []string, stdout io.Writer) error {
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(spec)
 	case "mermaid":
-		_, err := fmt.Fprint(stdout, ExportWorkflowMermaid(spec))
-		return err
-	case "dagu":
-		_, err := fmt.Fprint(stdout, ExportWorkflowDaguYAML(spec))
+		_, err := fmt.Fprint(stdout, buildCompactMermaid(changeName, workflow))
 		return err
 	default:
-		return fmt.Errorf("未知 graph format %q，可选 json、mermaid、dagu", format)
+		return fmt.Errorf("未知 graph format %q，可选 json、mermaid", format)
 	}
 }
 
@@ -189,20 +186,52 @@ func exportWorkflowDaguYAML(spec WorkflowSpec, runID string) string {
 	return string(data)
 }
 
-// ExportWorkflowMermaid renders a self-contained user-facing DAG.
-func ExportWorkflowMermaid(spec WorkflowSpec) string {
+// buildCompactMermaid renders a compact Chinese state-machine graph for human review.
+func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 	var out strings.Builder
 	out.WriteString("flowchart TD\n")
-	for _, node := range spec.Nodes {
-		fmt.Fprintf(&out, "  %s[%q]\n", mermaidID(node.ID), node.Name)
-	}
-	for _, edge := range spec.Edges {
-		label := ""
-		if edge.Label != "" {
-			label = "|" + edge.Label + "|"
+
+	if group, ok := workflow.Parallel.Groups["planning_context"]; ok && workflow.Parallel.Enabled {
+		for i, member := range group.Members {
+			id := fmt.Sprintf("planning_m%d", i)
+			fmt.Fprintf(&out, "  %s[%s]\n", mermaidID(id), member.Name)
 		}
-		fmt.Fprintf(&out, "  %s -->%s %s\n", mermaidID(edge.From), label, mermaidID(edge.To))
+		out.WriteString("  planning_summary[规划上下文]\n")
+		for i := range group.Members {
+			id := fmt.Sprintf("planning_m%d", i)
+			fmt.Fprintf(&out, "  %s --> planning_summary\n", mermaidID(id))
+		}
 	}
+
+	out.WriteString("  execution[执行]\n")
+	if workflow.Parallel.Enabled && len(workflow.Parallel.Groups["planning_context"].Members) > 0 {
+		out.WriteString("  planning_summary --> execution\n")
+	}
+
+	if group, ok := workflow.Parallel.Groups["implementation_context"]; ok && workflow.Parallel.Enabled {
+		for i, member := range group.Members {
+			id := fmt.Sprintf("impl_m%d", i)
+			fmt.Fprintf(&out, "  %s[%s]\n", mermaidID(id), member.Name)
+		}
+		out.WriteString("  impl_summary[执行上下文]\n")
+		for i := range group.Members {
+			id := fmt.Sprintf("impl_m%d", i)
+			fmt.Fprintf(&out, "  %s --> impl_summary\n", mermaidID(id))
+		}
+		out.WriteString("  impl_summary --> execution\n")
+	}
+
+	out.WriteString("  review[审核]\n")
+	out.WriteString("  qa[测试]\n")
+	out.WriteString("  fix[修复]\n")
+	out.WriteString("  archive[归档]\n")
+
+	out.WriteString("  execution --> review\n")
+	out.WriteString("  review --> qa\n")
+	out.WriteString("  qa --> fix\n")
+	fmt.Fprintf(&out, "  fix -->|最多%d轮| review\n", workflow.MaxReviewIterations)
+	out.WriteString("  qa --> archive\n")
+
 	return out.String()
 }
 

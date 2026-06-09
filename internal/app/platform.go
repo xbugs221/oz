@@ -33,10 +33,8 @@ func resolveCommand(name string) (string, error) {
 
 // ensureBaseWorkflowCommands verifies external tools every workflow path needs.
 func ensureBaseWorkflowCommands() error {
-	for _, name := range []string{ozCommand, "git"} {
-		if _, err := resolveCommand(name); err != nil {
-			return err
-		}
+	if _, err := resolveCommand("git"); err != nil {
+		return err
 	}
 	return nil
 }

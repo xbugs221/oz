@@ -1,0 +1,151 @@
+{
+  "summary": "验证 wo 公开 graph/engine 合同只保留 go-dag，默认 parallel subagent tool 统一为 pi，并且 go-dag subagent artifact 类型错误会 resume 原会话修正。",
+  "coverage": [
+    {
+      "spec": "需求：graph 和 engine 去 Dagu 化 / 场景：wo graph 不再暴露 Dagu 格式",
+      "tests": [
+        "contract-no-dagu-graph-engine"
+      ],
+      "evidence": [
+        "runtime-no-dagu-graph-engine"
+      ],
+      "risk": "只验证公开 CLI 行为，不扫描所有源码注释。"
+    },
+    {
+      "spec": "需求：graph 和 engine 去 Dagu 化 / 场景：workflow.engine 只接受 go-dag",
+      "tests": [
+        "contract-no-dagu-graph-engine"
+      ],
+      "evidence": [
+        "runtime-no-dagu-graph-engine"
+      ],
+      "risk": "历史 run state 中旧 engine 值的只读兼容由实现阶段按最小风险处理。"
+    },
+    {
+      "spec": "需求：默认 parallel subagent tool 使用 pi / 场景：默认 subagent tool 为 pi",
+      "tests": [
+        "contract-default-subagent-pi"
+      ],
+      "evidence": [
+        "runtime-default-subagent-pi"
+      ],
+      "risk": "review/QA gate_input 成员当前没有 tool 字段，本测试不要求它们生成 tool。"
+    },
+    {
+      "spec": "需求：默认迭代预算和 graph 展示保持克制 / 场景：默认最大迭代数为 5",
+      "tests": [
+        "contract-compact-chinese-graph-iteration-limit"
+      ],
+      "evidence": [
+        "runtime-compact-chinese-graph"
+      ],
+      "risk": "用户显式配置更大轮次时的处理策略由实现阶段决定。"
+    },
+    {
+      "spec": "需求：默认迭代预算和 graph 展示保持克制 / 场景：wo graph 输出紧凑中文图",
+      "tests": [
+        "contract-compact-chinese-graph-iteration-limit"
+      ],
+      "evidence": [
+        "runtime-compact-chinese-graph"
+      ],
+      "risk": "JSON graph 是否保留完整执行 spec 由实现阶段根据 go-dag 调度需要决定，本合同只约束 Mermaid 人类图。"
+    },
+    {
+      "spec": "需求：go-dag subagent artifact hook 自动修正格式错误 / 场景：subagent artifact 类型错误会 resume 原会话修正",
+      "tests": [
+        "contract-subagent-artifact-retry"
+      ],
+      "evidence": [
+        "runtime-subagent-artifact-retry"
+      ],
+      "risk": "使用 fake agent 验证 session resume 语义和 artifact 修正闭环，不依赖真实 LLM 是否会遵守提示词。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-no-dagu-graph-engine",
+      "source": "change_contract",
+      "path": "docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh",
+      "command": "bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh",
+      "purpose": "证明 wo graph 和 engine 公开入口不再暴露 Dagu/legacy 作为可选执行合同。",
+      "assertions": [
+        "wo graph --format json 和 mermaid 仍成功输出 workflow graph",
+        "wo graph --format dagu 返回非零且不再把 dagu 列为可选格式",
+        "workflow.engine: legacy 和 workflow.engine: dagu 被配置读取拒绝",
+        "wo run --engine dagu 不检查或调用 Dagu CLI，并引导使用 go-dag"
+      ],
+      "expected_initial_failure": "当前实现仍支持 graph --format dagu、允许 workflow.engine legacy/dagu，并对 --engine dagu 执行 Dagu CLI 检查。"
+    },
+    {
+      "id": "contract-default-subagent-pi",
+      "source": "change_contract",
+      "path": "docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh",
+      "command": "bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh",
+      "purpose": "证明新项目运行 wo config 后默认 planning/implementation subagent tool 使用 pi。",
+      "assertions": [
+        "wo config 生成的 wo.yaml 包含 engine: go-dag",
+        "wo config 生成的 planning/implementation subagent 成员至少有 5 个 tool: pi",
+        "wo config 生成的 wo.yaml 不包含 tool: opencode",
+        "默认 graph JSON 仍包含 planning_context 和 implementation_context subagent 节点"
+      ],
+      "expected_initial_failure": "当前内置默认配置仍把 planning/implementation subagent tool 写成 opencode。"
+    },
+    {
+      "id": "contract-compact-chinese-graph-iteration-limit",
+      "source": "change_contract",
+      "path": "docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh",
+      "command": "bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh",
+      "purpose": "证明默认最大审核迭代数为 5，且 Mermaid graph 用紧凑中文图表达循环而不是逐轮复制节点。",
+      "assertions": [
+        "wo config 生成的 wo.yaml 包含 max_review_iterations: 5",
+        "wo config 生成的 wo.yaml 不再包含 max_review_iterations: 30",
+        "wo graph --format mermaid 不包含 review_2、qa_2、fix_2 这类逐轮重复节点",
+        "wo graph --format mermaid 可见 subagent/fan-in 标签不混入 subagent、fan-in、planning_context 或 implementation_context",
+        "wo graph --format mermaid 保留需求分析员、代码库侦察员、外部资料研究员等中文 subagent 名称"
+      ],
+      "expected_initial_failure": "当前默认最大审核迭代数为 30，Mermaid graph 会展开 review_N/qa_N/fix_N 多轮节点，并显示 planning_context subagent、fan-in 等英文标签。"
+    },
+    {
+      "id": "contract-subagent-artifact-retry",
+      "source": "change_contract",
+      "path": "docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh",
+      "command": "bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh",
+      "purpose": "证明 go-dag subagent 正常退出但 member artifact 字段类型错误时，wo 会 resume 原 subagent 会话要求只重写 artifact，最多三次，而不是直接让 run failed。",
+      "assertions": [
+        "默认 go-dag run 不调用 Dagu CLI",
+        "fake pi 第一次为 subagent 写出对象数组 evidence 后被 schema gate 拦截",
+        "第二次修正调用使用同一个 subagent session id",
+        "修正提示包含 evidence 字段、期望字符串数组和只重写 SUBAGENT_OUTPUT 的约束",
+        "最终 member artifact 的 evidence 为字符串数组，fanin 继续读取修正后的产物"
+      ],
+      "expected_initial_failure": "当前实现会在 readMemberArtifact 解析对象型 evidence 时直接失败，不会 resume 原 subagent 会话修正 artifact。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "runtime-no-dagu-graph-engine",
+      "kind": "runtime_log",
+      "path": "test-results/4-clean-dagu/graph-engine/test.log",
+      "purpose": "记录 graph/engine 去 Dagu 合同测试的真实 CLI 输出、错误和断言结果。"
+    },
+    {
+      "id": "runtime-default-subagent-pi",
+      "kind": "runtime_log",
+      "path": "test-results/4-clean-dagu/default-subagent-pi/test.log",
+      "purpose": "记录默认 subagent tool 为 pi 合同测试的真实 CLI 输出、生成配置和断言结果。"
+    },
+    {
+      "id": "runtime-compact-chinese-graph",
+      "kind": "runtime_log",
+      "path": "test-results/4-clean-dagu/compact-chinese-graph/test.log",
+      "purpose": "记录默认迭代数和紧凑中文 Mermaid graph 合同测试的真实 CLI 输出、生成配置和断言结果。"
+    },
+    {
+      "id": "runtime-subagent-artifact-retry",
+      "kind": "runtime_log",
+      "path": "test-results/4-clean-dagu/subagent-artifact-retry/test.log",
+      "purpose": "记录 subagent artifact schema retry 合同测试的真实 go-dag run、fake pi prompt/session 日志和断言结果。"
+    }
+  ]
+}

@@ -125,7 +125,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return writeChangeList(stdout, changes)
 		case "run":
 			if !hasFlag(args[1:], "--json") {
-				return fmt.Errorf("用法：wo run --change <change-name> [--engine dagu] --json")
+				return fmt.Errorf("用法：wo run --change <change-name> [--engine go-dag] --json")
 			}
 			changeName, err := requireFlagValue(args[1:], "--change")
 			if err != nil {
@@ -133,10 +133,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			}
 			engine.Output = nil
 			if engineName, _ := optionalFlagValue(args[1:], "--engine"); engineName != "" {
-				if engineName != "dagu" {
-					return fmt.Errorf("未知 engine %q", engineName)
+				if engineName != "go-dag" {
+					return fmt.Errorf("workflow.engine 只支持 go-dag")
 				}
-				return engine.StartDaguJSON(ctx, changeName, stdout)
 			}
 			if err := engine.StartJSON(ctx, changeName, stdout); err != nil {
 				return err
@@ -983,7 +982,7 @@ func stageChecklistLinesForRepo(repo string, state State, runtime map[string]sta
 		engine = state.Workflow.Engine
 	}
 	if engine == "" {
-		engine = "legacy"
+		engine = "go-dag"
 	}
 	var lines []string
 	lines = append(lines, "- 引擎 "+engine)

@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const defaultMaxReviewIterations = 30
+const defaultMaxReviewIterations = 5
 
 var (
 	validReasoning = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
@@ -311,8 +311,8 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		maxIterations = *input.MaxReviewIterations
 	}
 	if strings.TrimSpace(input.Engine) != "" {
-		if input.Engine != "go-dag" && input.Engine != "legacy" && input.Engine != "dagu" {
-			return WorkflowConfig{}, fmt.Errorf("未知 engine %q", input.Engine)
+		if input.Engine != "go-dag" {
+			return WorkflowConfig{}, fmt.Errorf("workflow.engine 只支持 go-dag")
 		}
 		engine = input.Engine
 	}
@@ -557,16 +557,16 @@ func defaultParallelConfig() ParallelConfig {
 			"planning_context": {
 				Mode: "advisory",
 				Members: []ParallelMemberConfig{
-					{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏", Stage: "planning", Tool: "opencode", Subagent: "metis"},
-					{Name: "代码库侦察员", Purpose: "搜索现有模块、测试入口和实现约定", Stage: "planning", Tool: "opencode", Subagent: "explore"},
-					{Name: "外部资料研究员", Purpose: "查询外部库文档和开源实现", Stage: "planning", Tool: "opencode", Subagent: "librarian"},
+					{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏", Stage: "planning", Tool: "pi", Subagent: "metis"},
+					{Name: "代码库侦察员", Purpose: "搜索现有模块、测试入口和实现约定", Stage: "planning", Tool: "pi", Subagent: "explore"},
+					{Name: "外部资料研究员", Purpose: "查询外部库文档和开源实现", Stage: "planning", Tool: "pi", Subagent: "librarian"},
 				},
 			},
 			"implementation_context": {
 				Mode: "advisory",
 				Members: []ParallelMemberConfig{
-					{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式", Stage: "before_execution", Tool: "opencode", Subagent: "explore"},
-					{Name: "外部资料研究员", Purpose: "查询 execution 依赖的外部库文档和开源实现", Stage: "before_execution", Tool: "opencode", Subagent: "librarian"},
+					{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式", Stage: "before_execution", Tool: "pi", Subagent: "explore"},
+					{Name: "外部资料研究员", Purpose: "查询 execution 依赖的外部库文档和开源实现", Stage: "before_execution", Tool: "pi", Subagent: "librarian"},
 				},
 			},
 			"review": {
@@ -639,7 +639,7 @@ func mustDefaultWorkflowConfigYAML() string {
 		"wo:",
 		"  workflow:",
 		"    engine: go-dag",
-		"    max_review_iterations: 30",
+		"    max_review_iterations: 5",
 		"    stages:",
 		"      planning:",
 		"        cli: codex",
@@ -668,17 +668,17 @@ func mustDefaultWorkflowConfigYAML() string {
 		"            - name: 需求分析员",
 		"              purpose: 找出需求歧义、风险和遗漏",
 		"              stage: planning",
-		"              tool: opencode",
+		"              tool: pi",
 		"              subagent: metis",
 		"            - name: 代码库侦察员",
 		"              purpose: 搜索现有模块、测试入口和实现约定",
 		"              stage: planning",
-		"              tool: opencode",
+		"              tool: pi",
 		"              subagent: explore",
 		"            - name: 外部资料研究员",
 		"              purpose: 查询外部库文档和开源实现",
 		"              stage: planning",
-		"              tool: opencode",
+		"              tool: pi",
 		"              subagent: librarian",
 		"        implementation_context:",
 		"          mode: advisory",
@@ -686,12 +686,12 @@ func mustDefaultWorkflowConfigYAML() string {
 		"            - name: 代码库侦察员",
 		"              purpose: 汇总 execution 需要读取的文件和测试模式",
 		"              stage: before_execution",
-		"              tool: opencode",
+		"              tool: pi",
 		"              subagent: explore",
 		"            - name: 外部资料研究员",
 		"              purpose: 查询 execution 依赖的外部库文档和开源实现",
 		"              stage: before_execution",
-		"              tool: opencode",
+		"              tool: pi",
 		"              subagent: librarian",
 		"        review:",
 		"          mode: gate_input",

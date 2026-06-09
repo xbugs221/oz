@@ -226,7 +226,7 @@
 - **当** 用户在仓库根目录调用 `wo config`
 - **且** 仓库根目录不存在 `wo.yaml` 或 `wo.yml`
 - **则** 系统创建默认 `wo.yaml`
-- **且** 默认配置包含 `max_review_iterations: 30`
+- **且** 默认配置包含 `max_review_iterations: 5`
 - **且** 默认配置包含 `workflow.stages.planning/execution/review/fix/archive`
 - **且** 每类会话配置包含 `cli` 和 `reasoning`
 - **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
@@ -302,7 +302,7 @@
 - **则** sealed run 仍按现有串行阶段推进
 - **且** review、QA、fix 和 archive 的 artifact gate 规则不变
 
-#### 场景：导出 OmO Dagu/用户图
+#### 场景：导出 workflow 图
 
 - **给定** `workflow.parallel.enabled` 或 `workflow.subagents.enabled` 为 `true`
 - **且** 配置了 `before_execution`、`before_review` 或 `before_qa` 并行组
@@ -311,41 +311,32 @@
 - **且** 包含 `main_stage`、`subagent`、`fanin` 和 `gate` 节点
 - **当** 用户运行 `wo graph --change demo --format mermaid`
 - **则** 输出必须显示 fan-out/fan-in、review clean/needs_fix、QA clean/needs_fix 和 archive gate
-- **当** 用户运行 `wo graph --change demo --format dagu`
-- **则** 输出必须是 Dagu YAML
+- **且** `dagu` 不再是可选 graph format
 - **且** step command 只能调用 `wo node run-subagent`、`wo node fanin`、`wo node run-stage` 或 `wo node gate`
 - **且** 不得直接拼接 `codex exec`、`pi --mode json` 或 `opencode run`
-- **且** 导出图时不得检查 Dagu 二进制，不得创建 run、batch 或 agent session
+- **且** 导出图时不得创建 run、batch 或 agent session
 
-#### 场景：显式 Dagu engine 执行 run-local DAG
+#### 场景：workflow engine 只支持 go-dag
 
-- **给定** 当前仓库存在 active change、合法 `acceptance.json` 和可执行 `dagu`
-- **当** 用户运行 `wo run --change demo --engine dagu --json`
-- **则** 系统必须先创建 sealed run、prompt snapshot 和 acceptance snapshot
-- **且** 必须在 run 目录生成 `dagu/workflow.yaml`
-- **且** run-local YAML 中所有 step command 必须带同一个 `--run-id`
-- **且** step command 只能调用 `wo node run-subagent`、`wo node fanin`、`wo node run-stage` 或 `wo node gate`
-- **且** 系统必须调用外部 Dagu 进程执行该 YAML，并把 Dagu 输出保存为 run-local 可复查日志
-- **且** Dagu 成功后 runner JSON 和 `state.json` 必须反映最终 run 状态
+- **给定** 当前仓库存在 active change 和合法 `acceptance.json`
+- **当** 用户运行 `wo run --change demo --json`
+- **则** 默认 engine 必须是内嵌 `go-dag`，不依赖外部 Dagu CLI
+- **且** `wo run --change demo --engine dagu --json` 必须被拒绝，并引导用户使用 `go-dag`
+- **且** `workflow.engine: legacy` 或 `workflow.engine: dagu` 必须在配置读取阶段被拒绝
 
-#### 场景：显式 Dagu engine 缺少 Dagu 时失败
+#### 场景：go-dag subagent artifact schema retry
 
-- **给定** PATH 中不存在可执行 `dagu`
-- **当** 用户运行 `wo run --change demo --engine dagu --json`
-- **则** 命令必须非零退出并说明缺少 Dagu CLI
-- **且** 不得回退默认 Go 状态机
-- **且** 不得先调用 Codex、Pi 或 OpenCode agent
-- **当** 用户运行默认 `wo run --change demo --json`
-- **则** 默认 engine 仍不得依赖 Dagu
-
-#### 场景：Dagu node fan-out/fan-in 和 gate 保持 wo 领域规则
-
-- **给定** Dagu 执行 `wo node run-subagent --run-id <run-id> --group before_review --member <name> --stage review_1 --iteration 1 --json`
+- **给定** go-dag 执行 `wo node run-subagent --run-id <run-id> --group before_review --member <name> --stage review_1 --iteration 1 --json`
+- **当** subagent 正常退出但写出的 member artifact 中 `evidence` 为对象数组而非字符串数组
+- **则** 系统必须 resume 同一 subagent session 要求只重写 `SUBAGENT_OUTPUT`
+- **且** 修正 prompt 必须包含字段名、期望类型和 artifact 路径
+- **且** 最多重试 3 次，仍失败才将 run 标记为 `failed`
+- **且** 修正通过后 fan-in 才能继续读取该成员产物
 - **则** `wo` 必须渲染只读 subagent prompt，包含 `SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE` 和 `SUBAGENT_OUTPUT`
 - **且** subagent 必须写出单成员 JSON artifact，不能修改源码或 worktree
-- **当** Dagu 执行 `wo node fanin`
+- **当** go-dag 执行 `wo node fanin`
 - **则** `wo` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
-- **当** Dagu 执行 `wo node gate`
+- **当** go-dag 执行 `wo node gate`
 - **则** review/QA clean 不得忽略 gate_input subagent 的 blocker/major finding 或成员失败
 - **且** clean review/QA 必须跳过未激活 fix 分支，needs_fix 必须激活下一轮 fix/review/QA 分支
 

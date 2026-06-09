@@ -44,19 +44,35 @@ grep -qF "engine: go-dag" "$project/wo.yaml" || fail "wo.yaml 必须声明默认
 grep -qF "parallel:" "$project/wo.yaml" || fail "wo.yaml 必须包含 parallel 配置"
 grep -qF "enabled: true" "$project/wo.yaml" || fail "parallel.enabled 必须默认 true"
 
-note "wo graph mermaid 应展示默认并行 fan-out/fan-in"
+note "wo graph mermaid 应展示紧凑中文状态图和默认并行成员"
 (cd "$project" && "$wo" graph --change demo --format mermaid) >"$tmp/graph.mmd"
 cat "$tmp/graph.mmd" >>"$log"
 for want in \
-  "planning_context" \
-  "implementation_context" \
-  "review" \
-  "qa" \
-  "fan-in" \
-  "subagent" \
-  "archive gate"
+  "需求分析员" \
+  "代码库侦察员" \
+  "外部资料研究员" \
+  "规划上下文" \
+  "执行上下文" \
+  "审核" \
+  "测试" \
+  "修复" \
+  "最多5轮" \
+  "归档"
 do
   grep -qF "$want" "$tmp/graph.mmd" || fail "Mermaid graph 缺少 $want"
+done
+for forbidden in \
+  "planning_context" \
+  "implementation_context" \
+  "fan-in" \
+  "subagent" \
+  "review_2" \
+  "qa_2" \
+  "fix_2"
+do
+  if grep -qF "$forbidden" "$tmp/graph.mmd"; then
+    fail "Mermaid graph 不应暴露旧内部标签 $forbidden"
+  fi
 done
 if grep -qi "dagu" "$tmp/graph.mmd"; then
   fail "默认 Mermaid graph 不应要求 Dagu CLI"
