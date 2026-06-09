@@ -359,16 +359,17 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 	for state.Status == statusRunning {
 		forceRun := shouldForceStageRerun(state)
 		done := false
+		var err error
 		if !forceRun {
-			var err error
 			done, err = e.artifactDone(state)
 			if err != nil {
-				if handled, handleErr := e.handleStageArtifactGateFailure(&state, err); handleErr != nil {
+				gateErr := e.stageArtifactGateError(state, err)
+				if handled, handleErr := e.handleStageArtifactGateFailure(&state, gateErr); handleErr != nil {
 					return handleErr
 				} else if handled {
 					continue
 				}
-				return err
+				return gateErr
 			}
 		}
 		if !done || forceRun {
@@ -381,6 +382,18 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 		} else {
 			state.Stages[state.Stage] = "completed"
 			e.printProgress(state, "skipped")
+		}
+		done, err = e.checkStageArtifactGate(state)
+		if err != nil {
+			if handled, handleErr := e.handleStageArtifactGateFailure(&state, err); handleErr != nil {
+				return handleErr
+			} else if handled {
+				continue
+			}
+			return err
+		}
+		if !done {
+			continue
 		}
 		validationPassed, err := e.validateStage(ctx, &state)
 		if err != nil {
@@ -994,7 +1007,7 @@ func (e *Engine) advance(state *State) error {
 		}
 	case state.Stage == "archive":
 		if err := e.validateArchiveReadiness(*state); err != nil {
-			return err
+			return e.stageArtifactGateError(*state, err)
 		}
 		state.Status = statusDone
 		state.Stage = "done"

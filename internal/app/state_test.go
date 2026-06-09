@@ -4,6 +4,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -657,6 +658,129 @@ func TestQAArtifactGateRerunsQAInsteadOfFailing(t *testing.T) {
 	qaGate := state.Validation["qa_1"]
 	if qaGate.Kind != validationKindArtifact || qaGate.Status != validationStatusPassed || qaGate.Attempts != 1 || qaGate.LastError != "" {
 		t.Fatalf("qa artifact gate state = %#v, want one repaired artifact-gate failure", qaGate)
+	}
+}
+
+// TestSubagentPromptsSpellStrictFindingSchema keeps real pi outputs inside the member artifact contract.
+func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
+	member := ParallelMemberConfig{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏"}
+	initial := subagentPrompt("planning_context", member, "/tmp/member.json")
+	retry := artifactRetryPrompt("planning_context", member, "/tmp/member.json", fmt.Errorf(`json: unknown field "category"`))
+	for label, prompt := range map[string]string{"initial": initial, "retry": retry} {
+		for _, want := range []string{
+			"只允许字段：name, purpose, status, summary, evidence, findings",
+			"每个对象只允许 title, severity, evidence, recommendation",
+			"不要使用 category、description、detail、location、level、type",
+			"需要分类或位置时写入 title/evidence/recommendation",
+		} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("%s prompt missing %q:\n%s", label, want, prompt)
+			}
+		}
+	}
+	if !strings.Contains(retry, `json: unknown field "category"`) {
+		t.Fatalf("retry prompt missing concrete schema error:\n%s", retry)
+	}
+}
+
+// TestGoDAGAdvanceArtifactGateFailurePersistsRetry verifies advance-time archive gates survive node reload.
+func TestGoDAGAdvanceArtifactGateFailurePersistsRetry(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "demo")
+	runID := "archive-readiness-run"
+	if err := os.MkdirAll(runDir(repo, runID), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir(repo, runID), "delivery-summary.md"), []byte("done\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "docs", "changes", "archive", "2026-05-05-demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	state := State{
+		RunID:      runID,
+		ChangeName: "demo",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      "archive",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{"execution": "completed", "archive": "completed"},
+		Workflow:   DefaultWorkflowConfig(),
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := NewEngine(repo, testRegistry(fakeRunner{}))
+	var out bytes.Buffer
+	err := engine.nodeRunStage(context.Background(), state, []string{"--stage", "archive"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "archive 阶段缺少 clean QA artifact") {
+		t.Fatalf("nodeRunStage err = %v, want archive readiness artifact gate", err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := persisted.Validation["archive"]
+	if gate.Kind != validationKindArtifact || gate.Status != validationStatusFailed || gate.Attempts != 1 {
+		t.Fatalf("archive validation = %#v, want persisted artifact gate failure", gate)
+	}
+	if persisted.Stages["archive"] != "validation_failed" {
+		t.Fatalf("archive stage = %q, want validation_failed", persisted.Stages["archive"])
+	}
+	node := WorkflowNode{ID: "archive", Type: "main_stage", Stage: "archive"}
+	if !engine.goDAGShouldRetryNode(runID, node) {
+		t.Fatal("go-dag should retry archive after persisted artifact gate failure")
+	}
+}
+
+// TestLegacyRunLoopDoesNotPrecheckMissingNewStageArtifact verifies first turns are not false retries.
+func TestLegacyRunLoopDoesNotPrecheckMissingNewStageArtifact(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "demo")
+	mustPrompts(t, repo)
+	runID := "legacy-new-review-run"
+	mustSnapshotPrompts(t, repo, runID)
+	head, diff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := DefaultWorkflowConfig()
+	workflow.Engine = "legacy"
+	workflow.Parallel.Enabled = false
+	state := State{
+		RunID:        runID,
+		ChangeName:   "demo",
+		Sealed:       true,
+		Status:       statusRunning,
+		Stage:        "review_1",
+		BaselineHead: head,
+		BaselineDiff: diff,
+		Sessions:     map[string]string{},
+		Stages:       map[string]string{"execution": "completed"},
+		Workflow:     workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &scenarioRunner{}
+	engine := NewEngine(repo, testRegistry(runner))
+
+	if err := engine.runLoop(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.prompts) == 0 {
+		t.Fatal("legacy runLoop did not run the review agent")
+	}
+	if strings.Contains(runner.prompts[0], "Stage artifact gate failed") {
+		t.Fatalf("first review prompt had false artifact gate retry:\n%s", runner.prompts[0])
+	}
+	final, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Validation["review_1"].Attempts != 0 {
+		t.Fatalf("review validation attempts = %d, want no pre-run artifact gate attempt", final.Validation["review_1"].Attempts)
 	}
 }
 
@@ -2025,8 +2149,8 @@ func TestDefaultFixPromptCarriesCurrentReviewContract(t *testing.T) {
 	}
 }
 
-// TestDefaultExecutionPromptDoesNotCarryFixContract verifies execution stays separate from repair.
-func TestDefaultExecutionPromptDoesNotCarryFixContract(t *testing.T) {
+// TestDefaultExecutionPromptKeepsFullFirstTurnContract verifies execution keeps the full oz-exec contract.
+func TestDefaultExecutionPromptKeepsFullFirstTurnContract(t *testing.T) {
 	repo := gitRepo(t)
 	t.Setenv("HOME", t.TempDir())
 	runID := "execution-prompt-contract-run"
@@ -2043,6 +2167,21 @@ func TestDefaultExecutionPromptDoesNotCarryFixContract(t *testing.T) {
 	}
 	if !strings.Contains(got, "oz-exec") {
 		t.Fatalf("execution prompt should reference oz-exec:\n%s", got)
+	}
+	for _, want := range []string{
+		"proposal.md",
+		"design.md",
+		"spec.md",
+		"task.md",
+		"acceptance.json",
+		"required_tests",
+		"不得删除、弱化、跳过或改写",
+		"oz status",
+		"tasks.done",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("execution prompt missing full first-turn contract %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -2244,8 +2383,8 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 		},
 		{
 			name:       "wo-start",
-			mustHave:   []string{"oz-exec", "state.json.change_name", "当前 oz change"},
-			mustReject: []string{"oz status", "oz validate", "tasks.total", "tasks.done", "tasks.md"},
+			mustHave:   []string{"oz-exec", "state.json.change_name", "当前 oz change", "proposal.md", "acceptance.json", "required_tests", "oz status", "tasks.done"},
+			mustReject: []string{"review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"},
 		},
 		{
 			name:       "wo-done",

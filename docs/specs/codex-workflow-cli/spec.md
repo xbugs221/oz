@@ -334,6 +334,12 @@
 - **且** 修正通过后 fan-in 才能继续读取该成员产物
 - **则** `wo` 必须渲染只读 subagent prompt，包含 `SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE` 和 `SUBAGENT_OUTPUT`
 - **且** subagent 必须写出单成员 JSON artifact，不能修改源码或 worktree
+- **且** 单成员 JSON 顶层只允许 `name`、`purpose`、`status`、`summary`、`evidence`、`findings`
+- **且** `evidence` 必须是字符串数组
+- **且** `findings[]` 每项只允许 `title`、`severity`、`evidence`、`recommendation` 四个字符串字段
+- **且** prompt 必须明确禁止 `category`、`description`、`detail`、`location`、`level`、`type` 等额外字段
+- **且** `findings[].severity` 最终只允许 `blocker`、`major`、`minor`
+- **且** `critical/blocker` 归一为 `blocker`，`high/medium/major` 归一为 `major`，`low/nit/minor/info/informational/note/warning` 归一为 `minor`
 - **当** go-dag 在进程内执行 fan-in 节点
 - **则** `wo` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
 - **当** go-dag 在进程内执行 gate 节点
@@ -571,6 +577,17 @@
 - **且** prompt 不得默认列出 `fix-1-summary.md`、`fix-2-summary.md`、`fix-3-summary.md`
 - **且** prompt 必须说明旧历史只在重复 finding、证据矛盾、最新 artifact 引用旧 finding 或升级原因不清时按需追溯
 
+#### 场景：execution 首轮提示词保留完整执行合同
+
+- **给定** 当前阶段为 `execution`
+- **当** 系统渲染默认 execution prompt
+- **则** prompt 必须调用 `oz-exec` 技能并指向当前 run 的 `state.json`
+- **且** prompt 必须要求读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`
+- **且** prompt 必须要求先运行 `acceptance.json` 中的 `required_tests[].command`
+- **且** prompt 必须禁止删除、弱化、跳过或改写创建阶段契约测试和 `acceptance.json`
+- **且** prompt 必须说明 execution 完成标准来自 `oz status <change> --json` 的 `tasks.total` 和 `tasks.done`
+- **且** prompt 不得混入 review/fix 当前轮 artifact，例如 `review-1.json`、`fix-1-summary.md` 或“只修复当前 review/QA artifact”
+
 #### 场景：review 续轮隐藏 JSON 示例
 
 - **给定** 当前阶段为 `review_2`
@@ -697,6 +714,29 @@
 - **且** 下一次运行必须重新进入同一个 `qa_i` 阶段
 - **且** prompt 必须包含失败 artifact 路径和未定义 id 的错误摘要
 - **且** 未达到最大尝试次数前不得把 run 或 batch 标记为 `failed`
+
+### 需求：统一主阶段 artifact gate retry
+
+系统必须在任意主阶段 agent 返回后检查该阶段应有产物。产物缺失、格式非法或合同不满足时，系统必须记录 `Stage artifact gate failed`，resume 同一角色 session，要求只补写或改写当前阶段产物，最多重试 3 次。第三次仍失败后才进入阻断状态。
+
+#### 场景：所有主阶段产物缺失或非法都会同会话重试
+
+- **给定** 默认 `go-dag` workflow 正在执行 execution、review、fix、QA 或 archive
+- **当** 当前阶段 agent 返回后未完成该阶段产物，或写出的 artifact 不满足 schema / acceptance / readiness 合同
+- **则** 系统必须记录同阶段 artifact gate 失败
+- **且** 下一次运行必须 resume 同一角色 session
+- **且** retry prompt 必须包含 `Stage artifact gate failed`、目标阶段、目标 artifact 路径和失败原因
+- **且** retry prompt 必须要求只补写或改写当前阶段产物，不得修改 acceptance 合同或其他阶段 artifact
+- **且** execution 阶段 task 未完成、fix summary 缺失、archive delivery summary 或归档目录缺失也必须进入同一 artifact gate retry
+- **且** 未达到最大尝试次数前不得把 run 或 batch 标记为 `failed`
+
+#### 场景：batch 中阶段产物修复后继续后续 change
+
+- **给定** batch 中当前 change 的 execution 产物首次未完成
+- **当** 同一 executor session 在 artifact gate retry 中修复该产物
+- **则** batch worker 必须继续执行后续 change
+- **且** batch state 不得因为可修复 artifact gate failure 进入 `failed`
+- **且** 只有达到重试上限、真实 agent/backend 失败或不可恢复阻断时，batch 才能停止为 `failed`
 
 ### 需求：sealed run 配置快照
 

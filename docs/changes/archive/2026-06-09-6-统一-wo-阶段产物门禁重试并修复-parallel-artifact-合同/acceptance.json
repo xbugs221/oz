@@ -1,0 +1,156 @@
+{
+  "summary": "验证 wo 对任意主阶段产物缺失或非法都能同会话重试，修复 parallel subagent member artifact 的 severity 合同，并保证所有阶段首轮提示词保留完整阶段合同，避免批量任务被低级产物错误中断。",
+  "coverage": [
+    {
+      "spec": "需求：主阶段 artifact gate 缺失或非法时同会话重试 / 场景：所有主阶段产物缺失或非法都会同会话重试",
+      "tests": [
+        "contract-stage-artifact-gate-retry-all-roles"
+      ],
+      "evidence": [
+        "runtime-stage-artifact-gate-retry-all-roles"
+      ],
+      "risk": "使用 fake codex 稳定复现产物缺失和修正，不依赖真实 LLM 输出质量。"
+    },
+    {
+      "spec": "需求：batch 不因可修复阶段产物问题中断 / 场景：batch 中 execution 产物修复后继续后续 change",
+      "tests": [
+        "contract-batch-continues-after-stage-artifact-repair"
+      ],
+      "evidence": [
+        "runtime-batch-continues-after-stage-artifact-repair"
+      ],
+      "risk": "覆盖 batch worker 与 run state，不重复验证交互式菜单输入解析。"
+    },
+    {
+      "spec": "需求：parallel subagent member artifact 合同统一归一化 / 场景：parallel subagent 的 info severity 不会中断 workflow",
+      "tests": [
+        "contract-parallel-subagent-info-severity"
+      ],
+      "evidence": [
+        "runtime-parallel-subagent-info-severity"
+      ],
+      "risk": "覆盖 info 这一真实故障口径，其他 severity alias 可由执行阶段补充 Go 单元测试。"
+    },
+    {
+      "spec": "需求：所有阶段首轮提示词保留完整阶段合同 / 场景：渲染后的内置阶段提示词满足首轮完整和续轮精简边界",
+      "tests": [
+        "contract-stage-prompt-completeness"
+      ],
+      "evidence": [
+        "runtime-stage-prompt-completeness"
+      ],
+      "risk": "覆盖内置模板渲染合同，不替代真实 agent 是否遵守 prompt 的运行时验证。"
+    },
+    {
+      "spec": "需求：阶段产物门禁改造后保持 Go 回归通过 / 场景：全仓库 Go 回归保持通过",
+      "tests": [
+        "root-go-test-regression"
+      ],
+      "evidence": [
+        "runtime-root-go-tests"
+      ],
+      "risk": "Go 回归不替代 shell 契约测试。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-stage-artifact-gate-retry-all-roles",
+      "source": "change_contract",
+      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh",
+      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh",
+      "purpose": "证明 execution、review、fix、QA、archive 任意阶段产物缺失或非法时，wo 会记录 artifact gate failure 并 resume 同一角色会话修正。",
+      "assertions": [
+        "execution task 首次未完成后不会直接 failed，第二次使用原 executor session 完成 task",
+        "review、fix、QA、archive 的缺失或非法产物都会触发 Stage artifact gate failed retry",
+        "最终 run 状态为 done，并且 run 目录保留 artifact gate failure 诊断"
+      ],
+      "expected_initial_failure": "当前实现对 execution/fix/archive 的 done=false 产物缺失直接 failNodeState，不能同会话 retry。"
+    },
+    {
+      "id": "contract-batch-continues-after-stage-artifact-repair",
+      "source": "change_contract",
+      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh",
+      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh",
+      "purpose": "证明 batch 中首个 change 的 execution 产物可修复时，batch 不进入 failed，而是在修复后继续执行后续 change。",
+      "assertions": [
+        "batch state 最终为 done",
+        "第一个 change 的 execution retry 使用原 executor session",
+        "两个 change 都创建 run 并完成 task"
+      ],
+      "expected_initial_failure": "当前实现会将首个 change 的 execution artifact 未完成提升为 batch failed。"
+    },
+    {
+      "id": "contract-parallel-subagent-info-severity",
+      "source": "change_contract",
+      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh",
+      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh",
+      "purpose": "证明 parallel subagent member artifact 中的 severity info 会被归一化为 minor，不会让 workflow 或 batch 被低级字段口径中断。",
+      "assertions": [
+        "wo run 成功完成",
+        "member artifact 的 findings severity 最终为 minor",
+        "parallel-planning-context.json 的 findings severity 最终为 minor",
+        "fan-in、execution 和 archive 都继续完成"
+      ],
+      "expected_initial_failure": "当前实现会在 validateMemberResult 阶段拒绝 severity info，并把 run 标记为 failed。"
+    },
+    {
+      "id": "contract-stage-prompt-completeness",
+      "source": "change_contract",
+      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh",
+      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh",
+      "purpose": "证明 wo-discuss、wo-start、wo-review、wo-qa、wo-fix、wo-done 的渲染后首轮提示词保留完整阶段合同，review/QA/fix 续轮只省略示例或方法论。",
+      "assertions": [
+        "execution 首轮提示词包含 proposal/design/spec/task/acceptance/tests、required_tests、禁止改弱合同和 oz status task 完成标准",
+        "review 首轮包含审核输入、输出 review-N.json、严格 JSON 和示例，续轮保留目标 artifact 但不重复 schema 示例",
+        "QA 首轮包含 required_tests、required_evidence、acceptance_matrix 和 qa-N.json，续轮保留目标 artifact 但不重复示例",
+        "fix 首轮包含当前 review/QA findings、根因分析、不得弱化 acceptance、验证要求和 fix-N-summary.md，续轮保留当前 artifact 但不重复方法论",
+        "archive 提示词包含 oz-archive、最新 review/QA clean 条件、delivery-summary.md、归档目录和 commit 范围"
+      ],
+      "expected_initial_failure": "实现变更前 execution 首轮提示词可能只剩读取 state.json 并调用 oz-exec，缺少完整执行合同。"
+    },
+    {
+      "id": "root-go-test-regression",
+      "source": "existing_regression",
+      "path": "go test ./...",
+      "command": "go test ./...",
+      "purpose": "证明统一 artifact gate retry 和 parallel member artifact normalize 后，现有 Go 包行为保持通过。",
+      "assertions": [
+        "所有 Go 包测试通过",
+        "旧的直接 failed 预期被更新为 artifact gate retry 语义"
+      ],
+      "expected_initial_failure": "实现变更前 Go 回归可能仍保留旧的直接 failed 断言，执行阶段需要按新意图更新。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "runtime-stage-artifact-gate-retry-all-roles",
+      "kind": "runtime_log",
+      "path": "test-results/6-stage-artifact-gate/stage-artifact-gate-retry/contract.log",
+      "purpose": "记录所有主阶段产物缺失或非法后同会话 retry 的真实 wo run 输出、fake codex 调用日志和最终 state。"
+    },
+    {
+      "id": "runtime-batch-continues-after-stage-artifact-repair",
+      "kind": "runtime_log",
+      "path": "test-results/6-stage-artifact-gate/batch-artifact-repair/contract.log",
+      "purpose": "记录 batch 在第一个 change execution 产物修复后继续第二个 change 的真实状态。"
+    },
+    {
+      "id": "runtime-parallel-subagent-info-severity",
+      "kind": "runtime_log",
+      "path": "test-results/6-stage-artifact-gate/parallel-info-severity/contract.log",
+      "purpose": "记录 parallel subagent 写出 severity info 后被归一化并成功 fan-in 的真实运行结果。"
+    },
+    {
+      "id": "runtime-stage-prompt-completeness",
+      "kind": "runtime_log",
+      "path": "test-results/6-stage-artifact-gate/stage-prompt-contract/contract.log",
+      "purpose": "记录内置阶段提示词渲染合同测试结果，证明首轮完整和续轮精简边界被测试覆盖。"
+    },
+    {
+      "id": "runtime-root-go-tests",
+      "kind": "runtime_log",
+      "path": "test-results/6-stage-artifact-gate/go-test.log",
+      "purpose": "记录 go test ./... 的完整回归结果。"
+    }
+  ]
+}

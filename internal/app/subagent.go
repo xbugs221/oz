@@ -72,7 +72,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if err != nil {
 			return e.failNodeState(state, err)
 		}
-		result, schemaErr = readAndValidateMemberArtifact(artifactPath)
+		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member)
 		if schemaErr == nil {
 			break
 		}
@@ -81,11 +81,6 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		}
 	}
 
-	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
-	result.Required = member.Required
-	if err := validateMemberResult(result); err != nil {
-		return e.failNodeState(state, err)
-	}
 	if err := writeMemberArtifact(artifactPath, result); err != nil {
 		return e.failNodeState(state, err)
 	}
@@ -150,7 +145,9 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
 		"SUBAGENT_OUTPUT=" + output,
-		"请将单成员 JSON artifact 写入 SUBAGENT_OUTPUT，字段包含 name/purpose/status/summary/evidence/findings。",
+		"",
+		"请将单成员 JSON artifact 写入 SUBAGENT_OUTPUT，只写一个 JSON object，不要 Markdown 或解释文字。",
+		memberArtifactSchemaPrompt(),
 	}, "\n") + "\n"
 }
 
@@ -193,6 +190,33 @@ func readMemberArtifact(path string) (ParallelMemberResult, error) {
 func validateMemberResult(result ParallelMemberResult) error {
 	artifact := ParallelArtifact{Group: "member", Mode: "member", Summary: "member", Members: []ParallelMemberResult{result}}
 	return ValidateParallelArtifact(artifact)
+}
+
+// readNormalizeValidateMemberArtifact enforces the member artifact contract at the subagent boundary.
+func readNormalizeValidateMemberArtifact(path string, group string, member ParallelMemberConfig) (ParallelMemberResult, error) {
+	result, err := readAndValidateMemberArtifact(path)
+	if err != nil {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
+	}
+	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
+	result.Required = member.Required
+	if strings.TrimSpace(result.Name) == "" {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=name artifact=%s: name 不能为空", group, member.Name, path)
+	}
+	if result.Name != member.Name {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=name artifact=%s: member name %q 不匹配配置 %q", group, member.Name, path, result.Name, member.Name)
+	}
+	for i := range result.Findings {
+		severity, ok := normalizeFindingSeverity(result.Findings[i].Severity)
+		if !ok {
+			return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=findings[%d].severity value=%q artifact=%s: severity 无法归一化", group, member.Name, i, result.Findings[i].Severity, path)
+		}
+		result.Findings[i].Severity = severity
+	}
+	if err := validateMemberResult(result); err != nil {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
+	}
+	return result, nil
 }
 
 func writeMemberArtifact(path string, result ParallelMemberResult) error {
@@ -265,8 +289,19 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"SUBAGENT_OUTPUT=" + artifactPath,
 		"",
 		"之前生成的 SUBAGENT_OUTPUT 格式不正确：" + schemaErr.Error(),
-		"evidence 必须是字符串数组，findings 必须是对象数组。",
+		memberArtifactSchemaPrompt(),
 		"请只重写 SUBAGENT_OUTPUT，修正上述格式错误，不要修改其他文件。",
 		"请将修正后的单成员 JSON artifact 写入 SUBAGENT_OUTPUT。",
 	}, "\n") + "\n"
+}
+
+func memberArtifactSchemaPrompt() string {
+	return strings.Join([]string{
+		"JSON 顶层只允许字段：name, purpose, status, summary, evidence, findings。",
+		"name 必须等于 SUBAGENT_NAME；purpose/status/summary 必须是非空字符串。",
+		"evidence 必须是字符串数组。",
+		"findings 必须是对象数组；每个对象只允许 title, severity, evidence, recommendation 四个字符串字段。",
+		"findings[].severity 使用 blocker/major/minor；info、warning、note 这类低风险口径写成 minor。",
+		"不要使用 category、description、detail、location、level、type 等额外字段；需要分类或位置时写入 title/evidence/recommendation 字符串。",
+	}, "\n")
 }
