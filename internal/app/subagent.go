@@ -72,7 +72,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if err != nil {
 			return e.failNodeState(state, err)
 		}
-		result, schemaErr = readAndValidateMemberArtifact(artifactPath)
+		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member)
 		if schemaErr == nil {
 			break
 		}
@@ -81,11 +81,6 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		}
 	}
 
-	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
-	result.Required = member.Required
-	if err := validateMemberResult(result); err != nil {
-		return e.failNodeState(state, err)
-	}
 	if err := writeMemberArtifact(artifactPath, result); err != nil {
 		return e.failNodeState(state, err)
 	}
@@ -193,6 +188,33 @@ func readMemberArtifact(path string) (ParallelMemberResult, error) {
 func validateMemberResult(result ParallelMemberResult) error {
 	artifact := ParallelArtifact{Group: "member", Mode: "member", Summary: "member", Members: []ParallelMemberResult{result}}
 	return ValidateParallelArtifact(artifact)
+}
+
+// readNormalizeValidateMemberArtifact enforces the member artifact contract at the subagent boundary.
+func readNormalizeValidateMemberArtifact(path string, group string, member ParallelMemberConfig) (ParallelMemberResult, error) {
+	result, err := readAndValidateMemberArtifact(path)
+	if err != nil {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
+	}
+	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
+	result.Required = member.Required
+	if strings.TrimSpace(result.Name) == "" {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=name artifact=%s: name 不能为空", group, member.Name, path)
+	}
+	if result.Name != member.Name {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=name artifact=%s: member name %q 不匹配配置 %q", group, member.Name, path, result.Name, member.Name)
+	}
+	for i := range result.Findings {
+		severity, ok := normalizeFindingSeverity(result.Findings[i].Severity)
+		if !ok {
+			return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=findings[%d].severity value=%q artifact=%s: severity 无法归一化", group, member.Name, i, result.Findings[i].Severity, path)
+		}
+		result.Findings[i].Severity = severity
+	}
+	if err := validateMemberResult(result); err != nil {
+		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
+	}
+	return result, nil
 }
 
 func writeMemberArtifact(path string, result ParallelMemberResult) error {

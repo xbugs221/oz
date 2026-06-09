@@ -93,6 +93,25 @@ func TestBundledFixPromptKeepsMethodologyOnlyForFirstFixerTurn(t *testing.T) {
 	requirePromptOmits(t, resumed, "充分理解评审意见", "从根源入手，不能治标不治本", "禁止只按错误文本打补丁")
 }
 
+// TestBundledExecutionPromptKeepsFullFirstTurnContract verifies execution is not trimmed like resumed review/QA/fix turns.
+func TestBundledExecutionPromptKeepsFullFirstTurnContract(t *testing.T) {
+	prompt := renderBundledPromptForRoleContract(t, "wo-start.md", "wo-start", "execution", nil)
+	requirePromptContains(t, prompt,
+		"oz-exec",
+		"state.json.change_name",
+		"proposal.md",
+		"design.md",
+		"spec.md",
+		"task.md",
+		"acceptance.json",
+		"required_tests",
+		"不得删除、弱化、跳过或改写",
+		"oz status",
+		"tasks.done",
+	)
+	requirePromptOmits(t, prompt, "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings")
+}
+
 // TestBundledDonePromptRequiresAuditableDeliverySummary verifies the final summary is useful to human reviewers.
 func TestBundledDonePromptRequiresAuditableDeliverySummary(t *testing.T) {
 	prompt := renderBundledPromptForRoleContract(t, "wo-done.md", "wo-done", "archive", map[string]string{
@@ -114,6 +133,6 @@ func TestBundledDonePromptRequiresAuditableDeliverySummary(t *testing.T) {
 GO
 
 (
-	cd "$ROOT"
-	go test ./internal/app -run 'TestBundled(Review|QA|Fix)PromptKeeps.*First.*Turn|TestBundledDonePromptRequiresAuditableDeliverySummary' -count=1
+  cd "$ROOT"
+  go test ./internal/app -run 'TestBundled(Review|QA|Fix)PromptKeeps.*First.*Turn|TestBundledExecutionPromptKeepsFullFirstTurnContract|TestBundledDonePromptRequiresAuditableDeliverySummary' -count=1
 ) | tee "$RESULT_DIR/contract.log"

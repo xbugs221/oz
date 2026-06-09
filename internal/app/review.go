@@ -148,7 +148,7 @@ func normalizeFindingSeverity(severity string) (string, bool) {
 		return "blocker", true
 	case "major", "high", "medium":
 		return "major", true
-	case "minor", "low", "nit":
+	case "minor", "low", "nit", "info", "informational", "note", "warning":
 		return "minor", true
 	default:
 		return "", false

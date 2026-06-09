@@ -56,7 +56,14 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 		return e.failNodeState(state, err)
 	}
 	if !done {
-		return e.failNodeState(state, fmt.Errorf("%s 阶段 artifact 未完成", stage))
+		err := e.stageArtifactGateError(state, fmt.Errorf("%s 阶段 artifact 未完成", stage))
+		if recordErr := recordStageArtifactGateFailure(e.Repo, &state, err); recordErr != nil {
+			return recordErr
+		}
+		if saveErr := saveState(e.Repo, state); saveErr != nil {
+			return saveErr
+		}
+		return err
 	}
 	validationPassed, err := e.validateStage(ctx, &state)
 	if err != nil {
@@ -71,7 +78,12 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 	if stage == "execution" || strings.HasPrefix(stage, "fix_") || stage == "archive" {
 		if err := e.advance(&state); err != nil {
 			if isStageArtifactGateError(err) {
-				_ = recordStageArtifactGateFailure(e.Repo, &state, err)
+				if recordErr := recordStageArtifactGateFailure(e.Repo, &state, err); recordErr != nil {
+					return recordErr
+				}
+				if saveErr := saveState(e.Repo, state); saveErr != nil {
+					return saveErr
+				}
 				return err
 			}
 			return e.failNodeState(state, err)
@@ -85,35 +97,7 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 
 // nodeStageDone checks stage-local output before advancing scheduler gates.
 func (e *Engine) nodeStageDone(state State) (bool, error) {
-	base := runDir(e.Repo, state.RunID)
-	switch {
-	case strings.HasPrefix(state.Stage, "review_"):
-		n := strings.TrimPrefix(state.Stage, "review_")
-		_, err := ReadReview(filepath.Join(base, "review-"+n+".json"))
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return err == nil, err
-	case strings.HasPrefix(state.Stage, "qa_"):
-		n := strings.TrimPrefix(state.Stage, "qa_")
-		qa, err := ReadQA(filepath.Join(base, "qa-"+n+".json"))
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		acceptance, err := readAcceptanceForState(e.Repo, state)
-		if err != nil {
-			return false, err
-		}
-		if err := ValidateQAAgainstAcceptance(qa, acceptance); err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		return true, nil
-	default:
-		return e.artifactDone(state)
-	}
+	return e.checkStageArtifactGate(state)
 }
 
 // nodeGate advances durable workflow state after a completed stage.
@@ -165,11 +149,14 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 	}
 	artifact := ParallelArtifact{Group: configName, Mode: group.Mode, Summary: configName + " fanin completed"}
 	for _, member := range group.Members {
-		result, err := readMemberArtifact(memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name))
+		path := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
+		result, err := readNormalizeValidateMemberArtifact(path, configName, member)
 		if err != nil {
 			return e.failNodeState(state, err)
 		}
-		result.Required = member.Required
+		if err := writeMemberArtifact(path, result); err != nil {
+			return e.failNodeState(state, err)
+		}
 		artifact.Members = append(artifact.Members, result)
 	}
 	if err := ValidateParallelArtifact(artifact); err != nil {

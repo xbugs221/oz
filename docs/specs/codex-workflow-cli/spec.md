@@ -571,6 +571,17 @@
 - **且** prompt 不得默认列出 `fix-1-summary.md`、`fix-2-summary.md`、`fix-3-summary.md`
 - **且** prompt 必须说明旧历史只在重复 finding、证据矛盾、最新 artifact 引用旧 finding 或升级原因不清时按需追溯
 
+#### 场景：execution 首轮提示词保留完整执行合同
+
+- **给定** 当前阶段为 `execution`
+- **当** 系统渲染默认 execution prompt
+- **则** prompt 必须调用 `oz-exec` 技能并指向当前 run 的 `state.json`
+- **且** prompt 必须要求读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`
+- **且** prompt 必须要求先运行 `acceptance.json` 中的 `required_tests[].command`
+- **且** prompt 必须禁止删除、弱化、跳过或改写创建阶段契约测试和 `acceptance.json`
+- **且** prompt 必须说明 execution 完成标准来自 `oz status <change> --json` 的 `tasks.total` 和 `tasks.done`
+- **且** prompt 不得混入 review/fix 当前轮 artifact，例如 `review-1.json`、`fix-1-summary.md` 或“只修复当前 review/QA artifact”
+
 #### 场景：review 续轮隐藏 JSON 示例
 
 - **给定** 当前阶段为 `review_2`
