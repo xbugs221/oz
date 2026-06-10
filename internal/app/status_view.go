@@ -68,6 +68,7 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 		view.Rows = append(view.Rows, row)
 		view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages))...)
 	}
+	applyStatusRunningMarker(&view, runningMarker)
 	return view
 }
 
@@ -93,6 +94,7 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 			view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages))...)
 		}
 	}
+	applyStatusRunningMarker(&view, runningMarker)
 	return view
 }
 
@@ -177,6 +179,9 @@ func statusStageReached(state State, stage string) bool {
 	if _, ok := state.StageTimings[stage]; ok {
 		return true
 	}
+	if _, ok := state.DAGNodes[stage]; ok {
+		return true
+	}
 	return false
 }
 
@@ -206,15 +211,12 @@ func statusRoleSessionID(state State, role string) string {
 func statusStageMarker(state State, stages []string) string {
 	var marker strings.Builder
 	for _, stage := range stages {
-		if state.Stages[stage] == "completed" {
+		switch statusStageProgress(state, stage) {
+		case "completed":
 			marker.WriteString("✓")
-			continue
-		}
-		if state.Stage == stage && state.Status == statusRunning {
+		case statusRunning:
 			marker.WriteString("→")
-			continue
-		}
-		if state.Stage == stage && state.Status != "" && state.Status != statusRunning && state.Status != statusDone {
+		case statusFailed:
 			marker.WriteString("x")
 		}
 	}
@@ -222,6 +224,44 @@ func statusStageMarker(state State, stages []string) string {
 		return marker.String()
 	}
 	return "-"
+}
+
+// statusStageProgress merges scheduler, DAG, and timing evidence for one compact stage marker.
+func statusStageProgress(state State, stage string) string {
+	if state.Stages[stage] == "completed" {
+		return "completed"
+	}
+	if state.Stage == stage && state.Status == statusRunning {
+		return statusRunning
+	}
+	if state.Stage == stage && state.Status != "" && state.Status != statusRunning && state.Status != statusDone {
+		return statusFailed
+	}
+	if node, ok := state.DAGNodes[stage]; ok {
+		if statusDAGNodeSucceeded(node.Status) {
+			return "completed"
+		}
+		switch node.Status {
+		case statusRunning:
+			return statusRunning
+		case statusFailed, "error":
+			return statusFailed
+		}
+	}
+	if timing, ok := state.StageTimings[stage]; ok && timing.StartedAt != "" && timing.FinishedAt != "" {
+		return "completed"
+	}
+	return ""
+}
+
+// applyStatusRunningMarker replaces every running marker in status/watch rows.
+func applyStatusRunningMarker(view *statusView, runningMarker string) {
+	if runningMarker == "" || runningMarker == "→" {
+		return
+	}
+	for i := range view.Rows {
+		view.Rows[i].Marker = strings.ReplaceAll(view.Rows[i].Marker, "→", runningMarker)
+	}
 }
 
 // statusPlanningContextCompleted treats execution preflight context fan-in as the completed planning marker.
