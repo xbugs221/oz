@@ -21,6 +21,11 @@ type CleanResult struct {
 	CleanedAgentRecords int
 }
 
+// CleanOptions controls optional cleanup scopes outside the current wo state tree.
+type CleanOptions struct {
+	CleanAgentSessions bool
+}
+
 // cleanableRunStatuses defines run statuses that wo clean considers garbage.
 var cleanableRunStatuses = map[string]bool{
 	statusFailed:            true,
@@ -40,6 +45,11 @@ var cleanableBatchStatuses = map[string]bool{
 // CleanRuntimeState scans runs and batches for the given repository and removes
 // failed, interrupted, blocked, aborted, and corrupted state, respecting active locks.
 func CleanRuntimeState(repo string) (CleanResult, error) {
+	return CleanRuntimeStateWithOptions(repo, CleanOptions{})
+}
+
+// CleanRuntimeStateWithOptions scans runtime state and optionally cleans external agent records.
+func CleanRuntimeStateWithOptions(repo string, options CleanOptions) (CleanResult, error) {
 	var result CleanResult
 	cleanedRunIDs := map[string]bool{}
 	cleanableSessions := map[string]bool{}
@@ -213,7 +223,9 @@ func CleanRuntimeState(repo string) (CleanResult, error) {
 		result.CleanedBatches++
 	}
 
-	result.CleanedAgentRecords = cleanAgentSessionRecords(cleanableSessions, protectedSessions)
+	if options.CleanAgentSessions {
+		result.CleanedAgentRecords = cleanAgentSessionRecords(cleanableSessions, protectedSessions)
+	}
 	return result, nil
 }
 
@@ -460,6 +472,9 @@ func buildProtectedRunIDs(repo string) map[string]bool {
 // loadCleanRunState tries to parse state.json from a run directory. Returns error
 // if the file is missing or corrupt.
 func loadCleanRunState(repo, runID string) (State, error) {
+	if err := validateRunID(runID); err != nil {
+		return State{}, err
+	}
 	data, err := os.ReadFile(filepath.Join(runDir(repo, runID), "state.json"))
 	if err != nil {
 		return State{}, err
@@ -467,6 +482,12 @@ func loadCleanRunState(repo, runID string) (State, error) {
 	var state State
 	if err := json.Unmarshal(data, &state); err != nil {
 		return State{}, err
+	}
+	if err := validateRunID(state.RunID); err != nil {
+		return State{}, err
+	}
+	if state.RunID != runID {
+		return State{}, fmt.Errorf("state run_id %q does not match requested run %q", state.RunID, runID)
 	}
 	return state, nil
 }
@@ -538,9 +559,27 @@ func joinLines(lines []string) string {
 	return result
 }
 
+// parseCleanOptions validates wo clean flags and returns the requested cleanup scope.
+func parseCleanOptions(args []string) (CleanOptions, error) {
+	var options CleanOptions
+	for _, arg := range args {
+		switch arg {
+		case "--agent-sessions":
+			options.CleanAgentSessions = true
+		default:
+			return CleanOptions{}, fmt.Errorf("用法：wo clean [--agent-sessions]")
+		}
+	}
+	return options, nil
+}
+
 // runClean executes the wo clean command and writes human-readable output.
-func runClean(stdout io.Writer, repo string) error {
-	result, err := CleanRuntimeState(repo)
+func runClean(stdout io.Writer, repo string, args ...string) error {
+	options, err := parseCleanOptions(args)
+	if err != nil {
+		return err
+	}
+	result, err := CleanRuntimeStateWithOptions(repo, options)
 	if err != nil {
 		return err
 	}

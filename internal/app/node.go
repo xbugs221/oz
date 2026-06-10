@@ -138,7 +138,10 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	iteration := nodeIteration(args, stage)
+	iteration, err := nodeIteration(args, stage)
+	if err != nil {
+		return e.failNodeState(state, err)
+	}
 	if state.Status != statusRunning || state.Stage != stage {
 		return writeNodeResult(stdout, nodeResult{Status: "skipped", RunID: state.RunID, Stage: stage, Group: groupName})
 	}
@@ -175,7 +178,12 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 // failNodeState records node failures in durable run state.
 func (e *Engine) failNodeState(state State, err error) error {
 	state = failedState(state, err)
-	_ = saveState(e.Repo, state)
+	_ = mergeState(e.Repo, state.RunID, func(latest *State) {
+		latest.Status = state.Status
+		if latest.Error == "" {
+			latest.Error = state.Error
+		}
+	})
 	return err
 }
 

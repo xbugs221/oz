@@ -1,0 +1,516 @@
+// Package app validates durable state observability for parallel subagents.
+package app
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+// TestParallelSubagentSessionsAreMergedWithoutDroppingPeers proves sibling subagent sessions survive concurrent saves.
+func TestParallelSubagentSessionsAreMergedWithoutDroppingPeers(t *testing.T) {
+	repo := gitRepo(t)
+	workflow, members := sessionStateWorkflow()
+	state := State{
+		RunID:      "run-session-merge",
+		ChangeName: "10-合并并行subagent会话状态并修正status观测",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      "execution",
+		Engine:     "go-dag",
+		Sessions: map[string]string{
+			sessionStateKey("codex", "executor"): "executor-session",
+		},
+		Stages:   map[string]string{},
+		Paths:    map[string]string{},
+		Workflow: workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := NewEngine(repo, sessionStateRegistry(&sessionStateRunner{}))
+	errs := make(chan error, len(members))
+	var wg sync.WaitGroup
+	for _, member := range members {
+		member := member
+		staleState := cloneSessionState(state)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var out strings.Builder
+			args := []string{"--group", "implementation_context", "--member", member.Name, "--stage", "execution", "--json"}
+			errs <- engine.nodeRunSubagent(context.Background(), staleState, args, &out)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	finalState, err := loadState(repo, state.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSessionStateSnapshot(t, "final-state.json", finalState)
+	if got := finalState.Sessions[sessionStateKey("codex", "executor")]; got != "executor-session" {
+		t.Fatalf("executor session = %q, want executor-session; sessions=%#v", got, finalState.Sessions)
+	}
+	for _, member := range members {
+		key := sessionStateKey("pi", "subagent:implementation_context:"+member.Name+":0")
+		want := "session-" + memberArtifactFileName(member.Name)
+		if got := finalState.Sessions[key]; got != want {
+			t.Fatalf("subagent session %s = %q, want %q; all sessions=%#v", key, got, want, finalState.Sessions)
+		}
+		if !fileExists(memberArtifactPath(repo, state.RunID, "implementation_context", 0, member.Name)) {
+			t.Fatalf("member artifact missing for %s", member.Name)
+		}
+	}
+
+	view := buildStatusView(repo, finalState, "w1", "→")
+	for _, member := range members {
+		row := sessionStateStatusRowByFullName(t, view, member.Name)
+		want := "session-" + memberArtifactFileName(member.Name)
+		if row.SessionID != want || row.Marker != "✓" {
+			t.Fatalf("status row for %s = session:%q marker:%q, want session:%q marker:✓", member.Name, row.SessionID, row.Marker, want)
+		}
+	}
+}
+
+// TestRunningSubagentSessionIsPersistedBeforeArtifactCompletion proves session started events are durable before completion.
+func TestRunningSubagentSessionIsPersistedBeforeArtifactCompletion(t *testing.T) {
+	repo := gitRepo(t)
+	workflow, members := sessionStateWorkflow()
+	member := members[0]
+	state := State{
+		RunID:      "run-session-started",
+		ChangeName: "10-合并并行subagent会话状态并修正status观测",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      "execution",
+		Engine:     "go-dag",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+		Paths:      map[string]string{},
+		Workflow:   workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := newBlockingSessionStateRunner()
+	defer runner.releaseOnce()
+	engine := NewEngine(repo, sessionStateRegistry(runner))
+	var progress strings.Builder
+	engine.Output = &progress
+	done := make(chan error, 1)
+	go func() {
+		var out strings.Builder
+		args := []string{"--group", "implementation_context", "--member", member.Name, "--stage", "execution", "--json"}
+		done <- engine.nodeRunSubagent(context.Background(), state, args, &out)
+	}()
+
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("subagent runner did not reach session started point")
+	}
+
+	runningState, err := loadState(repo, state.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSessionStateSnapshot(t, "running-state.json", runningState)
+	key := sessionStateKey("pi", "subagent:implementation_context:"+member.Name+":0")
+	want := "session-" + memberArtifactFileName(member.Name)
+	if got := runningState.Sessions[key]; got != want {
+		t.Fatalf("running subagent session before artifact completion = %q, want %q; sessions=%#v", got, want, runningState.Sessions)
+	}
+	view := buildStatusView(repo, runningState, "w1", "→")
+	subagentRow := sessionStateStatusRowByFullName(t, view, member.Name)
+	if subagentRow.SessionID != want {
+		t.Fatalf("running subagent row session = %q, want %q; row=%#v", subagentRow.SessionID, want, subagentRow)
+	}
+	parentRow := sessionStateStatusRowByStage(t, view, "execution")
+	if parentRow.SessionID == want {
+		t.Fatalf("parent execution row was polluted by helper session: %#v", parentRow)
+	}
+	if strings.Contains(progress.String(), "- 写 "+want+" →") {
+		t.Fatalf("parent progress line was polluted by helper session:\n%s", progress.String())
+	}
+
+	runner.releaseOnce()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("subagent runner did not finish after release")
+	}
+}
+
+// TestGoDAGNodeStatesAreMergedWithoutDroppingPeers proves sibling DAG node progress survives concurrent records.
+func TestGoDAGNodeStatesAreMergedWithoutDroppingPeers(t *testing.T) {
+	repo := gitRepo(t)
+	workflow, members := sessionStateWorkflow()
+	state := State{
+		RunID:      "run-dag-node-merge",
+		ChangeName: "10-合并并行subagent会话状态并修正status观测",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      "execution",
+		Engine:     "go-dag",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+		Paths:      map[string]string{},
+		Workflow:   workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := NewEngine(repo, testRegistry(fakeRunner{}))
+	var finalState State
+	var nodes map[string]DAGNodeState
+	for round := 0; round < 20; round++ {
+		nodes = sessionStateDAGNodeStates(repo, round)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for nodeID, nodeState := range nodes {
+			nodeID, nodeState := nodeID, nodeState
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				engine.recordGoDAGNode(state.RunID, nodeID, nodeState)
+			}()
+		}
+		close(start)
+		wg.Wait()
+		var err error
+		finalState, err = loadState(repo, state.RunID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for nodeID, want := range nodes {
+			got, ok := finalState.DAGNodes[nodeID]
+			if !ok {
+				t.Fatalf("round %d DAG node %s missing; all nodes=%#v", round, nodeID, finalState.DAGNodes)
+			}
+			if got.Status != want.Status || got.StartedAt != want.StartedAt || got.FinishedAt != want.FinishedAt || got.Artifact != want.Artifact || got.Error != want.Error {
+				t.Fatalf("round %d DAG node %s = %#v, want %#v", round, nodeID, got, want)
+			}
+		}
+	}
+	writeSessionStateSnapshot(t, "dag-node-state.json", finalState)
+
+	view := buildStatusView(repo, finalState, "w1", "→")
+	for _, member := range members {
+		row := sessionStateStatusRowByFullName(t, view, member.Name)
+		if row.Marker == "-" {
+			t.Fatalf("status view did not observe DAG node for %s: %#v", member.Name, row)
+		}
+	}
+}
+
+// TestMergeStateRejectsMismatchedRunID proves merge writes only to the run requested by the caller.
+func TestMergeStateRejectsMismatchedRunID(t *testing.T) {
+	repo := gitRepo(t)
+	state := State{
+		RunID:      "run-merge-target",
+		ChangeName: "10-合并并行subagent会话状态并修正status观测",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+		Paths:      map[string]string{},
+		Workflow:   DefaultWorkflowConfig(),
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(runDir(repo, state.RunID), "state.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tampered State
+	if err := json.Unmarshal(data, &tampered); err != nil {
+		t.Fatal(err)
+	}
+	tampered.RunID = "../escape"
+	data, err = json.MarshalIndent(tampered, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = mergeState(repo, state.RunID, func(latest *State) {
+		latest.Sessions["pi:subagent:implementation_context:代码库侦察员:0"] = "session-should-not-write"
+	})
+	if err == nil {
+		t.Fatal("mergeState accepted mismatched state run_id")
+	}
+	if fileExists(filepath.Join(runDir(repo, "../escape"), "state.json")) {
+		t.Fatal("mergeState wrote to tampered run_id path")
+	}
+}
+
+// TestLoadStateRejectsMismatchedRunID proves all state readers reject polluted run identifiers.
+func TestLoadStateRejectsMismatchedRunID(t *testing.T) {
+	repo := gitRepo(t)
+	state := State{
+		RunID:      "run-load-target",
+		ChangeName: "10-合并并行subagent会话状态并修正status观测",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+		Paths:      map[string]string{},
+		Workflow:   DefaultWorkflowConfig(),
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(runDir(repo, state.RunID), "state.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tampered State
+	if err := json.Unmarshal(data, &tampered); err != nil {
+		t.Fatal(err)
+	}
+	tampered.RunID = "../escape"
+	data, err = json.MarshalIndent(tampered, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadState(repo, state.RunID); err == nil {
+		t.Fatal("loadState accepted mismatched state run_id")
+	}
+	if fileExists(filepath.Join(runDir(repo, "../escape"), "parallel-implementation-context.json")) {
+		t.Fatal("polluted run_id created an escaped artifact path")
+	}
+}
+
+// sessionStateDAGNodeStates returns a pressure set of sibling node states for one round.
+func sessionStateDAGNodeStates(repo string, round int) map[string]DAGNodeState {
+	nodes := map[string]DAGNodeState{
+		"before_execution_1": {Status: "success", StartedAt: fmt.Sprintf("2026-06-10T01:%02d:00Z", round), FinishedAt: fmt.Sprintf("2026-06-10T01:%02d:30Z", round), Artifact: filepath.Join(repo, fmt.Sprintf("artifact-%d-1.json", round))},
+		"before_execution_2": {Status: "running", StartedAt: fmt.Sprintf("2026-06-10T01:%02d:01Z", round)},
+		"before_execution_3": {Status: "failed", StartedAt: fmt.Sprintf("2026-06-10T01:%02d:02Z", round), FinishedAt: fmt.Sprintf("2026-06-10T01:%02d:32Z", round), Error: fmt.Sprintf("boom-%d", round)},
+	}
+	for i := 4; i <= 25; i++ {
+		nodeID := fmt.Sprintf("pressure_%02d_%02d", round, i)
+		nodes[nodeID] = DAGNodeState{Status: "success", StartedAt: fmt.Sprintf("2026-06-10T01:%02d:%02dZ", round, i), FinishedAt: fmt.Sprintf("2026-06-10T01:%02d:%02dZ", round, i+20)}
+	}
+	return nodes
+}
+
+type sessionStateTool struct {
+	runner AgentRunner
+}
+
+// Name returns the fake pi backend name used by member config.
+func (t sessionStateTool) Name() string { return "pi" }
+
+// Resolve keeps the contract test independent from real pi binaries.
+func (t sessionStateTool) Resolve() error { return nil }
+
+// PlanningCommand is unused because the contract only exercises sealed subagent execution.
+func (t sessionStateTool) PlanningCommand(context.Context, string, string, io.Reader, StageOptions) (*exec.Cmd, error) {
+	return nil, os.ErrInvalid
+}
+
+// NewRunner returns the runner that writes member artifacts and session IDs.
+func (t sessionStateTool) NewRunner() AgentRunner { return t.runner }
+
+type sessionStateRunner struct{}
+
+// Run writes the member artifact requested by SUBAGENT_OUTPUT and returns a member-specific session.
+func (r *sessionStateRunner) Run(_ context.Context, _ string, prompt, _ string, _ StageOptions) (string, error) {
+	return writeSessionStateMemberArtifact(prompt)
+}
+
+type blockingSessionStateRunner struct {
+	progress io.Writer
+	started  chan struct{}
+	release  chan struct{}
+	once     sync.Once
+}
+
+// newBlockingSessionStateRunner returns a runner that pauses after emitting session started.
+func newBlockingSessionStateRunner() *blockingSessionStateRunner {
+	return &blockingSessionStateRunner{started: make(chan struct{}), release: make(chan struct{})}
+}
+
+// SetProgress records the progress writer supplied by the subagent execution path.
+func (r *blockingSessionStateRunner) SetProgress(writer io.Writer) {
+	r.progress = writer
+}
+
+// Run emits session started before writing the artifact, then waits for the test to release it.
+func (r *blockingSessionStateRunner) Run(_ context.Context, _ string, prompt, _ string, _ StageOptions) (string, error) {
+	name := sessionStatePromptValue(prompt, "SUBAGENT_NAME")
+	sessionID := "session-" + memberArtifactFileName(name)
+	if r.progress != nil {
+		_, _ = r.progress.Write([]byte("agent session started: tool=pi session=" + sessionID + "\n"))
+	}
+	close(r.started)
+	<-r.release
+	return writeSessionStateMemberArtifact(prompt)
+}
+
+// releaseOnce unblocks the runner at most once.
+func (r *blockingSessionStateRunner) releaseOnce() {
+	r.once.Do(func() { close(r.release) })
+}
+
+// sessionStateRegistry returns a registry containing only the fake pi backend used by members.
+func sessionStateRegistry(runner AgentRunner) *AgentRegistry {
+	registry := &AgentRegistry{}
+	registry.Register(sessionStateTool{runner: runner})
+	return registry
+}
+
+// sessionStateWorkflow returns a minimal workflow with multiple implementation_context members.
+func sessionStateWorkflow() (WorkflowConfig, []ParallelMemberConfig) {
+	workflow := DefaultWorkflowConfig()
+	workflow.MaxReviewIterations = 0
+	members := []ParallelMemberConfig{
+		{Name: "代码库侦察员", Purpose: "搜索现有模块和测试入口", Stage: "before_execution", Tool: "pi"},
+		{Name: "外部资料研究员", Purpose: "查询外部资料和版本约束", Stage: "before_execution", Tool: "pi"},
+		{Name: "状态观测员", Purpose: "核对 state.json 与 status 展示", Stage: "before_execution", Tool: "pi"},
+	}
+	workflow.Parallel.Enabled = true
+	workflow.Parallel.Groups = map[string]ParallelGroupConfig{
+		"implementation_context": {Mode: "advisory", Members: members},
+	}
+	return workflow, members
+}
+
+// cloneSessionState copies mutable maps so each goroutine simulates an independently loaded stale state.
+func cloneSessionState(state State) State {
+	next := state
+	next.Sessions = map[string]string{}
+	for key, value := range state.Sessions {
+		next.Sessions[key] = value
+	}
+	next.Stages = map[string]string{}
+	for key, value := range state.Stages {
+		next.Stages[key] = value
+	}
+	next.Paths = map[string]string{}
+	for key, value := range state.Paths {
+		next.Paths[key] = value
+	}
+	next.DAGNodes = map[string]DAGNodeState{}
+	for key, value := range state.DAGNodes {
+		next.DAGNodes[key] = value
+	}
+	return next
+}
+
+// writeSessionStateMemberArtifact writes the JSON artifact expected by the subagent schema.
+func writeSessionStateMemberArtifact(prompt string) (string, error) {
+	output := sessionStatePromptValue(prompt, "SUBAGENT_OUTPUT")
+	name := sessionStatePromptValue(prompt, "SUBAGENT_NAME")
+	purpose := sessionStatePromptValue(prompt, "SUBAGENT_PURPOSE")
+	if output == "" || name == "" {
+		return "", fmt.Errorf("missing subagent prompt fields: output=%q name=%q", output, name)
+	}
+	result := ParallelMemberResult{
+		Name:     name,
+		Purpose:  purpose,
+		Status:   "success",
+		Summary:  "合同测试写入真实 member artifact",
+		Evidence: []string{"state merge contract"},
+	}
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(output, append(data, '\n'), 0o644); err != nil {
+		return "", err
+	}
+	return "session-" + memberArtifactFileName(name), nil
+}
+
+// sessionStatePromptValue extracts one KEY=value field from the generated subagent prompt.
+func sessionStatePromptValue(prompt string, key string) string {
+	prefix := key + "="
+	for _, line := range strings.Split(prompt, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
+}
+
+// sessionStateStatusRowByFullName returns the status row for one configured member.
+func sessionStateStatusRowByFullName(t *testing.T, view statusView, fullName string) statusViewRow {
+	t.Helper()
+	for _, row := range view.Rows {
+		if row.FullName == fullName {
+			return row
+		}
+	}
+	t.Fatalf("missing status row for %s in %#v", fullName, view.Rows)
+	return statusViewRow{}
+}
+
+// sessionStateStatusRowByStage returns the parent status row for one stage.
+func sessionStateStatusRowByStage(t *testing.T, view statusView, stage string) statusViewRow {
+	t.Helper()
+	for _, row := range view.Rows {
+		if row.Kind == "stage" && row.Stage == stage {
+			return row
+		}
+	}
+	t.Fatalf("missing stage row for %s in %#v", stage, view.Rows)
+	return statusViewRow{}
+}
+
+// writeSessionStateSnapshot stores a state snapshot under test-results for human review.
+func writeSessionStateSnapshot(t *testing.T, name string, state State) {
+	t.Helper()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(cwd, "..", "..", "test-results", "10-parallel-subagent-session-state")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

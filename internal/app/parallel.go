@@ -77,6 +77,9 @@ func ValidateParallelArtifact(artifact ParallelArtifact) error {
 			if _, ok := normalizeFindingSeverity(finding.Severity); !ok {
 				return fmt.Errorf("parallel artifact member %d finding %d 的 severity 无效：%q", i, j, finding.Severity)
 			}
+			if _, ok := normalizeFindingScope(finding.Scope); !ok {
+				return fmt.Errorf("parallel artifact member %d finding %d 的 scope 无效：%q", i, j, finding.Scope)
+			}
 		}
 	}
 	return nil
@@ -193,8 +196,7 @@ func ValidateParallelArtifactForGroup(artifact ParallelArtifact, group string, c
 func artifactHasSevereFinding(artifact ParallelArtifact) bool {
 	for _, member := range artifact.Members {
 		for _, finding := range member.Findings {
-			severity, ok := normalizeFindingSeverity(finding.Severity)
-			if ok && (severity == "blocker" || severity == "major") {
+			if isCurrentChangeFindingHardBlocking(finding) {
 				return true
 			}
 		}

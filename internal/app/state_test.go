@@ -60,6 +60,16 @@ func (fakeRunner) Run(_ context.Context, repo, prompt, threadID string, options 
 	}
 }
 
+type countingRunner struct {
+	count int
+}
+
+// Run records whether a guarded DAG node reached the agent backend.
+func (r *countingRunner) Run(context.Context, string, string, string, StageOptions) (string, error) {
+	r.count++
+	return "counting-session", nil
+}
+
 func subagentOutputFromPrompt(prompt string) string {
 	return promptValue(prompt, "SUBAGENT_OUTPUT")
 }
@@ -150,7 +160,10 @@ func (r *scenarioRunner) Run(_ context.Context, repo, prompt, threadID string, o
 	case stage == "execution":
 		return "executor-thread", os.WriteFile(filepath.Join(repo, "docs", "changes", "demo", "task.md"), []byte("- [x] task\n"), 0o644)
 	case strings.HasPrefix(stage, "review_"):
-		n := stageIteration(stage)
+		n, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
 		decision := "clean"
 		if n-1 < len(r.decisions) {
 			decision = r.decisions[n-1]
@@ -161,14 +174,21 @@ func (r *scenarioRunner) Run(_ context.Context, repo, prompt, threadID string, o
 		}
 		return "reviewer-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "review-"+strconv.Itoa(n)+".json"), []byte(body), 0o644)
 	case strings.HasPrefix(stage, "qa_"):
-		n := stageIteration(stage)
+		n, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
 		body := cleanQAJSON()
 		if n-1 < len(r.qaDecisions) && r.qaDecisions[n-1] == "needs_fix" {
 			body = fixQAJSON()
 		}
 		return "qa-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "qa-"+strconv.Itoa(n)+".json"), []byte(body), 0o644)
 	case strings.HasPrefix(stage, "fix_"):
-		n := strconv.Itoa(stageIteration(stage))
+		iteration, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
+		n := strconv.Itoa(iteration)
 		return threadID, os.WriteFile(filepath.Join(runDir(repo, runID), "fix-"+n+"-summary.md"), []byte("done\n"), 0o644)
 	case stage == "archive":
 		if err := os.MkdirAll(filepath.Join(repo, "docs", "changes", "archive", "2026-05-05-demo"), 0o755); err != nil {
@@ -198,7 +218,11 @@ func (r *qaArtifactRepairRunner) Run(ctx context.Context, repo, prompt, threadID
 	r.fast = append(r.fast, options.Fast)
 	r.qaAttempts++
 	runID := currentRunID(repo)
-	n := strconv.Itoa(stageIteration(stage))
+	iteration, err := stageIteration(stage)
+	if err != nil {
+		return "", err
+	}
+	n := strconv.Itoa(iteration)
 	body := cleanQAJSON()
 	if r.qaAttempts == 1 {
 		body = cleanQAWithUnknownAcceptanceIDJSON()
@@ -249,7 +273,11 @@ func (r *sessionCaptureRunner) Run(_ context.Context, repo, prompt, sessionID st
 	case stage == "execution":
 		return options.Tool + "-executor-session", os.WriteFile(filepath.Join(repo, "docs", "changes", "demo", "task.md"), []byte("- [x] task\n"), 0o644)
 	case strings.HasPrefix(stage, "fix_"):
-		n := strconv.Itoa(stageIteration(stage))
+		iteration, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
+		n := strconv.Itoa(iteration)
 		return options.Tool + "-executor-session", os.WriteFile(filepath.Join(runDir(repo, runID), "fix-"+n+"-summary.md"), []byte("done\n"), 0o644)
 	case stage == "archive":
 		if err := os.MkdirAll(filepath.Join(repo, "docs", "changes", "archive", "2026-05-05-demo"), 0o755); err != nil {
@@ -288,7 +316,10 @@ func (r *validationRunner) Run(_ context.Context, repo, prompt, threadID string,
 		}
 		return "executor-thread", nil
 	case strings.HasPrefix(stage, "review_"):
-		n := stageIteration(stage)
+		n, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
 		decision := "clean"
 		if n-1 < len(r.decisions) {
 			decision = r.decisions[n-1]
@@ -299,10 +330,17 @@ func (r *validationRunner) Run(_ context.Context, repo, prompt, threadID string,
 		}
 		return "reviewer-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "review-"+strconv.Itoa(n)+".json"), []byte(body), 0o644)
 	case strings.HasPrefix(stage, "qa_"):
-		n := stageIteration(stage)
+		n, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
 		return "qa-thread", os.WriteFile(filepath.Join(runDir(repo, runID), "qa-"+strconv.Itoa(n)+".json"), []byte(cleanQAJSON()), 0o644)
 	case strings.HasPrefix(stage, "fix_"):
-		n := strconv.Itoa(stageIteration(stage))
+		iteration, err := stageIteration(stage)
+		if err != nil {
+			return "", err
+		}
+		n := strconv.Itoa(iteration)
 		if err := os.WriteFile(filepath.Join(runDir(repo, runID), "fix-"+n+"-summary.md"), []byte("done\n"), 0o644); err != nil {
 			return "", err
 		}
@@ -539,7 +577,7 @@ func TestValidationGateRerunsExecutionBeforeReview(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 2\n      commands:\n        - test -f validation-ok\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 2\n      commands:\n        - executable: test\n          args: ['-f', 'validation-ok']\n")
 	runner := &validationRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -569,7 +607,7 @@ func TestValidationGateBlocksAtAttemptLimit(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 1\n      commands:\n        - test -f never-created\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 0\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 1\n      commands:\n        - executable: test\n          args: ['-f', 'never-created']\n")
 	runner := &scenarioRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -599,7 +637,7 @@ func TestValidationGateRerunsFixWithoutConsumingReview(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "validation-ok"), []byte("ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 2\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 2\n      commands:\n        - test -f validation-ok\n")
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    max_review_iterations: 2\n    parallel:\n      enabled: false\n    validation:\n      max_attempts_per_stage: 2\n      commands:\n        - executable: test\n          args: ['-f', 'validation-ok']\n")
 	runner := &validationRunner{decisions: []string{"needs_fix", "clean"}}
 	engine := NewEngine(repo, testRegistry(runner))
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -734,6 +772,51 @@ func TestGoDAGAdvanceArtifactGateFailurePersistsRetry(t *testing.T) {
 	}
 }
 
+// TestGoDAGNodeSkipsWhenRunNotActiveOrStageMismatched verifies stale nodes cannot execute.
+func TestGoDAGNodeSkipsWhenRunNotActiveOrStageMismatched(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "demo")
+	mustPrompts(t, repo)
+	runID := "stale-node-run"
+	mustSnapshotPrompts(t, repo, runID)
+	state := State{
+		RunID:      runID,
+		ChangeName: "demo",
+		Sealed:     true,
+		Status:     statusDone,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{},
+		Workflow:   DefaultWorkflowConfig(),
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &countingRunner{}
+	engine := NewEngine(repo, testRegistry(runner))
+	if err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"}); err != nil {
+		t.Fatal(err)
+	}
+	state.Status = statusRunning
+	state.Stage = "review_1"
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"}); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count != 0 {
+		t.Fatalf("stale DAG node executed %d time(s), want skipped", runner.count)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := persisted.DAGNodes["execution"]; ok {
+		t.Fatalf("stale DAG node recorded progress: %#v", persisted.DAGNodes["execution"])
+	}
+}
+
 // TestLegacyRunLoopDoesNotPrecheckMissingNewStageArtifact verifies first turns are not false retries.
 func TestLegacyRunLoopDoesNotPrecheckMissingNewStageArtifact(t *testing.T) {
 	repo := gitRepo(t)
@@ -838,6 +921,25 @@ func TestEngineBlocksAfterLastFix(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(runner.stages, ","), "archive") {
 		t.Fatalf("stages = %v, archive should not run", runner.stages)
+	}
+}
+
+// TestInvalidIteratedStageReturnsErrors verifies corrupt stage names never become round zero.
+func TestInvalidIteratedStageReturnsErrors(t *testing.T) {
+	for _, stage := range []string{"review_x", "review_0", "qa_bad", "qa_", "fix_-1"} {
+		if iteration, err := stageIteration(stage); err == nil || iteration != 0 {
+			t.Fatalf("stageIteration(%q) = %d/%v, want explicit error", stage, iteration, err)
+		}
+	}
+
+	repo := gitRepo(t)
+	engine := NewEngine(repo, testRegistry(fakeRunner{}))
+	state := State{RunID: "invalid-stage-run", ChangeName: "demo", Status: statusRunning, Stage: "review_x", Workflow: DefaultWorkflowConfig()}
+	if done, err := engine.artifactDone(state); err == nil || done {
+		t.Fatalf("artifactDone invalid stage = %t/%v, want error", done, err)
+	}
+	if err := engine.advance(&state); err == nil {
+		t.Fatal("advance invalid stage succeeded, want error")
 	}
 }
 
@@ -1999,6 +2101,7 @@ func TestPromptForStageFallsBackToGlobalPrompt(t *testing.T) {
 // TestPlanningPromptReadsDiscussTemplate verifies interactive planning uses the README template name.
 func TestPlanningPromptReadsDiscussTemplate(t *testing.T) {
 	repo := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  prompts:\n    planning: \"stage={{.Stage}} max={{.MaxReviewIterations}}\\n\"\n")
 	got, options, err := planningPrompt(repo)
 	if err != nil {
@@ -2233,7 +2336,10 @@ func TestPromptContextExposesRoleSessionTurnState(t *testing.T) {
 		},
 	}
 
-	context := promptContext(repo, state)
+	context, err := promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if context.RoleSessionKey != "opencode:reviewer" || context.RoleSessionID != "review-session" {
 		t.Fatalf("role session = %q/%q, want opencode reviewer session", context.RoleSessionKey, context.RoleSessionID)
 	}
@@ -2242,7 +2348,10 @@ func TestPromptContextExposesRoleSessionTurnState(t *testing.T) {
 	}
 
 	state.Stage = "qa_2"
-	context = promptContext(repo, state)
+	context, err = promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if context.RoleSessionKey != "codex:qa" || context.RoleSessionID != "" {
 		t.Fatalf("qa role session = %q/%q, want isolated empty codex qa session", context.RoleSessionKey, context.RoleSessionID)
 	}
@@ -2323,7 +2432,10 @@ func TestBundledReviewPromptUsesLatestHistoryOnly(t *testing.T) {
 		Workflow:   DefaultWorkflowConfig(),
 		Stages:     map[string]string{},
 	}
-	context := promptContext(repo, state)
+	context, err := promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := renderPromptTemplate("wo-review", string(data), context)
 	if err != nil {
 		t.Fatal(err)

@@ -32,9 +32,11 @@ func (e *Engine) StartGoDAGJSON(ctx context.Context, changeName string, stdout i
 			latest = state
 		}
 		latest = failedState(latest, err)
-		_ = saveState(e.Repo, latest)
-		_ = writeFailedRunnerState(stdout, latest, err)
-		return err
+		saveErr := saveState(e.Repo, latest)
+		warnWorkflowWrite("save failed go-dag state", saveErr)
+		writeErr := writeFailedRunnerState(stdout, latest, err)
+		warnWorkflowWrite("write failed go-dag runner state", writeErr)
+		return errors.Join(err, saveErr, writeErr)
 	}
 	return nil
 }
@@ -64,6 +66,11 @@ func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
 		remainingDeps[edge.To]++
 	}
 	completed := map[string]bool{}
+	retries := map[string]int{}
+	maxRetries := state.Workflow.Validation.MaxAttemptsPerStage
+	if maxRetries < 1 {
+		maxRetries = 3
+	}
 	for len(completed) < len(nodes) {
 		var ready []WorkflowNode
 		for _, node := range spec.Nodes {
@@ -87,6 +94,10 @@ func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
 		close(results)
 		for result := range results {
 			if errors.Is(result.err, errGoDAGValidationRetry) {
+				retries[result.nodeID]++
+				if retries[result.nodeID] >= maxRetries {
+					return fmt.Errorf("go-dag node %s validation retry limit reached", result.nodeID)
+				}
 				continue
 			}
 			if result.err != nil {
@@ -112,7 +123,7 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	if err != nil {
 		return err
 	}
-	if state.Status != statusRunning && state.Stage != node.Stage {
+	if state.Status != statusRunning || state.Stage != node.Stage {
 		return nil
 	}
 	e.recordGoDAGNode(runID, node.ID, DAGNodeState{Status: "running", StartedAt: time.Now().UTC().Format(time.RFC3339Nano)})
@@ -171,19 +182,17 @@ func (e *Engine) goDAGShouldRetryNode(runID string, node WorkflowNode) bool {
 
 // recordGoDAGNode updates state.json with node-level progress for status/debugging.
 func (e *Engine) recordGoDAGNode(runID string, nodeID string, nodeState DAGNodeState) {
-	state, err := loadState(e.Repo, runID)
-	if err != nil {
-		return
-	}
-	if state.DAGNodes == nil {
-		state.DAGNodes = map[string]DAGNodeState{}
-	}
-	current := state.DAGNodes[nodeID]
-	if nodeState.StartedAt == "" {
-		nodeState.StartedAt = current.StartedAt
-	}
-	state.DAGNodes[nodeID] = nodeState
-	_ = saveState(e.Repo, state)
+	err := mergeState(e.Repo, runID, func(state *State) {
+		if state.DAGNodes == nil {
+			state.DAGNodes = map[string]DAGNodeState{}
+		}
+		current := state.DAGNodes[nodeID]
+		if nodeState.StartedAt == "" {
+			nodeState.StartedAt = current.StartedAt
+		}
+		state.DAGNodes[nodeID] = nodeState
+	})
+	warnWorkflowWrite("record go-dag node", err)
 }
 
 func goDAGNodeArgs(node WorkflowNode) []string {

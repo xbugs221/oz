@@ -1,0 +1,66 @@
+{
+  "summary": "验证 wo status/watch human 输出直接从提案列表开始，watch spinner 只标记 running 阶段，并修复窄终端长提案名刷新后的旧首行残留。",
+  "coverage": [
+    {
+      "spec": "需求：status/watch 直接展示提案列表 / 场景：默认 status 不再显示 batch 或 workflow 顶部行",
+      "tests": ["status-watch-proposal-list"],
+      "evidence": ["status-watch-output-log"],
+      "risk": "不覆盖 JSON 输出；JSON 明确保持既有协议。"
+    },
+    {
+      "spec": "需求：status/watch 直接展示提案列表 / 场景：watch 动画只标记 running 阶段",
+      "tests": ["status-watch-proposal-list"],
+      "evidence": ["status-watch-output-log"],
+      "risk": "创建阶段只验证 running 主阶段；执行阶段可增加 running 子代理细粒度回归。"
+    },
+    {
+      "spec": "需求：watch 在窄终端刷新不残留旧首行 / 场景：长中文提案名换行后连续刷新仍只显示当前帧",
+      "tests": ["watch-tty-clear-long-change"],
+      "evidence": ["watch-tty-capture-log"],
+      "risk": "依赖系统 script 命令提供伪 TTY；该依赖只用于测试。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "status-watch-proposal-list",
+      "source": "change_contract",
+      "path": "docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh",
+      "command": "bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh",
+      "purpose": "证明 status/watch human 输出以提案列表为顶层，并且 watch spinner 位于 running 阶段行。",
+      "assertions": [
+        "默认 status 第一行是 - <change-name>，不是 batch header、workflow header 或默认提示",
+        "默认 status 的 running 执行阶段仍显示静态 →",
+        "batch watch 和 single-run watch 都从 - <change-name> 开始",
+        "watch 的 spinner 出现在 执行阶段 marker 列，顶部不出现 spinner header"
+      ],
+      "expected_initial_failure": "当前实现仍输出 b1/w1 顶部行，并把 watch spinner 放在 header 或保留 running 行静态箭头。"
+    },
+    {
+      "id": "watch-tty-clear-long-change",
+      "source": "change_contract",
+      "path": "docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh",
+      "command": "bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh",
+      "purpose": "证明真实 TTY 下长中文提案名连续刷新后不会残留旧首行。",
+      "assertions": [
+        "伪 TTY 捕获的最终屏幕第一条业务行是 - <long-change-name>",
+        "最终屏幕不包含 b1、w1 或 spinner header 残留",
+        "最终屏幕仍包含 running 执行阶段的 spinner marker"
+      ],
+      "expected_initial_failure": "当前实现按逻辑行数清理旧帧，长中文提案名换行后可能留下旧 header；同时当前输出仍存在 header。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "status-watch-output-log",
+      "kind": "runtime_log",
+      "path": "test-results/9-status-watch-proposal-list/status-watch-proposal-list.log",
+      "purpose": "记录 status/watch 提案列表合同测试的命令输出和失败点。"
+    },
+    {
+      "id": "watch-tty-capture-log",
+      "kind": "runtime_log",
+      "path": "test-results/9-status-watch-proposal-list/watch-tty-clear-long-change.log",
+      "purpose": "记录伪 TTY watch 原始捕获和解析后的最终屏幕。"
+    }
+  ]
+}

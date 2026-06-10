@@ -14,6 +14,8 @@ import (
 	"strings"
 )
 
+var mergeSubagentSessionState = mergeState
+
 // nodeRunSubagent executes one configured read-only helper member with artifact schema retry.
 func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string, stdout io.Writer) error {
 	groupName, err := requireFlagValue(args, "--group")
@@ -28,7 +30,10 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	if err != nil {
 		return err
 	}
-	iteration := nodeIteration(args, stage)
+	iteration, err := nodeIteration(args, stage)
+	if err != nil {
+		return e.failNodeState(state, err)
+	}
 	if state.Status != statusRunning || state.Stage != stage {
 		return writeNodeResult(stdout, nodeResult{Status: "skipped", RunID: state.RunID, Stage: stage, Group: groupName, Member: memberName})
 	}
@@ -51,6 +56,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		return e.failNodeState(state, err)
 	}
 	prompt := subagentPrompt(groupName, member, artifactPath)
+	sessionKey := sessionStateKey(options.Tool, "subagent:"+configName+":"+member.Name+":"+strconv.Itoa(iteration))
 
 	var sessionID string
 	var result ParallelMemberResult
@@ -60,11 +66,15 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if err != nil {
 			return err
 		}
+		runner := tool.NewRunner()
+		if runner, ok := runner.(progressSetter); ok {
+			runner.SetProgress(&subagentProgressWriter{engine: e, state: &state, sessionKey: sessionKey})
+		}
 		if attempt > 1 {
 			retryPrompt := artifactRetryPrompt(groupName, member, artifactPath, schemaErr)
-			sessionID, err = tool.NewRunner().Run(ctx, e.Repo, retryPrompt, sessionID, options)
+			sessionID, err = runner.Run(ctx, e.Repo, retryPrompt, sessionID, options)
 		} else {
-			sessionID, err = tool.NewRunner().Run(ctx, e.Repo, prompt, "", options)
+			sessionID, err = runner.Run(ctx, e.Repo, prompt, "", options)
 		}
 		if boundaryErr := e.checkSubagentReadOnlyBoundary(state, member, attempt, artifactPath, attemptHead, attemptDiff); boundaryErr != nil {
 			return boundaryErr
@@ -91,12 +101,17 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	if beforeHead != afterHead || beforeDiff != afterDiff {
 		return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到源码或 worktree 变化"))
 	}
-	if state.Sessions == nil {
-		state.Sessions = map[string]string{}
-	}
 	if sessionID != "" {
-		state.Sessions[sessionStateKey(options.Tool, "subagent:"+configName+":"+member.Name+":"+strconv.Itoa(iteration))] = sessionID
-		_ = saveState(e.Repo, state)
+		if state.Sessions == nil {
+			state.Sessions = map[string]string{}
+		}
+		state.Sessions[sessionKey] = sessionID
+		if err := mergeSubagentSessionState(e.Repo, state.RunID, func(latest *State) {
+			latest.Sessions[sessionKey] = sessionID
+		}); err != nil {
+			warnWorkflowWrite("record subagent session", err)
+			return e.failNodeState(state, fmt.Errorf("record subagent session: %w", err))
+		}
 	}
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage, Group: groupName, Member: memberName, Artifact: artifactPath})
 }
@@ -151,10 +166,13 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 	}, "\n") + "\n"
 }
 
-func nodeIteration(args []string, stage string) int {
+func nodeIteration(args []string, stage string) (int, error) {
 	if value, err := optionalFlagValue(args, "--iteration"); err == nil && value != "" {
-		n, _ := strconv.Atoi(value)
-		return n
+		n, parseErr := strconv.Atoi(value)
+		if parseErr != nil || n < 0 {
+			return 0, fmt.Errorf("invalid --iteration %q", value)
+		}
+		return n, nil
 	}
 	return stageIteration(stage)
 }

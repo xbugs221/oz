@@ -66,27 +66,33 @@ wo:
       planning:
         cli: codex
         reasoning: xhigh
+        permissions: default
       execution:
         cli: codex
         reasoning: low
+        permissions: default
       fix:
         cli: codex
         reasoning: low
+        permissions: default
       review:
         cli: codex
         reasoning: high
+        permissions: default
       qa:
         cli: codex
         reasoning: high
+        permissions: default
       archive:
         cli: codex
         reasoning: low
+        permissions: default
     validation:
       max_attempts_per_stage: 3
       commands: []
 ```
 
-配置按 `内置默认 -> ~/wo.yaml -> 仓库 wo.yaml -> run 快照` 合并；`validation.commands` 为空时不运行门禁，填入项目真实命令后，`execution` 和 `fix` 阶段完成时会先执行这些命令。
+配置按 `内置默认 -> ~/wo.yaml -> 仓库 wo.yaml -> run 快照` 合并；`validation.commands` 为空时不运行门禁，填入项目真实命令时使用 `executable` 和 `args` 描述 argv，`execution` 和 `fix` 阶段完成后会直接执行该程序，不经过 shell。
 
 ## 批注
 

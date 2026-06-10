@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -78,11 +77,17 @@ func clearStageValidationFailure(state *State) {
 
 type stageArtifactGateError struct {
 	Reason string
+	Cause  error
 }
 
 // Error returns the deterministic artifact gate failure reason.
 func (e stageArtifactGateError) Error() string {
 	return e.Reason
+}
+
+// Unwrap exposes the original artifact validation error for errors.Is/As callers.
+func (e stageArtifactGateError) Unwrap() error {
+	return e.Cause
 }
 
 // newStageArtifactGateError marks current-stage artifact failures as retriable.
@@ -94,7 +99,7 @@ func newStageArtifactGateError(err error) error {
 	if errors.As(err, &gateErr) {
 		return err
 	}
-	return stageArtifactGateError{Reason: err.Error()}
+	return stageArtifactGateError{Reason: err.Error(), Cause: err}
 }
 
 // isStageArtifactGateError reports whether a stage may rerun to rewrite its artifact.
@@ -150,23 +155,23 @@ func validationArtifactPath(repo, runID, stage string, attempt int) (string, str
 	return abs, abs, nil
 }
 
-// runValidationCommands executes configured commands in order and stops at the first failure.
-func runValidationCommands(ctx context.Context, repo, stage string, attempt int, commands []string) ValidationAttempt {
+// runValidationCommands executes configured argv commands and stops at the first failure.
+func runValidationCommands(ctx context.Context, repo, stage string, attempt int, config ValidationConfig) ValidationAttempt {
 	result := ValidationAttempt{
 		Stage:     stage,
 		Attempt:   attempt,
 		Status:    validationStatusPassed,
 		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	for _, command := range commands {
-		cmd := shellCommandContext(ctx, command)
+	for _, command := range config.Commands {
+		cmd := exec.CommandContext(ctx, command.Executable, command.Args...)
 		cmd.Dir = repo
 		var output bytes.Buffer
 		cmd.Stdout = &output
 		cmd.Stderr = &output
 		err := cmd.Run()
 		commandResult := ValidationCommandResult{
-			Command:  command,
+			Command:  validationCommandLabel(command),
 			ExitCode: commandExitCode(err),
 			Output:   limitValidationOutput(output.String()),
 		}
@@ -178,6 +183,11 @@ func runValidationCommands(ctx context.Context, repo, stage string, attempt int,
 	}
 	result.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	return result
+}
+
+// validationCommandLabel renders the exact argv used for diagnostics without shell syntax.
+func validationCommandLabel(command ValidationCommand) string {
+	return strings.Join(append([]string{command.Executable}, command.Args...), " ")
 }
 
 // writeValidationAttempt persists one gate result and returns its accessible path.
@@ -242,14 +252,6 @@ func validationFailurePrompt(repo string, state State) string {
 		}
 	}
 	return body
-}
-
-// shellCommandContext runs validation as a repository shell command string.
-func shellCommandContext(ctx context.Context, command string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		return exec.CommandContext(ctx, "cmd", "/C", command)
-	}
-	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
 // commandExitCode normalizes process and launch errors into JSON-friendly exit codes.

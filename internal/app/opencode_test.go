@@ -22,10 +22,22 @@ func TestOpenCodePlanningArgsPassProjectPromptAndModel(t *testing.T) {
 // TestOpenCodeRunArgsSupportNewAndResumeSessions verifies sealed run arguments.
 func TestOpenCodeRunArgsSupportNewAndResumeSessions(t *testing.T) {
 	args := opencodeRunArgs("/repo", "prompt", "", StageOptions{Model: "anthropic/claude", Reasoning: "high", Fast: true})
-	for _, want := range []string{"run", "--format", "json", "--dangerously-skip-permissions", "--dir", "/repo", "-m", "anthropic/claude", "--variant", "high", "prompt"} {
+	for _, want := range []string{"run", "--format", "json", "--dir", "/repo", "-m", "anthropic/claude", "--variant", "high", "prompt"} {
 		if !containsArg(args, want) {
 			t.Fatalf("args = %v, missing %q", args, want)
 		}
+	}
+	if containsArg(args, "--dangerously-skip-permissions") {
+		t.Fatalf("args = %v, default permissions must not skip checks", args)
+	}
+	withoutEnv := opencodeRunArgs("/repo", "prompt", "", StageOptions{Permissions: "disabled"})
+	if containsArg(withoutEnv, "--dangerously-skip-permissions") {
+		t.Fatalf("args = %v, disabled permissions without env must not skip checks", withoutEnv)
+	}
+	t.Setenv("WO_ALLOW_DISABLED_PERMISSIONS", "1")
+	optIn := opencodeRunArgs("/repo", "prompt", "", StageOptions{Permissions: "disabled"})
+	if containsArg(optIn, "--dangerously-skip-permissions") {
+		t.Fatalf("args = %v, env must not enable permission skip", optIn)
 	}
 	if containsArg(args, "fast_mode") {
 		t.Fatalf("args = %v, opencode must ignore fast mode", args)

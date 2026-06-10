@@ -4,6 +4,7 @@ package app
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -33,15 +34,18 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			}
 			return runUpdate(stdout)
 		case "config":
-			if !hasFlag(args[1:], "--global") {
+			options, err := parseConfigCommandOptions(args[1:])
+			if err != nil {
+				return err
+			}
+			if options.ListProfiles {
+				printWorkflowProfiles(stdout)
+				return nil
+			}
+			if !options.Global {
 				break
 			}
-			for _, arg := range args[1:] {
-				if arg != "--global" {
-					return fmt.Errorf("用法：wo config [--global]")
-				}
-			}
-			path, err := WriteWorkflowConfig("", true)
+			path, err := WriteWorkflowConfigProfile("", true, options.Profile)
 			if err != nil {
 				return err
 			}
@@ -74,21 +78,23 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "config":
-			for _, arg := range args[1:] {
-				if arg != "--global" {
-					return fmt.Errorf("用法：wo config [--global]")
-				}
+			options, err := parseConfigCommandOptions(args[1:])
+			if err != nil {
+				return err
 			}
-			global := hasFlag(args[1:], "--global")
-			if global {
-				path, err := WriteWorkflowConfig("", true)
+			if options.ListProfiles {
+				printWorkflowProfiles(stdout)
+				return nil
+			}
+			if options.Global {
+				path, err := WriteWorkflowConfigProfile("", true, options.Profile)
 				if err != nil {
 					return err
 				}
 				fmt.Fprintf(stdout, "已创建全局配置 %s\n", path)
 				return nil
 			}
-			path, err := WriteWorkflowConfig(repo, global)
+			path, err := WriteWorkflowConfigProfile(repo, false, options.Profile)
 			if err != nil {
 				return err
 			}
@@ -151,16 +157,21 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 				if state, loadErr := loadState(repo, runID); loadErr == nil {
 					if isRunLockedError(err) {
 						state.Error = err.Error()
-						_ = writeRunnerState(stdout, state)
-						return err
+						writeErr := writeRunnerState(stdout, state)
+						warnWorkflowWrite("write locked runner state", writeErr)
+						return errors.Join(err, writeErr)
 					}
 					state = failedState(state, err)
-					_ = saveState(repo, state)
-					_ = writeFailedRunnerState(stdout, state, err)
+					saveErr := saveState(repo, state)
+					warnWorkflowWrite("save failed resume state", saveErr)
+					writeErr := writeFailedRunnerState(stdout, state, err)
+					warnWorkflowWrite("write failed resume runner state", writeErr)
+					return errors.Join(err, saveErr, writeErr)
 				} else {
-					_ = writeFailedRunnerError(stdout, runID, err)
+					writeErr := writeFailedRunnerError(stdout, runID, err)
+					warnWorkflowWrite("write failed resume runner error", writeErr)
+					return errors.Join(err, writeErr)
 				}
-				return err
 			}
 			return nil
 		case "batch":
@@ -255,10 +266,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			}
 			return writeRunnerState(stdout, state)
 		case "clean":
-			if len(args) != 1 {
-				return fmt.Errorf("用法：wo clean")
+			for _, arg := range args[1:] {
+				if arg != "--agent-sessions" {
+					return fmt.Errorf("用法：wo clean [--agent-sessions]")
+				}
 			}
-			return runClean(stdout, repo)
+			return runClean(stdout, repo, args[1:]...)
 		case "watch":
 			return runWatch(stdout, repo, args[1:]...)
 		case "--list-changes":
@@ -524,7 +537,10 @@ func planningPrompt(repo string) (string, StageOptions, error) {
 	if err != nil {
 		return "", StageOptions{}, err
 	}
-	context := promptContext(repo, State{RunID: "planning", Stage: "planning", Workflow: workflow})
+	context, err := promptContext(repo, State{RunID: "planning", Stage: "planning", Workflow: workflow})
+	if err != nil {
+		return "", StageOptions{}, err
+	}
 	rendered, err := renderPromptTemplate(name, prompt, context)
 	if err != nil {
 		return "", StageOptions{}, err
@@ -538,7 +554,7 @@ func planningPrompt(repo string) (string, StageOptions, error) {
 
 // codexPlanningCommand keeps human planning interactive while passing the seed prompt directly.
 func codexPlanningCommand(ctx context.Context, path, prompt string, stdin io.Reader, options StageOptions) *exec.Cmd {
-	args := []string{"--dangerously-bypass-approvals-and-sandbox"}
+	args := []string{}
 	if options.Model != "" {
 		args = append(args, "-m", options.Model)
 	}
@@ -861,9 +877,6 @@ func printHumanStatus(stdout io.Writer, repo string, args ...string) error {
 		if err != nil {
 			return err
 		}
-		if len(args) == 0 {
-			fmt.Fprintf(stdout, "正在查看 %s 最近一次批量工作流，如需查看普通工作流，请使用 wo status -w1\n", projectName(repo))
-		}
 		lines := batchStatusLines(repo, &batch, ref.Alias, runRefs)
 		for _, line := range lines {
 			fmt.Fprintln(stdout, line)
@@ -876,7 +889,7 @@ func printHumanStatus(stdout io.Writer, repo string, args ...string) error {
 	if err != nil {
 		return err
 	}
-	for _, line := range compactStatusLines(buildStatusView(repo, state, ref.Alias, "→")) {
+	for _, line := range runProposalStatusLines(repo, state, ref.Alias, "→") {
 		fmt.Fprintln(stdout, line)
 	}
 	printUpdateHint(stdout)
@@ -898,11 +911,12 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "用法：")
 	fmt.Fprintln(stdout, "  wo")
-	fmt.Fprintln(stdout, "  wo config [--global]")
+	fmt.Fprintln(stdout, "  wo config [--global] [--profile <name>]")
+	fmt.Fprintln(stdout, "  wo config --list-profiles")
 	fmt.Fprintln(stdout, "  wo run | wo r")
 	fmt.Fprintln(stdout, "  wo status")
 	fmt.Fprintln(stdout, "  wo restart")
-	fmt.Fprintln(stdout, "  wo clean")
+	fmt.Fprintln(stdout, "  wo clean [--agent-sessions]")
 	fmt.Fprintln(stdout, "  wo watch")
 	fmt.Fprintln(stdout, "  wo update")
 	fmt.Fprintln(stdout, "  wo --list-changes")
@@ -913,8 +927,9 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "人类交互命令：")
 	fmt.Fprintln(stdout, "  wo                         进入规划、选择 active change，或恢复 run")
-	fmt.Fprintln(stdout, "  wo clean                   清理当前项目失败或异常运行态")
-	fmt.Fprintln(stdout, "  wo config [--global]       写入仓库 wo.yaml 或用户 ~/wo.yaml")
+	fmt.Fprintln(stdout, "  wo clean [--agent-sessions] 清理当前项目失败或异常运行态")
+	fmt.Fprintln(stdout, "  wo config [--global] [--profile <name>] 写入仓库 wo.yaml 或用户 ~/wo.yaml（默认写入 default profile）")
+	fmt.Fprintln(stdout, "  wo config --list-profiles  查看可用的 profile 列表")
 	fmt.Fprintln(stdout, "  wo run | wo r              直接全选 active change 并启动任务队列")
 	fmt.Fprintln(stdout, "  wo status                  打印最新 run 进度")
 	fmt.Fprintln(stdout, "  wo restart [-bN|-wN]       重启最近失败或中断的批量任务/工作流")
@@ -1321,12 +1336,11 @@ func runWatch(stdout io.Writer, repo string, args ...string) error {
 		var lines []string
 		lines = append(lines, watchStatusLines(repo, targetKind, targetRef, spinnerFrames[frameIdx%len(spinnerFrames)])...)
 		if tty && frameIdx > 0 {
-			fmt.Fprintf(stdout, "\x1b[%dA\x1b[J", prevWatchLines)
+			fmt.Fprint(stdout, "\x1b[H\x1b[2J")
 		}
 		for _, line := range lines {
 			fmt.Fprintln(stdout, line)
 		}
-		prevWatchLines = len(lines)
 		frameIdx++
 	}
 
@@ -1340,9 +1354,6 @@ func runWatch(stdout io.Writer, repo string, args ...string) error {
 		}
 	}
 }
-
-// prevWatchLines tracks how many lines to clear on the next watch refresh.
-var prevWatchLines int
 
 // resolveWatchTarget picks the watch target: explicit -bN/-wN or default to running batch > single-run.
 func resolveWatchTarget(repo string, args []string) (kind string, ref StatusRef, err error) {
@@ -1402,16 +1413,8 @@ func watchStatusLines(repo, kind string, ref StatusRef, spinner string) []string
 // watchBatchStatusLines formats a batch with spinner in the running stage.
 func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, spinner string) []string {
 	var lines []string
-	currentPos := batch.CurrentIndex + 1
-	if batch.Status == batchStatusDone {
-		currentPos = len(batch.Changes)
-	}
 	if batchAlias == "" {
 		batchAlias = batch.BatchID
-	}
-	lines = append(lines, fmt.Sprintf("%s %s %d/%d", spinner, batchAlias, currentPos, len(batch.Changes)))
-	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
-		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
 	}
 
 	for _, changeName := range batch.Changes {
@@ -1421,11 +1424,14 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 			if state, err := loadState(repo, runID); err == nil {
 				runRefs, _ := ListRunRefs(repo)
 				runAlias := RunAliasForID(runRefs, runID)
-				for _, line := range compactStatusLines(buildStatusView(repo, state, runAlias, "→")) {
+				for _, line := range compactStatusLines(buildHumanStatusView(repo, state, runAlias, spinner)) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
 			}
 		}
+	}
+	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
+		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
 	}
 
 	return lines
@@ -1433,13 +1439,21 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 
 // watchRunStatusLines formats a single run with spinner in the running stage.
 func watchRunStatusLines(repo string, state State, runAlias string, spinner string) []string {
-	var lines []string
 	if runAlias == "" {
 		runAlias = state.RunID
 	}
-	lines = append(lines, compactStatusLines(buildStatusView(repo, state, runAlias, spinner))...)
+	lines := runProposalStatusLines(repo, state, runAlias, spinner)
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {
 		lines = append(lines, "提示: 可运行 wo restart 重启最近失败任务")
+	}
+	return lines
+}
+
+// runProposalStatusLines renders one workflow under its change proposal list item.
+func runProposalStatusLines(repo string, state State, runAlias string, runningMarker string) []string {
+	lines := []string{fmt.Sprintf("- %s", state.ChangeName)}
+	for _, line := range compactStatusLines(buildHumanStatusView(repo, state, runAlias, runningMarker)) {
+		lines = append(lines, fmt.Sprintf("  %s", line))
 	}
 	return lines
 }
@@ -1482,4 +1496,40 @@ func watchStageChecklistLines(state State, runtime map[string]stageRuntime, spin
 		return []string{"- 写 未知 " + spinner}
 	}
 	return lines
+}
+
+type configCommandOptions struct {
+	Global       bool
+	Profile      string
+	ListProfiles bool
+}
+
+func parseConfigCommandOptions(args []string) (configCommandOptions, error) {
+	options := configCommandOptions{Profile: "default"}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--global":
+			options.Global = true
+		case "--list-profiles":
+			options.ListProfiles = true
+		case "--profile":
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				return configCommandOptions{}, fmt.Errorf("缺少 --profile 的值")
+			}
+			options.Profile = args[i+1]
+			i++
+		default:
+			return configCommandOptions{}, fmt.Errorf("用法：wo config [--global] [--profile <name>] 或 wo config --list-profiles")
+		}
+	}
+	if options.ListProfiles && (options.Global || options.Profile != "default" || len(args) > 1) {
+		return configCommandOptions{}, fmt.Errorf("用法：wo config --list-profiles")
+	}
+	return options, nil
+}
+
+func printWorkflowProfiles(stdout io.Writer) {
+	for _, profile := range BuiltInWorkflowProfiles() {
+		fmt.Fprintf(stdout, "%s\t%s\t适用场景：%s\n", profile.Name, profile.Description, profile.Scenario)
+	}
 }

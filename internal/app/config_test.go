@@ -96,12 +96,51 @@ func TestInitWorkflowConfigWritesDefaultMCYAML(t *testing.T) {
 	}
 }
 
+// TestDefaultWorkflowConfigYAMLRoundTripsRuntimeFields verifies generated YAML covers runtime fields.
+func TestDefaultWorkflowConfigYAMLRoundTripsRuntimeFields(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	if _, err := WriteWorkflowConfig(repo, false); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadWorkflowConfig(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults := DefaultWorkflowConfig()
+	if loaded.Engine != defaults.Engine || loaded.MaxReviewIterations != defaults.MaxReviewIterations {
+		t.Fatalf("workflow = %#v, want engine/max from defaults %#v", loaded, defaults)
+	}
+	for _, stage := range []string{"planning", "execution", "review_1", "qa_1", "fix_1", "archive"} {
+		got, err := loaded.StageOption(stage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := defaults.StageOption(stage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Tool != want.Tool || got.Reasoning != want.Reasoning || got.Fast != want.Fast || got.Permissions != want.Permissions {
+			t.Fatalf("%s = %#v, want %#v", stage, got, want)
+		}
+	}
+	if loaded.Validation.MaxAttemptsPerStage != defaults.Validation.MaxAttemptsPerStage || len(loaded.Validation.Commands) != 0 {
+		t.Fatalf("validation = %#v, want default attempts and no commands", loaded.Validation)
+	}
+	for _, group := range []string{"planning_context", "implementation_context", "review", "qa"} {
+		if _, ok := loaded.Parallel.Groups[group]; !ok {
+			t.Fatalf("parallel group %q missing after default YAML round trip", group)
+		}
+	}
+}
+
 // TestDefaultWorkflowConfigMatchesUserDocs verifies audited defaults do not drift.
 func TestDefaultWorkflowConfigMatchesUserDocs(t *testing.T) {
 	defaults := []string{
 		"max_review_iterations: 5",
 		"reasoning: xhigh",
 		"reasoning: high",
+		"permissions: default",
 		"max_attempts_per_stage: 3",
 		"commands: []",
 	}
@@ -172,8 +211,10 @@ wo:
     validation:
       max_attempts_per_stage: 5
       commands:
-        - pnpm run typecheck
-        - pnpm run test:spec
+        - executable: pnpm
+          args: ["run", "typecheck"]
+        - executable: pnpm
+          args: ["run", "test:spec"]
 `)
 	config, err := LoadWorkflowConfig(repo)
 	if err != nil {
@@ -191,10 +232,10 @@ wo:
 		t.Fatalf("fix_2 = %#v, want codex/base-model/medium/true", fix)
 	}
 	archive, _ := config.StageOption("archive")
-	if archive.Tool != "pi" || archive.Model != "archive-model" {
-		t.Fatalf("archive = %#v, want pi/archive-model from tool field", archive)
+	if archive.Tool != "pi" || archive.Model != "archive-model" || archive.Permissions != "default" {
+		t.Fatalf("archive = %#v, want pi/archive-model/default permissions", archive)
 	}
-	if config.Validation.MaxAttemptsPerStage != 5 || len(config.Validation.Commands) != 2 {
+	if config.Validation.MaxAttemptsPerStage != 5 || len(config.Validation.Commands) != 2 || config.Validation.Commands[0].Executable != "pnpm" {
 		t.Fatalf("validation = %#v, want two commands and five attempts", config.Validation)
 	}
 }
@@ -342,8 +383,11 @@ func TestLoadWorkflowConfigRejectsInvalidInput(t *testing.T) {
 		{name: "bad tool", body: "wo:\n  workflow:\n    defaults:\n      tool: unknown\n"},
 		{name: "pi ai alias", body: "wo:\n  workflow:\n    defaults:\n      cli: pi-ai\n"},
 		{name: "negative iterations", body: "wo:\n  workflow:\n    max_review_iterations: -1\n"},
-		{name: "empty validation command", body: "wo:\n  workflow:\n    validation:\n      commands: ['']\n"},
-		{name: "bad validation attempts", body: "wo:\n  workflow:\n    validation:\n      max_attempts_per_stage: 0\n      commands: ['true']\n"},
+		{name: "legacy validation command string", body: "wo:\n  workflow:\n    validation:\n      commands: ['true']\n"},
+		{name: "empty validation executable", body: "wo:\n  workflow:\n    validation:\n      commands:\n        - executable: ''\n"},
+		{name: "bad validation attempts", body: "wo:\n  workflow:\n    validation:\n      max_attempts_per_stage: 0\n      commands:\n        - executable: test\n"},
+		{name: "bad permissions", body: "wo:\n  workflow:\n    defaults:\n      permissions: root\n"},
+		{name: "disabled permissions unsupported", body: "wo:\n  workflow:\n    defaults:\n      permissions: disabled\n"},
 		{name: "bad parallel mode", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: swarm\n          members:\n            - name: 审核员\n              purpose: 审核\n"},
 		{name: "empty parallel member name", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: gate_input\n          members:\n            - name: ''\n              purpose: 审核\n"},
 		{name: "bad parallel member tool", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: gate_input\n          members:\n            - name: 审核员\n              purpose: 审核\n              tool: unknown\n"},

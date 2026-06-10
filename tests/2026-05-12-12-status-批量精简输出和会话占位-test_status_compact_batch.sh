@@ -63,7 +63,8 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status.txt
-grep -qF "→ b1 1/3" status.txt
+head -1 status.txt | grep -qF -- "- 45-智能体文件写入保护"
+! grep -qF "→ b1 1/3" status.txt
 grep -qF -- "- 45-智能体文件写入保护" status.txt
 grep -qF -- "- 46-重构主从智能体文件树" status.txt
 grep -qF -- "- 47-智能体命令执行deny策略" status.txt

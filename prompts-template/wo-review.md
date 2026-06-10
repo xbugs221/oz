@@ -52,7 +52,9 @@ Fix summary: `{{.LatestPreviousFixSummaryPath}}`
 - `summary` / `findings[].title` / `findings[].evidence` / `findings[].recommendation` 必须可复核。
 - evidence 必须可复核，不能只写结论。
 - `clean` 的 evidence 必须引用验证命令 artifact，并引用截图、trace、QA、浏览器控制台、网络或等价运行时证据；Web app 不得只写“代码已检查”。
-- `clean` 时 `findings` 为空、全部 `checks` 为 true、`evidence` 非空。
+- `clean` 时 `findings` 为空、全部 `checks` 为 true、`evidence` 非空，并按 `acceptance_contract` 的 required tests/evidence 填充。
+- findings 与每条 finding 必须包含 `scope`，取值为 `current_change` / `out_of_scope_existing` / `introduced_regression`，缺省按 `current_change` 处理。
+- 可选 `non_blocking_findings` 仅用于记录历史债务并须显式使用 `out_of_scope_existing`。
 - `needs_fix` 时 `findings` 至少一项。
 - `severity` 仅允许 `blocker`、`major`、`minor`（内部会归一化 `high/medium/low/nit/critical`）。
 - 第 2 轮及之后 `clean` 时 `previous_findings_resolved` 必须为 true。

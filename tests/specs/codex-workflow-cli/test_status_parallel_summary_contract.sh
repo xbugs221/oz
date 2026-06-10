@@ -73,11 +73,11 @@ func TestHumanStatusShowsParallelMemberSummary(t *testing.T) {
 	got := stdout.String()
 	statusSaveResult(t, "status-single.txt", got)
 	for _, want := range []string{
-		"- 写 writer-session ✓",
+		"  执行阶段 writer-session ✓",
 		"  - 并行 implementation_context 2/2 success",
 		"    - 代码库侦察员 success",
 		"    - 外部资料研究员 success",
-		"- 审 reviewer-session →",
+		"  审核阶段 reviewer-session →",
 		"  - 并行 review 1/2 failed",
 		"    - 目标核对审核员 success",
 		"    - 安全风险审核员 failed",
@@ -246,7 +246,7 @@ func TestBatchHumanStatusShowsParallelSummaryUnderChange(t *testing.T) {
 	for _, want := range []string{
 		"批量任务 b1 running 1/1",
 		"- 1-demo",
-		"  - 写 writer-session →",
+		"  执行阶段 writer-session →",
 		"    - 并行 implementation_context 2/2 success",
 		"      - 代码库侦察员 success",
 		"      - 外部资料研究员 success",

@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -98,6 +99,7 @@ type Engine struct {
 
 	PlanningTool      string
 	PlanningSessionID string
+	progressMu        sync.Mutex
 	lastProgressState string
 	progressLines     int
 	stageRuntime      map[string]stageRuntime
@@ -504,11 +506,14 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 		state.StageTimings[state.Stage] = timing
 		if ctx.Err() != nil {
 			state.Stages[state.Stage] = statusInterrupted
-			_ = saveState(e.Repo, *state)
+			saveErr := saveState(e.Repo, *state)
+			warnWorkflowWrite("save interrupted stage state", saveErr)
+			return errors.Join(err, saveErr)
 		} else {
-			_ = saveState(e.Repo, *state)
+			saveErr := saveState(e.Repo, *state)
+			warnWorkflowWrite("save failed stage state", saveErr)
+			return errors.Join(err, saveErr)
 		}
-		return err
 	}
 	if sessionID != "" {
 		state.Sessions[sessionKey] = sessionID
@@ -524,6 +529,13 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 	state.StageTimings[state.Stage] = timing
 	e.printProgress(*state, "completed")
 	return saveState(e.Repo, *state)
+}
+
+func warnWorkflowWrite(action string, err error) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "wo warning: %s: %v\n", action, err)
 }
 
 // stageOptionsForRun resolves dynamic stage options and persists automatic escalations.
@@ -560,7 +572,7 @@ func (e *Engine) validateStage(ctx context.Context, state *State) (bool, error) 
 	current := state.Validation[state.Stage]
 	current.Attempts++
 	current.Kind = validationKindCommands
-	attempt := runValidationCommands(ctx, e.Repo, state.Stage, current.Attempts, state.Workflow.Validation.Commands)
+	attempt := runValidationCommands(ctx, e.Repo, state.Stage, current.Attempts, state.Workflow.Validation)
 	artifactPath, err := writeValidationAttempt(e.Repo, state.RunID, attempt)
 	if err != nil {
 		return false, err
@@ -588,15 +600,17 @@ func (e *Engine) printProgress(state State, action string) {
 	if e.Output == nil {
 		return
 	}
+	e.progressMu.Lock()
+	defer e.progressMu.Unlock()
 	if state.Status == statusDone || state.Stage == "done" {
-		e.printStageChecklistOnce(state)
+		e.printStageChecklistOnceLocked(state)
 		return
 	}
-	e.printStageChecklistOnce(state)
+	e.printStageChecklistOnceLocked(state)
 }
 
-// printStageChecklistOnce suppresses duplicate terminal status blocks.
-func (e *Engine) printStageChecklistOnce(state State) {
+// printStageChecklistOnceLocked suppresses duplicate terminal status blocks while progressMu is held.
+func (e *Engine) printStageChecklistOnceLocked(state State) {
 	signature := e.stageChecklistSignature(state)
 	if signature == e.lastProgressState {
 		return
@@ -656,6 +670,8 @@ func (w *stageProgressWriter) apply(line string) error {
 	if line == "" || w.engine == nil || w.state == nil {
 		return nil
 	}
+	w.engine.progressMu.Lock()
+	defer w.engine.progressMu.Unlock()
 	if w.engine.stageRuntime == nil {
 		w.engine.stageRuntime = map[string]stageRuntime{}
 	}
@@ -680,7 +696,7 @@ func (w *stageProgressWriter) apply(line string) error {
 	}
 	w.engine.stageRuntime[w.state.Stage] = meta
 	if w.engine.Output != nil {
-		w.engine.printStageChecklistOnce(*w.state)
+		w.engine.printStageChecklistOnceLocked(*w.state)
 	}
 	return nil
 }
@@ -697,7 +713,62 @@ func (w *stageProgressWriter) persistSessionID(sessionID string) error {
 		return nil
 	}
 	w.state.Sessions[w.sessionKey] = sessionID
-	return saveState(w.engine.Repo, *w.state)
+	return mergeState(w.engine.Repo, w.state.RunID, func(latest *State) {
+		latest.Sessions[w.sessionKey] = sessionID
+	})
+}
+
+// subagentProgressWriter persists helper sessions without changing parent stage progress.
+type subagentProgressWriter struct {
+	engine     *Engine
+	state      *State
+	sessionKey string
+	pending    string
+}
+
+// Write consumes line-oriented helper progress and persists only session started events.
+func (w *subagentProgressWriter) Write(p []byte) (int, error) {
+	w.pending += string(p)
+	for {
+		line, rest, ok := strings.Cut(w.pending, "\n")
+		if !ok {
+			break
+		}
+		w.pending = rest
+		if err := w.apply(strings.TrimSpace(line)); err != nil {
+			return len(p), err
+		}
+	}
+	return len(p), nil
+}
+
+// apply extracts subagent session started events while leaving stageRuntime untouched.
+func (w *subagentProgressWriter) apply(line string) error {
+	if line == "" || w.engine == nil || w.state == nil {
+		return nil
+	}
+	if !strings.HasPrefix(line, "agent session started: ") {
+		return nil
+	}
+	sessionID := valueAfter(line, "session=")
+	return persistStateSessionID(w.engine.Repo, w.state, w.sessionKey, sessionID)
+}
+
+// persistStateSessionID makes a session visible through state.json without replacing sibling keys.
+func persistStateSessionID(repo string, state *State, sessionKey, sessionID string) error {
+	if sessionID == "" || sessionKey == "" || state == nil {
+		return nil
+	}
+	if state.Sessions == nil {
+		state.Sessions = map[string]string{}
+	}
+	if state.Sessions[sessionKey] == sessionID {
+		return nil
+	}
+	state.Sessions[sessionKey] = sessionID
+	return mergeState(repo, state.RunID, func(latest *State) {
+		latest.Sessions[sessionKey] = sessionID
+	})
 }
 
 // valueAfter extracts the first whitespace-delimited value following a key.
@@ -750,15 +821,19 @@ func stageKind(stage string) string {
 	return role.Name
 }
 
-// stageIteration returns the numeric review or fix round encoded in the stage name.
-func stageIteration(stage string) int {
+// stageIteration returns the numeric review, QA, or fix round encoded in the stage name.
+func stageIteration(stage string) (int, error) {
 	for _, prefix := range []string{"review_", "qa_", "fix_"} {
 		if strings.HasPrefix(stage, prefix) {
-			n, _ := strconv.Atoi(strings.TrimPrefix(stage, prefix))
-			return n
+			raw := strings.TrimPrefix(stage, prefix)
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 1 {
+				return 0, fmt.Errorf("非法迭代阶段 %q", stage)
+			}
+			return n, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 type fixEscalationPlan struct {
@@ -773,7 +848,10 @@ func fixEscalation(repo string, state State) (fixEscalationPlan, error) {
 	if !strings.HasPrefix(state.Stage, "fix_") {
 		return fixEscalationPlan{}, nil
 	}
-	iteration := stageIteration(state.Stage)
+	iteration, err := stageIteration(state.Stage)
+	if err != nil {
+		return fixEscalationPlan{}, err
+	}
 	if iteration < 2 {
 		return fixEscalationPlan{}, nil
 	}
@@ -896,8 +974,11 @@ func (e *Engine) artifactDone(state State) (bool, error) {
 		}
 		return true, nil
 	case strings.HasPrefix(state.Stage, "review_"):
-		n := strings.TrimPrefix(state.Stage, "review_")
-		iteration, _ := strconv.Atoi(n)
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return false, err
+		}
+		n := strconv.Itoa(iteration)
 		review, err := ReadReview(filepath.Join(base, "review-"+n+".json"))
 		if os.IsNotExist(err) {
 			return false, nil
@@ -910,11 +991,18 @@ func (e *Engine) artifactDone(state State) (bool, error) {
 		}
 		return true, nil
 	case strings.HasPrefix(state.Stage, "fix_"):
-		n := strings.TrimPrefix(state.Stage, "fix_")
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return false, err
+		}
+		n := strconv.Itoa(iteration)
 		return fileExists(filepath.Join(base, "fix-"+n+"-summary.md")), nil
 	case strings.HasPrefix(state.Stage, "qa_"):
-		n := strings.TrimPrefix(state.Stage, "qa_")
-		iteration, _ := strconv.Atoi(n)
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return false, err
+		}
+		n := strconv.Itoa(iteration)
 		qa, err := ReadQA(filepath.Join(base, "qa-"+n+".json"))
 		if os.IsNotExist(err) {
 			return false, nil
@@ -953,8 +1041,11 @@ func (e *Engine) advance(state *State) error {
 			state.Stage = "review_1"
 		}
 	case strings.HasPrefix(state.Stage, "review_"):
-		n := strings.TrimPrefix(state.Stage, "review_")
-		iteration, _ := strconv.Atoi(n)
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return err
+		}
+		n := strconv.Itoa(iteration)
 		review, err := ReadReview(filepath.Join(runDir(e.Repo, state.RunID), "review-"+n+".json"))
 		if err != nil {
 			return newStageArtifactGateError(err)
@@ -974,8 +1065,11 @@ func (e *Engine) advance(state *State) error {
 			state.Stage = "qa_" + n
 		}
 	case strings.HasPrefix(state.Stage, "qa_"):
-		n := strings.TrimPrefix(state.Stage, "qa_")
-		iteration, _ := strconv.Atoi(n)
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return err
+		}
+		n := strconv.Itoa(iteration)
 		qa, err := ReadQA(filepath.Join(runDir(e.Repo, state.RunID), "qa-"+n+".json"))
 		if err != nil {
 			return newStageArtifactGateError(err)
@@ -997,7 +1091,10 @@ func (e *Engine) advance(state *State) error {
 			state.Stage = "archive"
 		}
 	case strings.HasPrefix(state.Stage, "fix_"):
-		n, _ := strconv.Atoi(strings.TrimPrefix(state.Stage, "fix_"))
+		n, err := stageIteration(state.Stage)
+		if err != nil {
+			return err
+		}
 		if n >= state.Workflow.MaxReviewIterations {
 			state.Status = statusBlocked
 			state.Stage = statusBlocked
@@ -1104,6 +1201,11 @@ func (e *Engine) detectManualIntervention(state *State) error {
 
 // promptForStage reads and renders the YAML prompt for a sealed stage.
 func promptForStage(repo string, state State) (string, error) {
+	if state.ChangeName != "" {
+		if err := validateChangeNameForPath(state.ChangeName); err != nil {
+			return "", err
+		}
+	}
 	name, err := promptNameForStage(state.Stage)
 	if err != nil {
 		return "", err
@@ -1126,7 +1228,11 @@ func promptForStage(repo string, state State) (string, error) {
 			return "", err
 		}
 	}
-	prompt, err := renderPromptTemplate(name, templateText, promptContext(repo, state))
+	context, err := promptContext(repo, state)
+	if err != nil {
+		return "", err
+	}
+	prompt, err := renderPromptTemplate(name, templateText, context)
 	if err != nil {
 		return "", err
 	}
@@ -1271,10 +1377,13 @@ type promptTemplateContext struct {
 }
 
 // promptContext computes stable run paths for the current workflow stage.
-func promptContext(repo string, state State) promptTemplateContext {
+func promptContext(repo string, state State) (promptTemplateContext, error) {
 	ensureWorkflowConfig(&state)
 	kind := stageKind(state.Stage)
-	iteration := stageIteration(state.Stage)
+	iteration, err := stageIteration(state.Stage)
+	if err != nil {
+		return promptTemplateContext{}, err
+	}
 	runPath := runDir(repo, state.RunID)
 	roleSessionKey, roleSessionID := promptRoleSession(state)
 	context := promptTemplateContext{
@@ -1309,7 +1418,11 @@ func promptContext(repo string, state State) promptTemplateContext {
 		context.HasParallelReview = parallelGroupConfigured(state.Workflow, "review") && kind == "review"
 		context.HasParallelQA = parallelGroupConfigured(state.Workflow, "qa") && kind == "qa"
 	}
-	if escalation, err := fixEscalation(repo, state); err == nil {
+	escalation, err := fixEscalation(repo, state)
+	if err != nil {
+		return promptTemplateContext{}, err
+	}
+	if escalation.Enabled {
 		context.FixEscalated = escalation.Enabled
 		context.FixEscalationReasoning = escalation.Reasoning
 		context.ConsecutiveReviewFailures = escalation.ConsecutiveFailures
@@ -1351,7 +1464,7 @@ func promptContext(repo string, state State) promptTemplateContext {
 			}
 		}
 	}
-	return context
+	return context, nil
 }
 
 // promptRoleSession returns the current stage role's backend-scoped session identity.
@@ -1373,21 +1486,20 @@ func parallelGroupConfigured(workflow WorkflowConfig, name string) bool {
 func saveState(repo string, state State) error {
 	stateFileMu.Lock()
 	defer stateFileMu.Unlock()
-	if err := os.MkdirAll(runDir(repo, state.RunID), 0o755); err != nil {
+	if err := validateRunID(state.RunID); err != nil {
 		return err
 	}
 	normalizeStateMaps(&state)
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(runDir(repo, state.RunID), "state.json"), append(data, '\n'), 0o644)
+	return writeStateFileLocked(repo, state.RunID, state)
 }
 
 // loadState reads durable workflow state for a run id.
 func loadState(repo, runID string) (State, error) {
 	stateFileMu.Lock()
 	defer stateFileMu.Unlock()
+	if err := validateRunID(runID); err != nil {
+		return State{}, err
+	}
 	data, err := os.ReadFile(filepath.Join(runDir(repo, runID), "state.json"))
 	if err != nil {
 		return State{}, err
@@ -1396,8 +1508,67 @@ func loadState(repo, runID string) (State, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return State{}, err
 	}
+	if err := validateRunID(state.RunID); err != nil {
+		return State{}, err
+	}
+	if state.RunID != runID {
+		return State{}, fmt.Errorf("state run_id %q does not match requested run %q", state.RunID, runID)
+	}
 	normalizeStateMaps(&state)
 	return state, nil
+}
+
+// mergeState applies a small mutation to the latest durable state under one lock.
+func mergeState(repo, runID string, mutate func(*State)) error {
+	stateFileMu.Lock()
+	defer stateFileMu.Unlock()
+	if err := validateRunID(runID); err != nil {
+		return err
+	}
+	path := filepath.Join(runDir(repo, runID), "state.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var state State
+	if err := json.Unmarshal(data, &state); err != nil {
+		return err
+	}
+	if state.RunID != runID {
+		return fmt.Errorf("state run_id %q does not match requested run %q", state.RunID, runID)
+	}
+	normalizeStateMaps(&state)
+	if mutate != nil {
+		mutate(&state)
+	}
+	if state.RunID != runID {
+		return fmt.Errorf("state mutation changed run_id from %q to %q", runID, state.RunID)
+	}
+	normalizeStateMaps(&state)
+	return writeStateFileLocked(repo, runID, state)
+}
+
+// writeStateFileLocked writes state.json for the explicit run while the caller holds stateFileMu.
+func writeStateFileLocked(repo, runID string, state State) error {
+	if state.RunID != runID {
+		return fmt.Errorf("state run_id %q does not match write run %q", state.RunID, runID)
+	}
+	if err := os.MkdirAll(runDir(repo, runID), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(runDir(repo, runID), "state.json"), append(data, '\n'), 0o644)
+}
+
+// validateRunID rejects run identifiers that could escape the runs directory.
+func validateRunID(runID string) error {
+	if runID == "" || runID == "." || runID == ".." || filepath.IsAbs(runID) || strings.Contains(runID, "..") || strings.ContainsAny(runID, `/\`) {
+		return fmt.Errorf("invalid run_id %q", runID)
+	}
+	return nil
 }
 
 // FindUnfinishedRun returns the newest run whose state is not done.
@@ -1725,6 +1896,9 @@ func snapshotRunAcceptance(repo, runID, sourcePath string) error {
 
 // readAcceptanceForState reads the immutable run contract, with legacy fallbacks.
 func readAcceptanceForState(repo string, state State) (Acceptance, error) {
+	if err := validateChangeNameForPath(state.ChangeName); err != nil {
+		return Acceptance{}, err
+	}
 	runPath := filepath.Join(runDir(repo, state.RunID), "acceptance.json")
 	if acceptance, err := ReadAcceptance(runPath); err == nil {
 		return acceptance, nil
@@ -1748,6 +1922,9 @@ func readAcceptanceForState(repo string, state State) (Acceptance, error) {
 
 // archivedAcceptancePath locates acceptance.json after oz archive moves a change.
 func archivedAcceptancePath(repo, changeName string) (string, error) {
+	if err := validateChangeNameForPath(changeName); err != nil {
+		return "", err
+	}
 	matches, err := filepath.Glob(filepath.Join(repo, "docs", "changes", "archive", "*-"+changeName, "acceptance.json"))
 	if err != nil {
 		return "", err
@@ -1760,6 +1937,9 @@ func archivedAcceptancePath(repo, changeName string) (string, error) {
 
 // archiveExists checks for an archived change directory with the date prefix.
 func archiveExists(repo, changeName string) bool {
+	if err := validateChangeNameForPath(changeName); err != nil {
+		return false
+	}
 	matches, _ := filepath.Glob(filepath.Join(repo, "docs", "changes", "archive", "*-"+changeName))
 	return len(matches) > 0
 }

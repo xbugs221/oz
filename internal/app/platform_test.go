@@ -89,6 +89,45 @@ func TestCodexExecArgsKeepPromptOutOfArgv(t *testing.T) {
 	}
 }
 
+// TestCodexExecArgsUseSafePermissionsByDefault verifies sealed runs never bypass the sandbox.
+func TestCodexExecArgsUseSafePermissionsByDefault(t *testing.T) {
+	args := codexExecArgs(os.TempDir(), "", StageOptions{})
+	if containsArg(args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("args = %v, default permissions must not bypass sandbox", args)
+	}
+	withoutEnv := codexExecArgs(os.TempDir(), "", StageOptions{Permissions: "disabled"})
+	if containsArg(withoutEnv, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("args = %v, disabled permissions without env must not bypass sandbox", withoutEnv)
+	}
+	t.Setenv("WO_ALLOW_DISABLED_PERMISSIONS", "1")
+	optIn := codexExecArgs(os.TempDir(), "", StageOptions{Permissions: "disabled"})
+	if containsArg(optIn, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("args = %v, env must not enable sandbox bypass", optIn)
+	}
+}
+
+// TestAgentRunnersReturnResolveErrors verifies runner construction keeps command lookup diagnostics.
+func TestAgentRunnersReturnResolveErrors(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	repo := t.TempDir()
+	cases := []struct {
+		name   string
+		runner AgentRunner
+	}{
+		{name: "codex", runner: NewCodexCLI()},
+		{name: "opencode", runner: OpenCodeTool{}.NewRunner()},
+		{name: "pi", runner: PiTool{}.NewRunner()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.runner.Run(context.Background(), repo, "prompt", "", StageOptions{})
+			if err == nil || !strings.Contains(err.Error(), "找不到 "+tc.name+" 可执行文件") || !strings.Contains(err.Error(), "executable file") {
+				t.Fatalf("%s runner err = %v, want resolveCommand diagnostic", tc.name, err)
+			}
+		})
+	}
+}
+
 // TestPlanningCommandKeepsInteractiveStdin verifies planning mode remains a TUI.
 func TestPlanningCommandKeepsInteractiveStdin(t *testing.T) {
 	stdin := strings.NewReader("human input\n")
@@ -97,11 +136,11 @@ func TestPlanningCommandKeepsInteractiveStdin(t *testing.T) {
 	if cmd.Stdin != stdin {
 		t.Fatal("planning command should keep caller stdin")
 	}
-	if !containsArg(cmd.Args, "--dangerously-bypass-approvals-and-sandbox") {
-		t.Fatalf("args = %v, want yolo mode flag", cmd.Args)
+	if containsArg(cmd.Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("args = %v, default planning permissions must not bypass sandbox", cmd.Args)
 	}
 	if !containsArgPair(cmd.Args, "-c", "model_reasoning_effort=high") || cmd.Args[len(cmd.Args)-1] != prompt {
-		t.Fatalf("args = %v, want yolo mode and high reasoning config before prompt", cmd.Args)
+		t.Fatalf("args = %v, want high reasoning config before prompt", cmd.Args)
 	}
 }
 

@@ -37,14 +37,15 @@ func (PiTool) PlanningCommand(ctx context.Context, _ string, prompt string, stdi
 
 // NewRunner returns a Pi sealed-run runner.
 func (PiTool) NewRunner() AgentRunner {
-	path, _ := resolveCommand("pi")
-	return &PiCLI{Path: path}
+	path, err := resolveCommand("pi")
+	return &PiCLI{Path: path, ResolveErr: err}
 }
 
 // PiCLI invokes the real pi executable.
 type PiCLI struct {
-	Path     string
-	Progress io.Writer
+	Path       string
+	ResolveErr error
+	Progress   io.Writer
 }
 
 // SetProgress redirects concise process progress for callers that own the UI.
@@ -54,6 +55,9 @@ func (p *PiCLI) SetProgress(progress io.Writer) {
 
 // Run executes pi in JSON mode, extracts session metadata, and waits for process exit.
 func (p PiCLI) Run(ctx context.Context, repo, prompt, sessionID string, options StageOptions) (string, error) {
+	if p.ResolveErr != nil {
+		return "", p.ResolveErr
+	}
 	if p.Path == "" {
 		return "", fmt.Errorf("找不到 pi 可执行文件")
 	}

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,11 +23,28 @@ import (
 	"time"
 )
 
-const updateCheckTTL = 6 * time.Hour
+const (
+	updateCheckTTL       = 6 * time.Hour
+	maxUpdateAssetBytes  = 200 * 1024 * 1024
+	maxChecksumFileBytes = 2 * 1024 * 1024
+)
 
 var githubBaseURL = "https://api.github.com"
 
 var replaceExecutableFunc = replaceExecutable
+
+type updateAssetTrustPolicy struct {
+	TrustedHosts map[string]bool
+}
+
+// defaultUpdateAssetTrustPolicy returns the fixed production release download allowlist.
+func defaultUpdateAssetTrustPolicy() updateAssetTrustPolicy {
+	return updateAssetTrustPolicy{TrustedHosts: map[string]bool{
+		"github.com":                           true,
+		"objects.githubusercontent.com":        true,
+		"release-assets.githubusercontent.com": true,
+	}}
+}
 
 type updateTool struct {
 	Name  string
@@ -156,12 +174,9 @@ func checkUpdates(ctx context.Context, tools []updateTool, forceRefresh bool) (m
 	return results, nil
 }
 
-// fetchLatestRelease reads GitHub's latest release response through an injectable base URL.
+// fetchLatestRelease reads GitHub's latest release response from the configured API base.
 func fetchLatestRelease(ctx context.Context, client *http.Client, tool updateTool) (releaseInfo, error) {
-	base := strings.TrimRight(os.Getenv("WO_GITHUB_BASE_URL"), "/")
-	if base == "" {
-		base = githubBaseURL
-	}
+	base := strings.TrimRight(githubBaseURL, "/")
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", base, tool.Owner, tool.Repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -230,6 +245,11 @@ func parseVersionParts(version string) ([3]int, bool) {
 
 // installToolUpdate validates, backs up and replaces one tool executable.
 func installToolUpdate(ctx context.Context, client *http.Client, tool updateTool) updateInstallResult {
+	return installToolUpdateWithTrust(ctx, client, tool, defaultUpdateAssetTrustPolicy())
+}
+
+// installToolUpdateWithTrust runs the update flow with an explicit asset trust policy.
+func installToolUpdateWithTrust(ctx context.Context, client *http.Client, tool updateTool, trust updateAssetTrustPolicy) updateInstallResult {
 	result := updateInstallResult{Tool: tool.Name}
 	target, err := currentToolPath(tool.Name)
 	if err != nil {
@@ -274,12 +294,12 @@ func installToolUpdate(ctx context.Context, client *http.Client, tool updateTool
 		return result
 	}
 	defer os.RemoveAll(tempDir)
-	archivePath, err := downloadAsset(ctx, client, asset, tempDir)
+	archivePath, err := downloadAssetWithTrust(ctx, client, asset, tempDir, trust)
 	if err != nil {
 		result.Err = err
 		return result
 	}
-	sumPath, err := downloadAsset(ctx, client, sumAsset, tempDir)
+	sumPath, err := downloadAssetWithTrust(ctx, client, sumAsset, tempDir, trust)
 	if err != nil {
 		result.Err = err
 		return result
@@ -389,6 +409,14 @@ func selectChecksumAsset(release releaseInfo) (releaseAsset, error) {
 
 // downloadAsset downloads one release asset to a temp directory.
 func downloadAsset(ctx context.Context, client *http.Client, asset releaseAsset, dir string) (string, error) {
+	return downloadAssetWithTrust(ctx, client, asset, dir, defaultUpdateAssetTrustPolicy())
+}
+
+// downloadAssetWithTrust downloads one release asset after applying an explicit trust policy.
+func downloadAssetWithTrust(ctx context.Context, client *http.Client, asset releaseAsset, dir string, trust updateAssetTrustPolicy) (string, error) {
+	if err := validateUpdateAssetURL(asset.BrowserDownloadURL, trust); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.BrowserDownloadURL, nil)
 	if err != nil {
 		return "", err
@@ -398,6 +426,11 @@ func downloadAsset(ctx context.Context, client *http.Client, asset releaseAsset,
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.Request != nil && resp.Request.URL != nil {
+		if err := validateUpdateAssetURL(resp.Request.URL.String(), trust); err != nil {
+			return "", err
+		}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("下载 %s 失败：%s", asset.Name, resp.Status)
 	}
@@ -407,10 +440,37 @@ func downloadAsset(ctx context.Context, client *http.Client, asset releaseAsset,
 		return "", err
 	}
 	defer file.Close()
-	if _, err := io.Copy(file, resp.Body); err != nil {
+	limit := int64(maxUpdateAssetBytes)
+	if asset.Name == "sha256sums.txt" {
+		limit = maxChecksumFileBytes
+	}
+	written, err := io.Copy(file, io.LimitReader(resp.Body, limit+1))
+	if err != nil {
 		return "", err
 	}
+	if written > limit {
+		return "", fmt.Errorf("下载 %s 超过大小上限", asset.Name)
+	}
 	return path, nil
+}
+
+// validateUpdateAssetURL restricts self-update downloads to trusted release hosts.
+func validateUpdateAssetURL(raw string, trust updateAssetTrustPolicy) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("下载 URL 缺少 scheme 或 host：%s", raw)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("下载 URL 必须使用 https：%s", raw)
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if !trust.TrustedHosts[host] {
+		return fmt.Errorf("下载 URL host 不可信：%s", parsed.Host)
+	}
+	return nil
 }
 
 // verifyChecksum checks the archive digest against sha256sums.txt.

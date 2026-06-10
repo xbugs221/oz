@@ -54,6 +54,9 @@ func ListChanges(repo string) ([]Change, error) {
 		if item.Name == "" {
 			continue
 		}
+		if err := validateChangeNameForPath(item.Name); err != nil {
+			return nil, err
+		}
 		changes = append(changes, Change{Name: item.Name, Path: changePath(repo, item.Name)})
 	}
 	return changes, nil
@@ -61,6 +64,9 @@ func ListChanges(repo string) ([]Change, error) {
 
 // ValidateChange verifies an oz change through the oz validate JSON contract.
 func ValidateChange(repo, changeName string) error {
+	if err := validateChangeNameForPath(changeName); err != nil {
+		return err
+	}
 	var out ozValidateResponse
 	cmdErr := runOzJSON(repo, []string{"validate", changeName, "--json"}, &out)
 	if cmdErr != nil && len(out.Errors) == 0 {
@@ -77,6 +83,9 @@ func ValidateChange(repo, changeName string) error {
 
 // ChangeTasksDone asks oz status whether all tracked tasks are complete.
 func ChangeTasksDone(repo, changeName string) (bool, error) {
+	if err := validateChangeNameForPath(changeName); err != nil {
+		return false, err
+	}
 	status, err := ozStatus(repo, changeName)
 	if err != nil {
 		return false, err
@@ -95,7 +104,7 @@ func ozStatus(repo, changeName string) (ozStatusResponse, error) {
 func runOzJSON(repo string, args []string, target any) error {
 	path, err := resolveCommand(ozCommand)
 	if err != nil {
-		return runOzJSONFallback(repo, args, target)
+		return err
 	}
 	commandArgs := append([]string{}, ozCommandPrefix...)
 	commandArgs = append(commandArgs, args...)
@@ -123,38 +132,18 @@ func runOzJSON(repo string, args []string, target any) error {
 	return nil
 }
 
-func runOzJSONFallback(repo string, args []string, target any) error {
-	switch args[0] {
-	case "validate":
-		if len(args) < 2 {
-			return fmt.Errorf("oz validate 缺少 change name")
-		}
-		changeName := args[1]
-		cp := changePath(repo, changeName)
-		required := []string{
-			filepath.Join(cp, "proposal.md"),
-			filepath.Join(cp, "design.md"),
-			filepath.Join(cp, "spec.md"),
-			filepath.Join(cp, "task.md"),
-			filepath.Join(cp, "acceptance.json"),
-		}
-		for _, f := range required {
-			if !fileExists(f) {
-				return fmt.Errorf("%s 不是有效 oz change：缺少 %s", changeName, filepath.Base(f))
-			}
-		}
-		return json.Unmarshal([]byte(`{"valid":true}`), target)
-	case "status":
-		return json.Unmarshal([]byte(`{"tasks":{"total":1,"done":1}}`), target)
-	case "list":
-		return json.Unmarshal([]byte(`{"changes":[]}`), target)
-	default:
-		return fmt.Errorf("找不到 oz 可执行文件")
-	}
-}
-
 func changePath(repo, name string) string {
 	return filepath.Join(repo, "docs", "changes", name)
+}
+
+func validateChangeNameForPath(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("change name 不能为空")
+	}
+	if filepath.IsAbs(name) || strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("change name %q 包含非法路径片段", name)
+	}
+	return nil
 }
 
 // ParseChangeSelection converts one-based menu input into unique selected changes.

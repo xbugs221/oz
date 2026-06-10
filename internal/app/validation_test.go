@@ -13,9 +13,16 @@ import (
 // TestValidationAttemptStopsAtFirstFailureAndTruncatesOutput verifies artifacts preserve the actionable failure.
 func TestValidationAttemptStopsAtFirstFailureAndTruncatesOutput(t *testing.T) {
 	repo := gitRepo(t)
-	attempt := runValidationCommands(context.Background(), repo, "execution", 1, []string{
-		"yes x | head -c 200010; exit 7",
-		"touch should-not-run",
+	failScript := filepath.Join(repo, "fail-large")
+	if err := os.WriteFile(failScript, []byte("#!/bin/sh\nyes x | head -c 200010\nexit 7\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shouldNotRun := filepath.Join(repo, "should-not-run")
+	attempt := runValidationCommands(context.Background(), repo, "execution", 1, ValidationConfig{
+		Commands: []ValidationCommand{
+			{Executable: failScript},
+			{Executable: "touch", Args: []string{shouldNotRun}},
+		},
 	})
 	if attempt.Status != validationStatusFailed || len(attempt.Commands) != 1 {
 		t.Fatalf("attempt = %#v, want first command failure only", attempt)
@@ -26,8 +33,26 @@ func TestValidationAttemptStopsAtFirstFailureAndTruncatesOutput(t *testing.T) {
 	if !strings.Contains(attempt.Commands[0].Output, "[validation output truncated]") {
 		t.Fatal("failed command output should include truncation marker")
 	}
-	if fileExists(filepath.Join(repo, "should-not-run")) {
+	if fileExists(shouldNotRun) {
 		t.Fatal("validation continued after the first failing command")
+	}
+}
+
+// TestValidationCommandsDoNotInterpretShellSyntax verifies commands are structured argv.
+func TestValidationCommandsDoNotInterpretShellSyntax(t *testing.T) {
+	repo := gitRepo(t)
+	shouldNotRun := filepath.Join(repo, "should-not-run")
+	attempt := runValidationCommands(context.Background(), repo, "execution", 1, ValidationConfig{
+		Commands: []ValidationCommand{{Executable: "printf", Args: []string{"%s", "ok; touch " + shouldNotRun}}},
+	})
+	if attempt.Status != validationStatusPassed || len(attempt.Commands) != 1 {
+		t.Fatalf("attempt = %#v, want structured command success", attempt)
+	}
+	if !strings.Contains(attempt.Commands[0].Output, "ok; touch ") {
+		t.Fatalf("command result = %#v, want literal shell metacharacters", attempt.Commands[0])
+	}
+	if fileExists(shouldNotRun) {
+		t.Fatal("validation interpreted shell metacharacters")
 	}
 }
 

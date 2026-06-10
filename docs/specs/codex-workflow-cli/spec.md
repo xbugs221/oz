@@ -239,6 +239,7 @@
 - **且** 默认配置包含 `workflow.stages.planning/execution/review/qa/fix/archive`
 - **且** 每类会话配置包含 `cli` 和 `reasoning`
 - **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`qa.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
+- **且** 默认配置写入每类会话的 `permissions: default`
 - **且** 默认配置写入 `validation.max_attempts_per_stage: 3`
 - **且** 默认配置写入空的 `validation.commands: []`
 - **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
@@ -278,7 +279,7 @@
 - **则** 系统读取 `wo.workflow` 配置
 - **且** 校验 reasoning 只能是 `low`、`medium`、`high`、`xhigh`
 - **且** 校验 `max_review_iterations` 是非负整数
-- **且** 校验 `validation.commands` 中的命令必须是非空字符串
+- **且** 校验 `validation.commands` 中每个命令必须包含非空 `executable`
 
 #### 场景：配置文件冲突
 
@@ -389,11 +390,38 @@
 - **当** 系统构造 Pi sealed run 参数
 - **则** 参数不得包含 `--subagent`、`--agent`、`explore` 或 OpenCode 专属 agent 参数
 
+// Sources: 12-收窄验收gate到提案范围
+
 #### 场景：并行 review gate 不得被 clean 忽略
 
 - **给定** `review` 并行组已启用
 - **当** `parallel-review-i.json` 中任一配置成员缺失、成员失败，或 gate_input 成员报告 blocker/major finding
 - **则** 同轮 `review_i.json.decision` 不得为 `clean`
+- finding scope 缺省按 `current_change` 处理；`out_of_scope_existing` 只能作为历史债务记录（`non_blocking_findings`），不阻断 clean。
+
+#### 场景：out-of-scope severe finding 不阻断 clean
+
+- **给定** `parallel-review-1.json` 中所有配置成员均成功
+- **并且**某成员报告 `severity=major`、`scope=out_of_scope_existing` 的历史债务
+- **当**主 review artifact 为 clean
+- **则** `ValidateParallelReviewGate` 必须允许 workflow 继续
+- **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
+- **真实数据来源**：脚本临时写入真实 parallel review artifact JSON，调用真实 `ValidateParallelReviewGate`
+- **入口路径**：`internal/app/parallel.go`
+- **关键断言**：out-of-scope major finding 不阻断；成员 status 全部 success
+- **剩余风险**：成员失败仍按既有硬阻断处理
+
+#### 场景：当前变更和旧格式 severe finding 仍阻断 clean
+
+- **给定** `parallel-review-1.json` 中存在 `scope=current_change` 的 major finding
+- **当**主 review artifact 为 clean
+- **则** gate 必须拒绝 clean
+- **并且**缺少 `scope` 的旧格式 major finding 也必须继续拒绝 clean
+- **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
+- **真实数据来源**：同一脚本构造 current-change artifact 和 legacy artifact
+- **入口路径**：`internal/app/parallel.go`
+- **关键断言**：当前变更 severe finding 阻断；legacy missing scope 保持旧阻断行为
+- **剩余风险**：不会自动判断真实 git blame，scope 仍由 reviewer/QA 给出并接受 review
 
 #### 场景：并行 QA 覆盖 acceptance 合同
 
@@ -402,6 +430,68 @@
 - **则** 当前主 agent 按 `workflow_config.parallel.groups.qa` 的职责生成 `parallel-qa-i.json`
 - **且** `qa_i.json.acceptance_matrix` 必须逐项覆盖 `acceptance.json.required_tests` 和 `required_evidence`
 - **且** 任一配置成员缺失、成员失败、blocker/major finding 或 required evidence 缺失时，`qa_i.json.decision` 不得为 `clean`
+- `non_blocking_findings` 仅允许 `scope=out_of_scope_existing`，仅用于记录历史债务；`acceptance_matrix` 仍必须逐项覆盖 acceptance 合同 id，不得扩展为债务项。
+
+#### 场景：QA 可记录历史债务但 acceptance_matrix 不得新增无关 id
+
+- **给定** `acceptance.json` 定义了 `required_tests` 和 `required_evidence`
+- **并且** clean QA artifact 的 `acceptance_matrix` 逐项覆盖这些 id
+- **并且** QA artifact 通过 `non_blocking_findings` 记录 `scope=out_of_scope_existing` 的历史债务
+- **当** workflow 调用 `ValidateQAAgainstAcceptance`
+- **则** QA 必须通过
+- **并且**如果 `acceptance_matrix` 额外引用未知 id，必须继续失败
+- **测试**：`tests/specs/codex-workflow-cli/test_qa_acceptance_scope_contract.sh`
+- **真实数据来源**：脚本临时写入 QA artifact JSON 并构造真实 acceptance contract
+- **入口路径**：`internal/app/qa.go`
+- **关键断言**：non-blocking finding 不影响 acceptance matrix；未知 acceptance id 仍失败
+- **剩余风险**：该测试不启动浏览器，浏览器路径由具体业务提案自行定义
+
+### 需求：并行 subagent 会话状态不互相覆盖
+
+系统必须让同一 parallel group 中并发运行的 subagent 只合并自己的状态增量，不得用启动时的旧 `state.json` 快照覆盖其他 subagent 已写入的 session。
+
+#### 场景：implementation_context 多成员并发完成后保留全部 session
+
+- **给定** 一个 running `execution` run，`implementation_context` 配置了多个 subagent member
+- **当** 这些 member 使用各自的旧 state 快照并发完成，并分别写出 member artifact 和 session ID
+- **则** 最终 `state.json.sessions` 必须包含每个 member 的 session key
+- **并且** 不得丢失主阶段已有 session
+- **测试**：`tests/specs/codex-workflow-cli/test_parallel_subagent_session_merge_contract.sh`
+- **真实数据来源**：测试在临时 git 仓库中创建真实 run state，调用 `nodeRunSubagent` 写真实 `parallel-members/` artifact
+- **入口路径**：`nodeRunSubagent`、`saveState/loadState`、状态合并 helper
+- **关键断言**：全部 subagent session key 都存在；每个 member artifact 都存在
+- **剩余风险**：该场景不修复历史 run 中已经丢失的 session
+
+### 需求：status 展示完成 subagent 的真实 session
+
+系统必须让 `wo status/watch` 的 subagent 行反映 durable state 中已经记录的 session ID。已完成 member artifact 对应的行不应因为并发保存覆盖而随机显示 `-`。
+
+#### 场景：已完成 member artifact 对应的 status 行显示 session ID
+
+- **给定** 并发 subagent 已完成，member artifact 存在，`state.json.sessions` 应包含每个 member 的 session
+- **当** 系统构建 compact status view
+- **则** 每个完成 member 行必须显示对应 session ID
+- **并且** marker 必须仍是完成态 `✓`
+- **测试**：`tests/specs/codex-workflow-cli/test_parallel_subagent_session_merge_contract.sh`
+- **真实数据来源**：同一测试中由 fake runner 通过 subagent prompt 写出的 member artifact 和真实 `state.json`
+- **入口路径**：`buildStatusView`、`statusSubagentRows`、`statusSubagentSessionID`
+- **关键断言**：每个 member 的 row `SessionID` 等于对应 session；row `Marker` 为 `✓`
+- **剩余风险**：status 不从外部 agent 历史记录补救缺失 session，缺失状态应由写入路径修复
+
+### 需求：运行中 subagent session 可提前观测
+
+系统必须在 subagent backend 输出 session started 事件后立即把 session 合并进 `state.json`，不能等到 member artifact 完成后才保存。
+
+#### 场景：backend 输出 session started 后，artifact 完成前 state 已包含 session
+
+- **给定** 一个 subagent runner 在写 artifact 前先输出 session started 事件
+- **当** subagent 仍阻塞在运行中，member artifact 尚未完成
+- **则** `state.json.sessions` 必须已经包含该 subagent 的 session key
+- **测试**：`tests/specs/codex-workflow-cli/test_parallel_subagent_session_merge_contract.sh`
+- **真实数据来源**：测试 runner 实现 progress writer，在 artifact 写入前发送 session started 事件并阻塞
+- **入口路径**：`nodeRunSubagent` 与 agent runner progress writer 的连接点
+- **关键断言**：释放 runner 前读取 `state.json`，能看到对应 subagent session；释放后 goroutine 正常完成
+- **剩余风险**：该场景不要求未完成 member 行显示成功，只要求 session 可观测
 
 ### 需求：默认配置经过审计并保持一致
 
@@ -675,6 +765,26 @@
 - **则** 必须报错提示缺少当前 `prompts.qa` 快照
 - **当** 系统渲染任意 `fix_N` 阶段 prompt
 - **则** 必须报错提示缺少当前 `prompts.fix` 快照
+
+// Sources: 12-收窄验收gate到提案范围
+
+### 需求：历史债务非阻断记录
+
+系统必须允许 clean review 记录不属于当前提案范围的历史债务，同时保持 `findings` 为空。
+
+#### 场景：clean review 可以记录 out-of-scope 历史债务
+
+- **给定** review artifact 的 `decision` 为 `clean`
+- **并且** `findings` 为空、所有 checks 为 true、evidence 包含验证和运行时证据
+- **并且** `non_blocking_findings` 中存在 `scope=out_of_scope_existing` 的 major finding
+- **当** workflow 读取并验证该 review artifact
+- **则** artifact 必须通过 review schema 校验
+- **并且**该历史债务不得触发 fix 轮次
+- **测试**：`tests/specs/codex-workflow-cli/test_review_non_blocking_debt_contract.sh`
+- **真实数据来源**：脚本在 `internal/app` 包内临时写入 Go 测试，调用真实 `ReadReview`、`ValidateReview` 和 `NeedsFix`
+- **入口路径**：`internal/app/review.go`
+- **关键断言**：clean review 接受 `non_blocking_findings`；blocking `findings` 仍不允许出现在 clean review
+- **剩余风险**：该测试不评价历史债务内容质量，只验证机器合同边界
 
 ### 需求：严格 review artifact
 
@@ -1179,12 +1289,28 @@
 
 - **给定** 当前 run 已完成 planning，正在 execution，且配置了 implementation context 子代理
 - **当** 调用 `wo status -w1`
-- **则** stdout 第一行必须是静态 indicator 和 workflow 短编号，例如 `→ w1`
-- **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `规划阶段 planner-session ✓ 2.00` 和 `执行阶段 writer-session → 6.50`
-- **且** 子代理行必须缩进两个空格并使用用户可读短名，例如 `  代码侦察 explore-session ✓ 1.50`
+- **则** stdout 第一行必须是提案列表项，例如 `- 7-统一输出`
+- **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `  规划阶段 planner-session ✓ 2.00` 和 `  执行阶段 writer-session → 6.50`
+- **且** 子代理行必须在阶段行下继续缩进并使用用户可读短名，例如 `    代码侦察 explore-session ✓ 1.50`
 - **且** marker 只使用 `-`、`→`、`✓` 或 `x`
 - **且** 耗时必须格式化为两位小数分钟，不追加单位
-- **且** 输出不得包含 `工作流`、状态英文单词、change name、`引擎`、并行 group 汇总行或总耗时行
+- **且** 输出不得包含 `工作流`、状态英文单词、workflow 短编号 header、`引擎`、并行 group 汇总行或总耗时行
+
+#### 场景：watch spinner 只标记运行阶段
+
+- **给定** 当前 run 已完成 planning 且正在 execution
+- **当** 用户运行 `wo watch -w1`
+- **则** stdout 第一行必须仍是提案列表项
+- **且** spinner 帧必须替换 `执行阶段` 行的 running marker
+- **且** stdout 不得显示 spinner workflow header，例如 `| w1`
+
+#### 场景：窄 TTY 刷新不残留旧帧首行
+
+- **给定** 当前 run 的 change name 很长，在窄终端中会自动换行
+- **当** 用户在真实 TTY 中运行 `wo watch` 并连续刷新多帧
+- **则** 最终屏幕第一条业务内容必须仍是 `- <change-name>`
+- **且** 最终屏幕不得残留 `b1`、`w1` 或旧 spinner header
+- **且** running 阶段行仍必须显示当前 spinner marker
 
 #### 场景：规划会话可见
 
@@ -1296,13 +1422,12 @@
 - **且** `2-b` 对应的 run 正在执行 `review_1`
 - **且** `3-c` 尚未创建 run
 - **当** 用户运行 `wo status`
-- **则** 第一行必须显示 indicator、batch 短编号和整体进度，例如 `→ b1 2/3`
-- **且** 批量任务组名不得包含真实 batch id
-- **且** 输出必须显示整体进度为 `2/3`
+- **则** 第一行必须是第一个 change 的提案列表项，例如 `- 1-a`
+- **且** 输出不得显示 batch 短编号 header、真实 batch id 或 workflow header
 - **且** 输出必须把 `1-a`、`2-b` 和 `3-c` 分别显示为只包含 change 名称的独立行
 - **且** change 行不得包含 workflow 短编号、run id、索引、状态或运行中标记
 - **且** 未开始的 `3-c` 行不得追加 `未开始`
-- **且** 每个已创建 workflow 行下方必须紧跟它自己的 `→ wN` header 和固定列阶段/子代理行
+- **且** 每个已创建 workflow 的固定列阶段/子代理行必须直接显示在对应 change 行下方
 - **且** 未开始 change 下方不得显示伪造的内部阶段
 
 #### 场景：batch 刚提交但尚未创建 run
@@ -1310,8 +1435,8 @@
 - **给定** 当前仓库存在一个运行中的 batch state
 - **且** batch 的 `run_ids` 为空
 - **当** 用户运行 `wo status`
-- **则** 输出必须包含 batch 短编号、状态和整体进度
-- **且** 输出必须列出 batch 中所有 change
+- **则** 输出必须直接列出 batch 中所有 change
+- **且** 输出不得包含 batch 短编号 header 或整体进度 header
 - **且** 每个 change 行不得显示为 `未开始`
 - **且** 命令不得因为缺少当前 run 而返回“没有 wo run”
 
@@ -2122,3 +2247,114 @@
 - **当** 默认 go-dag run 完成后，用户运行 `wo status --run-id <run-id> --json`
 - **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`
+
+### 需求：默认工作流模板脱离 Go 硬编码
+
+// Sources: 11-新增-MADA-工作流profiles
+
+系统必须把默认 `wo.yaml` 生成逻辑中的并行 subagent 描述、角色 purpose、profile 提示词配置从 Go 字符串拼接中剥离到独立内置 YAML 模板文件 `profiles-template/*.yaml`。
+
+#### 场景：默认 profile 由内置 YAML 模板生成
+
+- **给定** 当前仓库源码
+- **当** 系统生成默认工作流配置
+- **则** 仓库必须包含 `profiles-template/default.yaml`
+- **并且** `profiles-template/default.yaml` 必须保存默认 `wo config` 当前输出语义
+- **并且** Go 源码不得继续硬编码默认 subagent 角色名和 purpose 文本
+- **并且** 默认 `wo config` 不带 `--profile` 时仍生成与现有默认 profile 等价的标准 `wo.yaml`
+- **测试**：`tests/specs/codex-workflow-cli/test_profile_templates_externalized_contract.sh`
+- **关键断言**：模板文件存在且包含业务角色；Go 源码不再承载默认角色文本；默认 `wo config` 仍可生成和加载标准配置
+- **剩余风险**：替换内置模板后需要重新构建二进制
+
+### 需求：MADA profile 生成标准配置
+
+// Sources: 11-新增-MADA-工作流profiles
+
+系统必须允许用户通过 `wo config --profile <name>` 生成可试用的 MADA 工作流配置，且输出仍是标准 `wo.yaml`。
+
+#### 场景：三个 MADA profile 均能生成可加载的 wo.yaml
+
+- **给定** 一个临时 git 仓库
+- **当** 用户分别运行 `wo config --profile mada-code`、`wo config --profile mada-decision`、`wo config --profile mada-research`
+- **则** 每次都必须生成 `wo.yaml`
+- **并且** YAML 中必须启用 `parallel.enabled`
+- **并且** 必须包含 `planning_context`、`implementation_context`、`review`、`qa` 四个并行组
+- **并且** `review` 和 `qa` 必须是 `gate_input`，`planning_context` 和 `implementation_context` 必须是 `advisory`
+- **并且** `wo graph --change <change> --format json` 必须能成功读取该配置
+- **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
+- **关键断言**：三类 profile 都生成标准配置；四类并行组模式正确
+- **剩余风险**：不启动真实 agent，避免创建阶段依赖外部模型
+
+#### 场景：decision profile 包含决策评审所需角色
+
+- **给定** 一个临时 git 仓库
+- **当** 用户运行 `wo config --profile mada-decision`
+- **则** 生成的 `wo.yaml` 必须包含面向技术选型的角色：`需求澄清员`、`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
+- **并且** `wo graph --change <change> --format json` 必须展示这些 review 子代理节点
+- **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
+- **关键断言**：decision profile 不退化为默认代码审查角色
+- **剩余风险**：该测试不评价具体推荐答案质量
+
+### 需求：Profile 可发现且错误明确
+
+// Sources: 11-新增-MADA-工作流profiles
+
+系统必须让用户能发现可用 profile，并在输入错误 profile 时得到明确反馈。
+
+#### 场景：wo config --list-profiles 输出全部 profile
+
+- **当** 用户运行 `wo config --list-profiles`
+- **则** 输出必须包含 `default`、`mada-code`、`mada-decision`、`mada-research`
+- **并且** 每个 MADA profile 必须带有中文用途说明
+- **并且** 该命令不得写入 `wo.yaml`
+- **测试**：`tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh`
+- **关键断言**：profile 可发现；list 命令无写文件副作用
+- **剩余风险**：第一版只要求 human 输出，不要求 JSON 输出
+
+#### 场景：未知 profile 返回错误并提示可用名称
+
+- **当** 用户运行 `wo config --profile not-real`
+- **则** 命令必须非零退出
+- **并且** stderr 必须包含未知 profile 名称
+- **并且** stderr 必须提示至少一个可用 profile 名称
+- **并且** 不得写入 `wo.yaml`
+- **测试**：`tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh`
+- **关键断言**：错误明确且无配置文件副作用
+- **剩余风险**：错误文案可以调整，但必须包含输入名和可用 profile 名称
+
+// Sources: 12-收窄验收gate到提案范围
+
+### 需求：旧提案兼容
+
+系统必须保证执行本变更后，已创建但尚未运行的旧提案不需要补 scope 字段或迁移 acceptance 合同。
+
+#### 场景：未运行旧提案不增加新必填字段
+
+- **给定** 一个只包含既有 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/` 的 active change
+- **并且**其 `acceptance.json` 不包含任何 scope 或 non-blocking 字段
+- **当**用户运行 `oz validate <change> --json`
+- **则**校验必须成功
+- **测试**：`tests/specs/codex-workflow-cli/test_legacy_active_change_compatibility_contract.sh`
+- **真实数据来源**：脚本创建临时 git 仓库和旧格式 active change，并运行真实编译后的 `oz validate`
+- **入口路径**：`cmd/oz validate`
+- **关键断言**：旧格式 active change 通过 validate；新 scope 字段不是 acceptance 必填项
+- **剩余风险**：该测试不启动完整 `wo run`，因为兼容性重点是未运行提案的创建阶段合同
+
+// Sources: 12-收窄验收gate到提案范围
+
+### 需求：Prompt 范围合同
+
+review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 agent 只靠自由发挥判断范围。
+
+#### 场景：review/QA prompt 明确要求 scope 分类
+
+- **给定** 默认 prompt 模板
+- **当**执行器生成 review 或 QA 指令
+- **则** prompt 必须包含 `non_blocking_findings`
+- **并且**必须包含 `out_of_scope_existing`
+- **并且**必须说明当前变更、acceptance 合同和 introduced regression 仍是 hard block
+- **测试**：`tests/specs/codex-workflow-cli/test_prompt_scope_contract.sh`
+- **真实数据来源**：脚本读取仓库内真实 `prompts-template/wo-review.md` 和 `prompts-template/wo-qa.md`
+- **入口路径**：默认 prompt 模板
+- **关键断言**：review/QA prompt 都包含 scope 字段、非阻断 finding 字段和当前范围硬阻断说明
+- **剩余风险**：该测试只验证 prompt 明确性，最终 gate 行为由前面的 Go 合同测试证明

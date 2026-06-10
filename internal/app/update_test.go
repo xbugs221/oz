@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -28,11 +29,34 @@ func TestCompareVersionsHandlesReleaseTags(t *testing.T) {
 	}
 }
 
+// setTestGithubBaseURL points release API calls at a per-test server.
+func setTestGithubBaseURL(t *testing.T, rawURL string) {
+	t.Helper()
+	previous := githubBaseURL
+	githubBaseURL = rawURL
+	t.Cleanup(func() { githubBaseURL = previous })
+}
+
+// testUpdateAssetTrust returns a download trust policy scoped to one httptest server.
+func testUpdateAssetTrust(t *testing.T, rawURL string) updateAssetTrustPolicy {
+	t.Helper()
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := strings.ToLower(parsed.Hostname())
+	trust := defaultUpdateAssetTrustPolicy()
+	if host != "" {
+		trust.TrustedHosts[host] = true
+	}
+	return trust
+}
+
 // TestUpdateCheckUsesFreshCacheWithoutNetwork verifies status can show cached updates offline.
 func TestUpdateCheckUsesFreshCacheWithoutNetwork(t *testing.T) {
 	cachePath := filepath.Join(t.TempDir(), "update-check.json")
 	t.Setenv("WO_UPDATE_CACHE", cachePath)
-	t.Setenv("WO_GITHUB_BASE_URL", "http://127.0.0.1:1")
+	setTestGithubBaseURL(t, "http://127.0.0.1:1")
 	cache := updateCheckCache{
 		CheckedAt:  time.Now().UTC(),
 		TTLSeconds: int64(updateCheckTTL.Seconds()),
@@ -69,7 +93,7 @@ func TestDefaultUpdateToolsUseOzReleaseBatch(t *testing.T) {
 func TestExpiredCacheRefreshFailureKeepsOldCache(t *testing.T) {
 	cachePath := filepath.Join(t.TempDir(), "update-check.json")
 	t.Setenv("WO_UPDATE_CACHE", cachePath)
-	t.Setenv("WO_GITHUB_BASE_URL", "http://127.0.0.1:1")
+	setTestGithubBaseURL(t, "http://127.0.0.1:1")
 	cache := updateCheckCache{
 		CheckedAt:  time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
 		TTLSeconds: int64(updateCheckTTL.Seconds()),
@@ -99,6 +123,27 @@ func TestExpiredCacheRefreshFailureKeepsOldCache(t *testing.T) {
 	}
 }
 
+// TestFetchLatestReleaseIgnoresEnvironmentBaseURL verifies env cannot redirect production trust.
+func TestFetchLatestReleaseIgnoresEnvironmentBaseURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/xbugs221/oz/releases/latest" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"tag_name":"v1.2.3","assets":[]}`)
+	}))
+	defer server.Close()
+	setTestGithubBaseURL(t, server.URL)
+	t.Setenv("WO_GITHUB_BASE_URL", "http://127.0.0.1:1")
+	release, err := fetchLatestRelease(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "oz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release.TagName != "v1.2.3" {
+		t.Fatalf("release = %#v, want test server release", release)
+	}
+}
+
 // TestCheckUpdatesSkipsEmptyOzVersion verifies malformed local versions stay best-effort.
 func TestCheckUpdatesSkipsEmptyOzVersion(t *testing.T) {
 	dir := t.TempDir()
@@ -108,7 +153,7 @@ func TestCheckUpdatesSkipsEmptyOzVersion(t *testing.T) {
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("WO_UPDATE_CACHE", filepath.Join(t.TempDir(), "cache.json"))
-	t.Setenv("WO_GITHUB_BASE_URL", "http://127.0.0.1:1")
+	setTestGithubBaseURL(t, "http://127.0.0.1:1")
 	if _, err := checkUpdates(t.Context(), []updateTool{{Name: "oz", Owner: "xbugs221", Repo: "oz"}}, true); err != nil {
 		t.Fatalf("empty oz version should be skipped, got %v", err)
 	}
@@ -125,9 +170,15 @@ func TestRunUpdateWorksOutsideGitRepo(t *testing.T) {
 	}
 	t.Setenv("WO_UPDATE_SELF_PATH", target)
 	t.Setenv("PATH", t.TempDir())
-	server, _ := updateServer(t, "wo", "v1.0.0", fakeBinary("v1.0.0"), false)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/xbugs221/oz/releases/latest" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"tag_name":"v1.0.0","assets":[]}`)
+	}))
 	defer server.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", server.URL)
+	setTestGithubBaseURL(t, server.URL)
 	chdir(t, t.TempDir())
 
 	var stdout, stderr bytes.Buffer
@@ -170,6 +221,50 @@ func TestVerifyChecksumRejectsMismatch(t *testing.T) {
 	}
 	if err := verifyChecksum(archive, sums); err == nil {
 		t.Fatal("checksum mismatch should fail")
+	}
+}
+
+// TestDownloadAssetRejectsOversizedChecksum verifies update downloads are bounded.
+func TestDownloadAssetRejectsOversizedChecksum(t *testing.T) {
+	body := strings.Repeat("x", maxChecksumFileBytes+1)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, body)
+	}))
+	defer server.Close()
+	setTestGithubBaseURL(t, server.URL)
+	_, err := downloadAssetWithTrust(t.Context(), server.Client(), releaseAsset{Name: "sha256sums.txt", BrowserDownloadURL: server.URL}, t.TempDir(), testUpdateAssetTrust(t, server.URL))
+	if err == nil || !strings.Contains(err.Error(), "超过大小上限") {
+		t.Fatalf("downloadAsset err = %v, want size limit", err)
+	}
+}
+
+// TestDownloadAssetRejectsHTTPOnConfiguredAPIHost verifies test API hosts do not bypass production URL policy.
+func TestDownloadAssetRejectsHTTPOnConfiguredAPIHost(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "not used")
+	}))
+	defer server.Close()
+	setTestGithubBaseURL(t, server.URL)
+
+	_, err := downloadAssetWithTrust(t.Context(), server.Client(), releaseAsset{Name: "wo.tgz", BrowserDownloadURL: server.URL + "/wo.tgz"}, t.TempDir(), testUpdateAssetTrust(t, server.URL))
+	if err == nil || !strings.Contains(err.Error(), "必须使用 https") {
+		t.Fatalf("downloadAsset err = %v, want https rejection", err)
+	}
+}
+
+// TestDownloadAssetRejectsUntrustedURL verifies release assets must come from trusted HTTPS hosts.
+func TestDownloadAssetRejectsUntrustedURL(t *testing.T) {
+	for _, raw := range []string{
+		"http://github.com/xbugs221/oz/releases/download/v1.0.0/wo.tgz",
+		"file:///tmp/wo.tgz",
+		"https://example.com/wo.tgz",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			_, err := downloadAsset(t.Context(), http.DefaultClient, releaseAsset{Name: "wo.tgz", BrowserDownloadURL: raw}, t.TempDir())
+			if err == nil {
+				t.Fatalf("downloadAsset(%q) succeeded, want trusted URL error", raw)
+			}
+		})
 	}
 }
 
@@ -218,9 +313,9 @@ func TestInstallToolUpdateBackupFailureKeepsOriginal(t *testing.T) {
 	t.Setenv("WO_UPDATE_SELF_PATH", target)
 	server, _ := updateServer(t, "wo", "v1.1.0", fakeBinary("v1.1.0"), false)
 	defer server.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", server.URL)
+	setTestGithubBaseURL(t, server.URL)
 
-	result := installToolUpdate(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"})
+	result := installToolUpdateWithTrust(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"}, testUpdateAssetTrust(t, server.URL))
 	if result.Err == nil || !strings.Contains(result.Err.Error(), "备份失败") {
 		t.Fatalf("result = %#v, want backup failure", result)
 	}
@@ -249,27 +344,11 @@ func TestInstallToolUpdateBacksUpReplacesAndPrintsRollback(t *testing.T) {
 	}
 	t.Setenv("WO_UPDATE_SELF_PATH", target)
 
-	var archive []byte
-	var sum string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/repos/xbugs221/wo/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":"v1.1.0","assets":[{"name":"wo_v1.1.0_%s_%s.tar.gz","browser_download_url":"%s/wo.tgz"},{"name":"sha256sums.txt","browser_download_url":"%s/sha256sums.txt"}]}`, runtime.GOOS, runtime.GOARCH, "http://"+r.Host, "http://"+r.Host)
-		case "/wo.tgz":
-			w.Write(archive)
-		case "/sha256sums.txt":
-			fmt.Fprintf(w, "%s  wo_v1.1.0_%s_%s.tar.gz\n", sum, runtime.GOOS, runtime.GOARCH)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
+	server, _ := updateServer(t, "wo", "v1.1.0", fakeBinary("v1.1.0"), false)
 	defer server.Close()
-	archive = tarGzBinary(t, "wo", fakeBinary("v1.1.0"))
-	digest := sha256.Sum256(archive)
-	sum = fmt.Sprintf("%x", digest)
-	t.Setenv("WO_GITHUB_BASE_URL", server.URL)
+	setTestGithubBaseURL(t, server.URL)
 
-	result := installToolUpdate(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"})
+	result := installToolUpdateWithTrust(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"}, testUpdateAssetTrust(t, server.URL))
 	if result.Err != nil {
 		t.Fatal(result.Err)
 	}
@@ -302,9 +381,9 @@ func TestInstallToolUpdateCanUpdateOz(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	server, _ := updateServer(t, "oz", "v1.1.0", fakeBinary("v1.1.0"), false)
 	defer server.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", server.URL)
+	setTestGithubBaseURL(t, server.URL)
 
-	result := installToolUpdate(t.Context(), server.Client(), updateTool{Name: "oz", Owner: "xbugs221", Repo: "oz"})
+	result := installToolUpdateWithTrust(t.Context(), server.Client(), updateTool{Name: "oz", Owner: "xbugs221", Repo: "oz"}, testUpdateAssetTrust(t, server.URL))
 	if result.Err != nil || !result.Updated || result.BackupPath == "" {
 		t.Fatalf("result = %#v", result)
 	}
@@ -327,8 +406,8 @@ func TestOneToolFailureDoesNotRollbackSuccessfulTool(t *testing.T) {
 	t.Setenv("WO_UPDATE_SELF_PATH", woTarget)
 	woServer, _ := updateServer(t, "wo", "v1.1.0", fakeBinary("v1.1.0"), false)
 	defer woServer.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", woServer.URL)
-	woResult := installToolUpdate(t.Context(), woServer.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"})
+	setTestGithubBaseURL(t, woServer.URL)
+	woResult := installToolUpdateWithTrust(t.Context(), woServer.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"}, testUpdateAssetTrust(t, woServer.URL))
 	if woResult.Err != nil || !woResult.Updated {
 		t.Fatalf("wo result = %#v", woResult)
 	}
@@ -341,8 +420,8 @@ func TestOneToolFailureDoesNotRollbackSuccessfulTool(t *testing.T) {
 	t.Setenv("PATH", ozDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ozServer, _ := updateServer(t, "oz", "v1.1.0", fakeBinary("v1.1.0"), true)
 	defer ozServer.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", ozServer.URL)
-	ozResult := installToolUpdate(t.Context(), ozServer.Client(), updateTool{Name: "oz", Owner: "xbugs221", Repo: "oz"})
+	setTestGithubBaseURL(t, ozServer.URL)
+	ozResult := installToolUpdateWithTrust(t.Context(), ozServer.Client(), updateTool{Name: "oz", Owner: "xbugs221", Repo: "oz"}, testUpdateAssetTrust(t, ozServer.URL))
 	if ozResult.Err == nil || !strings.Contains(ozResult.Err.Error(), "校验失败") {
 		t.Fatalf("oz result = %#v, want checksum failure", ozResult)
 	}
@@ -378,14 +457,14 @@ func TestReplaceFailureKeepsBackupAndStagedPath(t *testing.T) {
 	t.Setenv("WO_UPDATE_SELF_PATH", target)
 	server, _ := updateServer(t, "wo", "v1.1.0", fakeBinary("v1.1.0"), false)
 	defer server.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", server.URL)
+	setTestGithubBaseURL(t, server.URL)
 	oldReplace := replaceExecutableFunc
 	replaceExecutableFunc = func(target, staged string) (replaceResult, error) {
 		return replaceResult{StagedPath: staged}, fmt.Errorf("replace denied")
 	}
 	t.Cleanup(func() { replaceExecutableFunc = oldReplace })
 
-	result := installToolUpdate(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"})
+	result := installToolUpdateWithTrust(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"}, testUpdateAssetTrust(t, server.URL))
 	if result.Err == nil || result.BackupPath == "" || result.StagedPath == "" {
 		t.Fatalf("result = %#v, want failure with backup and staged paths", result)
 	}
@@ -417,7 +496,7 @@ func TestInstalledVersionFailureReportsRollback(t *testing.T) {
 	t.Setenv("WO_UPDATE_SELF_PATH", target)
 	server, _ := updateServer(t, "wo", "v1.1.0", fakeBinary("v1.1.0"), false)
 	defer server.Close()
-	t.Setenv("WO_GITHUB_BASE_URL", server.URL)
+	setTestGithubBaseURL(t, server.URL)
 	oldReplace := replaceExecutableFunc
 	replaceExecutableFunc = func(target, staged string) (replaceResult, error) {
 		if err := os.WriteFile(target, fakeBinary("v9.9.9"), 0o755); err != nil {
@@ -428,7 +507,7 @@ func TestInstalledVersionFailureReportsRollback(t *testing.T) {
 	}
 	t.Cleanup(func() { replaceExecutableFunc = oldReplace })
 
-	result := installToolUpdate(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"})
+	result := installToolUpdateWithTrust(t.Context(), server.Client(), updateTool{Name: "wo", Owner: "xbugs221", Repo: "wo"}, testUpdateAssetTrust(t, server.URL))
 	if result.Err == nil || !strings.Contains(result.Err.Error(), "安装后版本验证失败") {
 		t.Fatalf("result = %#v, want installed version failure", result)
 	}
@@ -529,7 +608,7 @@ func updateServer(t *testing.T, tool, latest string, binary []byte, badChecksum 
 		sum = strings.Repeat("0", 64)
 	}
 	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assetName := fmt.Sprintf("%s_%s_%s_%s.tar.gz", tool, latest, runtime.GOOS, runtime.GOARCH)
 		switch r.URL.Path {
 		case "/repos/xbugs221/" + tool + "/releases/latest", "/repos/xbugs221/oz/releases/latest":

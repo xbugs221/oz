@@ -9,7 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+trap 'chmod -R u+w "$TMPDIR" 2>/dev/null || true; rm -rf "$TMPDIR"' EXIT
+export HOME="$TMPDIR/home"
+mkdir -p "$HOME"
 
 export TMPDIR
 
@@ -25,10 +27,11 @@ cat > wo.yaml <<'EOF'
 wo:
   workflow:
     max_review_iterations: 0
+    parallel:
+      enabled: false
   prompts:
     planning: planning
-    acceptance: "{{.Stage}} {{.AcceptancePath}}"
-    writing: "{{.Stage}}"
+    execution: "{{.Stage}}"
     review: "{{.Stage}}"
     archive: "{{.Stage}} {{.DeliverySummaryPath}}"
 EOF
@@ -42,7 +45,12 @@ if [ "$1" = "list" ] && [ "$2" = "--json" ]; then
 elif [ "$1" = "validate" ]; then
   echo '{"valid":true,"errors":[]}'
 elif [ "$1" = "status" ]; then
-  echo '{"tasks":{"total":1,"done":0}}'
+  change="$2"
+  if grep -q '\[x\]' "docs/changes/$change/task.md"; then
+    echo '{"tasks":{"total":1,"done":1}}'
+  else
+    echo '{"tasks":{"total":1,"done":0}}'
+  fi
 fi
 EOF
 chmod +x "$TMPDIR/bin/oz"
@@ -117,7 +125,7 @@ if stage == "acceptance":
         path = m.group(1)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as f:
-            f.write("{\"summary\":\"test acceptance\",\"required_tests\":[{\"id\":\"contract-demo\",\"source\":\"change_contract\",\"path\":\"docs\/changes\/demo\/tests\/demo.acceptance.test.ts\",\"command\":\"true\",\"purpose\":\"cover demo contract\"}],\"required_evidence\":[{\"id\":\"screenshot-demo\",\"kind\":\"screenshot\",\"path\":\"test-results\/demo.png\",\"purpose\":\"prove demo runtime\"}]}\n")
+            f.write("{\"summary\":\"test acceptance\",\"required_tests\":[{\"id\":\"contract-demo\",\"source\":\"change_contract\",\"path\":\"docs\/changes\/demo\/tests\/demo.acceptance.test.ts\",\"command\":\"true\",\"purpose\":\"cover demo contract\",\"assertions\":[\"batch worker completes appended changes without skipping queue entries\"]}],\"required_evidence\":[{\"id\":\"screenshot-demo\",\"kind\":\"screenshot\",\"path\":\"test-results\/demo.png\",\"purpose\":\"prove demo runtime\"}]}\n")
 
 if stage == "archive" and change_name:
     archive_dir = os.path.join(tmpdir, 'docs', 'changes', 'archive', f'2026-05-12-{change_name}')
@@ -144,7 +152,7 @@ for name in 1-a 2-b 3-c; do
   done
   echo "- [ ] task" > "docs/changes/$name/task.md"
   cat > "docs/changes/$name/acceptance.json" <<JSON
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$name/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$name/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch worker completes appended changes without skipping queue entries"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 done
 

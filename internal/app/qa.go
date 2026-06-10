@@ -16,6 +16,7 @@ type QA struct {
 	Decision         string             `json:"decision"`
 	Evidence         []string           `json:"evidence"`
 	Findings         []Finding          `json:"findings"`
+	NonBlockingFindings []Finding        `json:"non_blocking_findings,omitempty"`
 	AcceptanceMatrix []AcceptanceResult `json:"acceptance_matrix,omitempty"`
 }
 
@@ -68,11 +69,13 @@ func ValidateQA(qa QA) error {
 		return fmt.Errorf("needs_fix qa 必须包含 findings")
 	}
 	for i, finding := range qa.Findings {
-		if finding.Title == "" || finding.Evidence == "" || finding.Recommendation == "" {
-			return fmt.Errorf("finding %d 不完整", i)
+		if err := validateFinding(finding, fmt.Sprintf("finding %d", i), false); err != nil {
+			return err
 		}
-		if _, ok := normalizeFindingSeverity(finding.Severity); !ok {
-			return fmt.Errorf("finding %d 的 severity 无效：%q", i, finding.Severity)
+	}
+	for i, finding := range qa.NonBlockingFindings {
+		if err := validateFinding(finding, fmt.Sprintf("non_blocking_findings %d", i), true); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -121,6 +124,17 @@ func normalizeQA(qa QA) QA {
 	for i := range qa.Findings {
 		if severity, ok := normalizeFindingSeverity(qa.Findings[i].Severity); ok {
 			qa.Findings[i].Severity = severity
+		}
+		if scope, ok := normalizeFindingScope(qa.Findings[i].Scope); ok {
+			qa.Findings[i].Scope = scope
+		}
+	}
+	for i := range qa.NonBlockingFindings {
+		if severity, ok := normalizeFindingSeverity(qa.NonBlockingFindings[i].Severity); ok {
+			qa.NonBlockingFindings[i].Severity = severity
+		}
+		if scope, ok := normalizeFindingScope(qa.NonBlockingFindings[i].Scope); ok {
+			qa.NonBlockingFindings[i].Scope = scope
 		}
 	}
 	return qa

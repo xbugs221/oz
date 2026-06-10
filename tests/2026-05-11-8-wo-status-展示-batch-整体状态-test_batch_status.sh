@@ -93,12 +93,16 @@ echo "=== wo status output ==="
 echo "$OUTPUT"
 
 # Assertions
-for want in "→ b1 2/3" "- 1-a" "- 2-b" "- 3-c"; do
+for want in "- 1-a" "- 2-b" "- 3-c"; do
     if ! echo "$OUTPUT" | grep -qF -- "$want"; then
         echo "FAIL: missing '$want'"
         exit 1
     fi
 done
+if echo "$OUTPUT" | grep -qF -- "→ b1 2/3"; then
+    echo "FAIL: status should not show batch header"
+    exit 1
+fi
 
 # Check every created run stage detail is indented
 if ! echo "$OUTPUT" | grep -q "  执行阶段 - ✓ -"; then

@@ -1,0 +1,103 @@
+{
+  "summary": "验证 wo 默认配置和 MADA 工作流 profile 都从内置 YAML 模板生成，用于代码、决策和资料调研三类本地试用，并确保 profile 可发现、错误明确、输出仍是标准 wo.yaml。",
+  "coverage": [
+    {
+      "spec": "需求：默认工作流模板必须脱离 Go 硬编码 / 场景：默认 profile 由内置 YAML 模板生成",
+      "tests": ["profile-templates-externalized"],
+      "evidence": ["profile-templates-externalized-log"],
+      "risk": "只要求内置模板文件可替换并随二进制编译；不要求运行时加载任意外部模板。"
+    },
+    {
+      "spec": "需求：MADA profile 可直接生成标准配置 / 场景：三个 MADA profile 均能生成可加载的 `wo.yaml`",
+      "tests": ["mada-profiles-config"],
+      "evidence": ["mada-profiles-config-log"],
+      "risk": "不启动真实 agent；只验证 CLI、配置和 graph 入口，避免创建阶段依赖外部模型。"
+    },
+    {
+      "spec": "需求：MADA profile 可直接生成标准配置 / 场景：decision profile 包含决策评审所需角色",
+      "tests": ["mada-profiles-config"],
+      "evidence": ["mada-profiles-config-log"],
+      "risk": "不评价具体推荐答案质量；答案质量由使用该 profile 的下游 change 自行定义 acceptance。"
+    },
+    {
+      "spec": "需求：Profile 可发现且错误明确 / 场景：`wo config --list-profiles` 输出全部 profile",
+      "tests": ["mada-profile-discovery"],
+      "evidence": ["mada-profile-discovery-log"],
+      "risk": "第一版只要求 human 输出，不要求 JSON 输出。"
+    },
+    {
+      "spec": "需求：Profile 可发现且错误明确 / 场景：未知 profile 返回错误并提示可用名称",
+      "tests": ["mada-profile-discovery"],
+      "evidence": ["mada-profile-discovery-log"],
+      "risk": "错误文案可调整，但必须包含未知输入和至少一个可用 MADA profile 名称。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "profile-templates-externalized",
+      "source": "change_contract",
+      "path": "docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh",
+      "command": "bash docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh",
+      "purpose": "证明默认 wo.yaml 和 MADA profile 的 subagent 描述、角色 purpose 与 profile prompt 配置维护在内置 YAML 模板文件中，而不是 Go 源码字符串拼接中。",
+      "assertions": [
+        "仓库包含 profiles-template/default.yaml、mada-code.yaml、mada-decision.yaml、mada-research.yaml",
+        "default.yaml 包含默认 parallel groups、默认 subagent 角色和 prompts 配置入口",
+        "MADA profile YAML 使用同一模板目录维护，mada-decision.yaml 包含决策型角色",
+        "internal/app 的生产 Go 源码不再硬编码默认 subagent 角色名",
+        "默认 wo config 仍能生成标准 wo.yaml，并可被 wo graph 加载"
+      ],
+      "expected_initial_failure": "当前实现仍在 internal/app/config.go 中用 mustDefaultWorkflowConfigYAML() 拼接默认 YAML，且没有 profiles-template/*.yaml。"
+    },
+    {
+      "id": "mada-profiles-config",
+      "source": "change_contract",
+      "path": "docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh",
+      "command": "bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh",
+      "purpose": "证明三个 MADA profile 能通过真实 wo config 生成标准 wo.yaml，并被 wo graph 正常加载。",
+      "assertions": [
+        "mada-code、mada-decision、mada-research 都能在临时 git 仓库中生成 wo.yaml",
+        "profile 输出来自 profiles-template/<name>.yaml 对应内置模板，而不是 Go 源码长字符串拼接",
+        "每个 profile 都启用 parallel，并包含 planning_context、implementation_context、review、qa 四组",
+        "planning_context 和 implementation_context 为 advisory，review 和 qa 为 gate_input",
+        "wo graph --change <demo> --format json 能读取生成的配置并输出 subagent/fanin 节点",
+        "mada-decision 包含技术选型决策所需角色，且这些角色出现在 graph JSON 中"
+      ],
+      "expected_initial_failure": "当前实现缺少 profiles-template/*.yaml，且不支持 wo config --profile，因此应失败于目标模板或 CLI 行为缺失。"
+    },
+    {
+      "id": "mada-profile-discovery",
+      "source": "change_contract",
+      "path": "docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh",
+      "command": "bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh",
+      "purpose": "证明用户能发现可用 profile，并且未知 profile 错误明确且无写文件副作用。",
+      "assertions": [
+        "wo config --list-profiles 输出 default、mada-code、mada-decision、mada-research",
+        "每个 MADA profile 都带中文用途说明",
+        "wo config --list-profiles 不写入 wo.yaml",
+        "wo config --profile not-real 非零返回，错误包含 not-real 和可用 MADA profile 名称",
+        "未知 profile 错误路径不写入 wo.yaml"
+      ],
+      "expected_initial_failure": "当前实现不支持 --list-profiles，也不识别 --profile 参数。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "profile-templates-externalized-log",
+      "kind": "runtime_log",
+      "path": "test-results/11-mada-profiles/profile-templates-externalized.log",
+      "purpose": "记录内置 YAML 模板文件、Go 源码去硬编码检查和默认 wo config 加载验证。"
+    },
+    {
+      "id": "mada-profiles-config-log",
+      "kind": "runtime_log",
+      "path": "test-results/11-mada-profiles/mada-profiles-config.log",
+      "purpose": "记录三个 MADA profile 生成配置、加载 graph 和角色断言的命令输出。"
+    },
+    {
+      "id": "mada-profile-discovery-log",
+      "kind": "runtime_log",
+      "path": "test-results/11-mada-profiles/mada-profile-discovery.log",
+      "purpose": "记录 profile 列表输出和未知 profile 错误路径。"
+    }
+  ]
+}

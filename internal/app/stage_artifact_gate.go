@@ -70,5 +70,5 @@ func (e *Engine) stageArtifactGateError(state State, failure error) error {
 	} else {
 		reason = fmt.Sprintf("%s；stage=%s；expectation=%s", reason, state.Stage, expect.Description)
 	}
-	return newStageArtifactGateError(fmt.Errorf("%s", reason))
+	return stageArtifactGateError{Reason: reason, Cause: failure}
 }

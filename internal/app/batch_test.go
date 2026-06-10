@@ -808,7 +808,7 @@ func TestPrintHumanStatusRunningBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 2/3", "- 1-a", "- 2-b", "- 3-c"} {
+	for _, want := range []string{"- 1-a", "- 2-b", "- 3-c"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -826,7 +826,6 @@ func TestPrintHumanStatusRunningBatch(t *testing.T) {
 	}
 	assertLineOrder(t, got,
 		"- 1-a",
-		"  → w2",
 		"- 2-b",
 		"  执行阶段 exec-thread ✓ -",
 		"  审核阶段 - → -",
@@ -860,7 +859,7 @@ func TestPrintHumanStatusFailedBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 1/2", "1-a 的写阶段失败", "- 1-a", "- 2-b", "提示: 可运行 wo restart -b1 删除失败记录并继续该批量任务"} {
+	for _, want := range []string{"1-a 的写阶段失败", "- 1-a", "- 2-b", "提示: 可运行 wo restart -b1 删除失败记录并继续该批量任务"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -897,7 +896,7 @@ func TestPrintHumanStatusFailedBatchHidesInternalNetworkError(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 1/2", "1-network 的写阶段失败", "智能体后端连接失败", "- 1-network", "- 2-next"} {
+	for _, want := range []string{"1-network 的写阶段失败", "智能体后端连接失败", "- 1-network", "- 2-next"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -935,7 +934,7 @@ func TestPrintHumanStatusBlockedReviewLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b", "审核修正达到上限"} {
+	for _, want := range []string{"- 1-a", "- 2-b", "审核修正达到上限"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -968,7 +967,7 @@ func TestPrintHumanStatusBlockedValidationLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b", "阶段验证达到上限"} {
+	for _, want := range []string{"- 1-a", "- 2-b", "阶段验证达到上限"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -1060,16 +1059,14 @@ func TestPrintHumanStatusDoneBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 2/2", "- 1-a", "- 2-b"} {
+	for _, want := range []string{"- 1-a", "- 2-b"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
 	assertLineOrder(t, got,
 		"- 1-a",
-		"  → w2",
 		"- 2-b",
-		"  → w1",
 	)
 	if strings.Contains(got, "x") {
 		t.Fatalf("done batch should not contain failure marker:\n%s", got)
@@ -1100,7 +1097,7 @@ func TestPrintHumanStatusAbortedBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b", "错误: 用户已中止", "清理: 可运行 wo clean 清理当前项目失败或异常运行态"} {
+	for _, want := range []string{"- 1-a", "- 2-b", "错误: 用户已中止", "清理: 可运行 wo clean 清理当前项目失败或异常运行态"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -1159,7 +1156,7 @@ func TestPrintHumanStatusBatchNoRunsYet(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	for _, want := range []string{"→ b1 1/2", "- 1-a", "- 2-b"} {
+	for _, want := range []string{"- 1-a", "- 2-b"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
@@ -1201,11 +1198,10 @@ func TestPrintHumanStatusDefaultPrefersLatestBatch(t *testing.T) {
 	}
 	got := stdout.String()
 	firstLine, _, _ := strings.Cut(got, "\n")
-	wantHint := fmt.Sprintf("正在查看 %s 最近一次批量工作流，如需查看普通工作流，请使用 wo status -w1", filepath.Base(repo))
-	if !strings.Contains(firstLine, wantHint) {
-		t.Fatalf("default batch status first line = %q, want %q\nfull output:\n%s", firstLine, wantHint, got)
+	if firstLine != "- old-a" {
+		t.Fatalf("default batch status first line = %q, want proposal list\nfull output:\n%s", firstLine, got)
 	}
-	if !strings.Contains(got, "→ b1 1/1") {
+	if strings.Contains(got, "最近一次批量工作流") || strings.Contains(got, "→ b1 1/1") {
 		t.Fatalf("default status should show latest batch:\n%s", got)
 	}
 	stdout.Reset()
@@ -1246,7 +1242,7 @@ func TestPrintHumanStatusNewerBatchTakesPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "→ b1 1/2") {
+	if !strings.Contains(got, "- 1-a") || !strings.Contains(got, "- 2-b") {
 		t.Fatalf("newer batch should take precedence over old single run:\n%s", got)
 	}
 	if strings.Contains(got, "写 20260510T000000.000000000Z →") {
@@ -1278,7 +1274,7 @@ func TestPrintHumanStatusShortRefsResolveHistory(t *testing.T) {
 	if err := printHumanStatus(&stdout, repo, "-b2"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "→ b2 1/1") {
+	if !strings.Contains(stdout.String(), "- old") {
 		t.Fatalf("-b2 should show older batch:\n%s", stdout.String())
 	}
 	stdout.Reset()
@@ -2034,11 +2030,11 @@ func TestWatchSpinnerReplacesArrowInRunningStage(t *testing.T) {
 
 	lines := watchRunStatusLines(repo, run, "w1", "|")
 	got := strings.Join(lines, "\n")
-	if !strings.HasPrefix(got, "| w1\n") {
-		t.Fatalf("watch output missing spinner header:\n%s", got)
+	if !strings.HasPrefix(got, "- demo\n") {
+		t.Fatalf("watch output should start from proposal list:\n%s", got)
 	}
-	if !strings.Contains(got, "执行阶段 - →") {
-		t.Fatalf("watch body should keep static running marker:\n%s", got)
+	if !strings.Contains(got, "  执行阶段 - | -") {
+		t.Fatalf("watch body should put spinner on running stage:\n%s", got)
 	}
 }
 

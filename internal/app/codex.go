@@ -40,14 +40,15 @@ func (CodexTool) NewRunner() AgentRunner {
 
 // CodexCLI invokes the real codex executable.
 type CodexCLI struct {
-	Path     string
-	Progress io.Writer
+	Path       string
+	ResolveErr error
+	Progress   io.Writer
 }
 
 // NewCodexCLI resolves the codex executable using the host PATH.
 func NewCodexCLI() *CodexCLI {
-	path, _ := resolveCommand("codex")
-	return &CodexCLI{Path: path}
+	path, err := resolveCommand("codex")
+	return &CodexCLI{Path: path, ResolveErr: err}
 }
 
 // SetProgress redirects concise process progress for callers that own the UI.
@@ -57,6 +58,9 @@ func (c *CodexCLI) SetProgress(progress io.Writer) {
 
 // Run executes codex exec/resume, extracts session metadata, and waits for process exit.
 func (c CodexCLI) Run(ctx context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
+	if c.ResolveErr != nil {
+		return "", c.ResolveErr
+	}
 	if c.Path == "" {
 		return "", fmt.Errorf("找不到 codex 可执行文件")
 	}
@@ -101,7 +105,7 @@ func stringsReader(text string) io.Reader {
 
 // codexExecArgs builds shell-free arguments while keeping prompt content on stdin.
 func codexExecArgs(repo, threadID string, options StageOptions) []string {
-	args := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "--cd", repo}
+	args := []string{"exec", "--json", "--cd", repo}
 	if options.Model != "" {
 		args = append(args, "-m", options.Model)
 	}

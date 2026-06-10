@@ -65,7 +65,10 @@ func parallelStatusSummaryForGroup(repo string, state State, group string) (para
 	if !ok || len(config.Members) == 0 {
 		return parallelStatusSummary{}, false
 	}
-	iteration := parallelStatusIteration(state, group)
+	iteration, err := parallelStatusIteration(state, group)
+	if err != nil {
+		return parallelStatusSummary{group: group, total: len(config.Members), status: "invalid"}, true
+	}
 	path := parallelArtifactPath(runDir(repo, state.RunID), group, iteration)
 	file := filepath.Base(path)
 	if !parallelStatusGroupReached(path, state, group) {
@@ -122,16 +125,19 @@ func parallelStatusGroupReached(path string, state State, group string) bool {
 }
 
 // parallelStatusIteration selects the artifact round for iterative review and QA groups.
-func parallelStatusIteration(state State, group string) int {
+func parallelStatusIteration(state State, group string) (int, error) {
 	switch group {
 	case "review", "qa":
-		iteration := stageIteration(state.Stage)
-		if iteration > 0 {
-			return iteration
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return 0, err
 		}
-		return 1
+		if iteration > 0 {
+			return iteration, nil
+		}
+		return 1, nil
 	default:
-		return 0
+		return 0, nil
 	}
 }
 

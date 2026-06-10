@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	profilestemplate "github.com/xbugs221/oz/profiles-template"
 	promptstemplate "github.com/xbugs221/oz/prompts-template"
 	"gopkg.in/yaml.v3"
 )
@@ -17,17 +18,19 @@ import (
 const defaultMaxReviewIterations = 5
 
 var (
-	validReasoning = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
-	stageKinds     = roleStageKinds()
-	iterationStage = regexp.MustCompile(`^(review|qa|fix)_([1-9][0-9]*)$`)
+	validReasoning   = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
+	validPermissions = map[string]bool{"default": true}
+	stageKinds       = roleStageKinds()
+	iterationStage   = regexp.MustCompile(`^(review|qa|fix)_([1-9][0-9]*)$`)
 )
 
 // StageOptions describes the agent runtime knobs for one effective workflow stage.
 type StageOptions struct {
-	Tool      string `json:"tool" yaml:"tool"`
-	Model     string `json:"model,omitempty" yaml:"model"`
-	Reasoning string `json:"reasoning" yaml:"reasoning"`
-	Fast      bool   `json:"fast" yaml:"fast"`
+	Tool        string `json:"tool" yaml:"tool"`
+	Model       string `json:"model,omitempty" yaml:"model"`
+	Reasoning   string `json:"reasoning" yaml:"reasoning"`
+	Fast        bool   `json:"fast" yaml:"fast"`
+	Permissions string `json:"permissions" yaml:"permissions"`
 }
 
 // WorkflowConfig is the effective sealed-run workflow snapshot stored in state.json.
@@ -64,8 +67,14 @@ type ParallelMemberConfig struct {
 
 // ValidationConfig describes deterministic commands that must pass before stage advance.
 type ValidationConfig struct {
-	Commands            []string `json:"commands,omitempty" yaml:"commands"`
-	MaxAttemptsPerStage int      `json:"max_attempts_per_stage,omitempty" yaml:"max_attempts_per_stage"`
+	Commands            []ValidationCommand `json:"commands,omitempty" yaml:"commands"`
+	MaxAttemptsPerStage int                 `json:"max_attempts_per_stage,omitempty" yaml:"max_attempts_per_stage"`
+}
+
+// ValidationCommand describes one shell-free executable invocation.
+type ValidationCommand struct {
+	Executable string   `json:"executable" yaml:"executable"`
+	Args       []string `json:"args,omitempty" yaml:"args"`
 }
 
 type woConfigFile struct {
@@ -109,20 +118,28 @@ type parallelMemberConfigInput struct {
 }
 
 type validationConfigInput struct {
-	Commands            []string `yaml:"commands"`
-	MaxAttemptsPerStage *int     `yaml:"max_attempts_per_stage"`
+	Commands            []ValidationCommand `yaml:"commands"`
+	MaxAttemptsPerStage *int                `yaml:"max_attempts_per_stage"`
 }
 
 type stageOptionsInput struct {
-	CLI       *string `yaml:"cli"`
-	Tool      *string `yaml:"tool"`
-	Model     *string `yaml:"model"`
-	Reasoning *string `yaml:"reasoning"`
-	Fast      *bool   `yaml:"fast"`
+	CLI         *string `yaml:"cli"`
+	Tool        *string `yaml:"tool"`
+	Model       *string `yaml:"model"`
+	Reasoning   *string `yaml:"reasoning"`
+	Fast        *bool   `yaml:"fast"`
+	Permissions *string `yaml:"permissions"`
+}
+
+// WorkflowProfile describes one built-in profile visible from `wo config`.
+type WorkflowProfile struct {
+	Name        string
+	Description string
+	Scenario    string
 }
 
 func (input stageOptionsInput) hasValues() bool {
-	return input.CLI != nil || input.Tool != nil || input.Model != nil || input.Reasoning != nil || input.Fast != nil
+	return input.CLI != nil || input.Tool != nil || input.Model != nil || input.Reasoning != nil || input.Fast != nil || input.Permissions != nil
 }
 
 // DefaultWorkflowConfigYAML is kept for tests that compare the generated config text.
@@ -153,9 +170,10 @@ func LoadWorkflowConfig(repo string) (WorkflowConfig, error) {
 
 // DefaultWorkflowConfig returns the built-in runtime behavior used without wo.yaml.
 func DefaultWorkflowConfig() WorkflowConfig {
-	config, _ := workflowConfigFromInput(workflowConfigInput{}, nil)
-	config.Prompts = defaultPromptSet()
-	normalizePromptConfig(config.Prompts)
+	config, err := workflowConfigFromProfile("default")
+	if err != nil {
+		panic(err)
+	}
 	normalizeWorkflowConfig(&config)
 	return config
 }
@@ -191,28 +209,10 @@ func mergeWorkflowConfigFile(config *WorkflowConfig, path string) error {
 	if err != nil {
 		return err
 	}
-	var file woConfigFile
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&file); err != nil {
-		return fmt.Errorf("解析 %s 失败：%w", filepath.Base(path), err)
-	}
-	next, err := workflowConfigFromInput(file.MC.Workflow, config)
+	next, err := workflowConfigFromYAML(data, filepath.Base(path), config)
 	if err != nil {
-		return fmt.Errorf("%s 无效：%w", filepath.Base(path), err)
+		return err
 	}
-	if file.MC.Prompts != nil {
-		if next.Prompts == nil {
-			next.Prompts = map[string]string{}
-		}
-		for key, body := range file.MC.Prompts {
-			if !slices.Contains(rolePromptKeys(), key) {
-				return fmt.Errorf("%s 无效：未知 prompt %q", filepath.Base(path), key)
-			}
-			next.Prompts[key] = body
-		}
-	}
-	normalizePromptConfig(next.Prompts)
 	*config = next
 	return nil
 }
@@ -241,6 +241,15 @@ func InitWorkflowConfig(repo string) (string, error) {
 
 // WriteWorkflowConfig writes either repository or user-level default configuration.
 func WriteWorkflowConfig(repo string, global bool) (string, error) {
+	return WriteWorkflowConfigProfile(repo, global, "default")
+}
+
+// WriteWorkflowConfigProfile writes a built-in profile as repository or user-level configuration.
+func WriteWorkflowConfigProfile(repo string, global bool, profile string) (string, error) {
+	body, err := WorkflowProfileYAML(profile)
+	if err != nil {
+		return "", err
+	}
 	path := filepath.Join(repo, "wo.yaml")
 	if global {
 		var err error
@@ -255,10 +264,66 @@ func WriteWorkflowConfig(repo string, global bool) (string, error) {
 	if !global && fileExists(filepath.Join(repo, "wo.yml")) {
 		return "", fmt.Errorf("wo.yml 已存在")
 	}
-	if err := os.WriteFile(path, []byte(DefaultWorkflowConfigYAML), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil
+}
+
+// BuiltInWorkflowProfiles returns the ordered profile registry shown by the CLI.
+func BuiltInWorkflowProfiles() []WorkflowProfile {
+	return []WorkflowProfile{
+		{Name: "default", Description: "默认代码工作流", Scenario: "通用 oz 提案执行、审查和 QA"},
+		{Name: "mada-code", Description: "MADA 代码实现/审查 profile", Scenario: "需要多角色代码侦察、实现审核和回归测试"},
+		{Name: "mada-decision", Description: "MADA 决策 profile", Scenario: "技术选型、推荐、学习路线和取舍评估"},
+		{Name: "mada-research", Description: "MADA 调研 profile", Scenario: "资料调研、证据审计和结论交叉验证"},
+	}
+}
+
+// WorkflowProfileYAML renders a built-in profile template into the final wo.yaml body.
+func WorkflowProfileYAML(profile string) (string, error) {
+	if !knownWorkflowProfile(profile) {
+		return "", fmt.Errorf("未知 profile %q，可用 profile: %s", profile, strings.Join(workflowProfileNames(), ", "))
+	}
+	data, err := profilestemplate.FS.ReadFile(profile + ".yaml")
+	if err != nil {
+		return "", err
+	}
+	return renderWorkflowProfileTemplate(string(data)), nil
+}
+
+func workflowConfigFromProfile(profile string) (WorkflowConfig, error) {
+	body, err := WorkflowProfileYAML(profile)
+	if err != nil {
+		return WorkflowConfig{}, err
+	}
+	return workflowConfigFromYAML([]byte(body), profile+".yaml", nil)
+}
+
+func workflowConfigFromYAML(data []byte, source string, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
+	var file woConfigFile
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&file); err != nil {
+		return WorkflowConfig{}, fmt.Errorf("解析 %s 失败：%w", source, err)
+	}
+	next, err := workflowConfigFromInput(file.MC.Workflow, baseConfig)
+	if err != nil {
+		return WorkflowConfig{}, fmt.Errorf("%s 无效：%w", source, err)
+	}
+	if file.MC.Prompts != nil {
+		if next.Prompts == nil {
+			next.Prompts = map[string]string{}
+		}
+		for key, body := range file.MC.Prompts {
+			if !slices.Contains(rolePromptKeys(), key) {
+				return WorkflowConfig{}, fmt.Errorf("%s 无效：未知 prompt %q", source, key)
+			}
+			next.Prompts[key] = body
+		}
+	}
+	normalizePromptConfig(next.Prompts)
+	return next, nil
 }
 
 func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
@@ -431,13 +496,13 @@ func validateParallelConfig(config ParallelConfig) error {
 
 // validationConfigFromInput validates user-supplied quality gate commands.
 func validationConfigFromInput(input validationConfigInput, base ValidationConfig) (ValidationConfig, error) {
-	config := ValidationConfig{Commands: append([]string(nil), base.Commands...), MaxAttemptsPerStage: base.MaxAttemptsPerStage}
+	config := ValidationConfig{Commands: cloneValidationCommands(base.Commands), MaxAttemptsPerStage: base.MaxAttemptsPerStage}
 	if input.Commands != nil {
-		config.Commands = append([]string(nil), input.Commands...)
+		config.Commands = cloneValidationCommands(input.Commands)
 	}
-	for _, command := range config.Commands {
-		if strings.TrimSpace(command) == "" {
-			return ValidationConfig{}, fmt.Errorf("validation command 不能为空")
+	for i, command := range config.Commands {
+		if strings.TrimSpace(command.Executable) == "" {
+			return ValidationConfig{}, fmt.Errorf("validation.commands[%d].executable 不能为空", i)
 		}
 	}
 	if input.MaxAttemptsPerStage != nil {
@@ -458,6 +523,9 @@ func normalizeWorkflowConfig(config *WorkflowConfig) {
 	for stage, options := range config.Stages {
 		if options.Tool == "" {
 			options.Tool = "codex"
+		}
+		if options.Permissions == "" {
+			options.Permissions = "default"
 		}
 		config.Stages[stage] = options
 	}
@@ -502,6 +570,12 @@ func mergeStageOptions(base *StageOptions, override stageOptionsInput) error {
 	if override.Fast != nil {
 		base.Fast = *override.Fast
 	}
+	if override.Permissions != nil {
+		if !validPermissions[*override.Permissions] {
+			return fmt.Errorf("无效 permissions %q", *override.Permissions)
+		}
+		base.Permissions = *override.Permissions
+	}
 	return nil
 }
 
@@ -526,46 +600,16 @@ func cloneParallelConfig(config ParallelConfig) ParallelConfig {
 	return cloned
 }
 
-func defaultParallelConfig() ParallelConfig {
-	return ParallelConfig{
-		Enabled: true,
-		Groups: map[string]ParallelGroupConfig{
-			"planning_context": {
-				Mode: "advisory",
-				Members: []ParallelMemberConfig{
-					{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏", Stage: "planning", Tool: "pi", Subagent: "metis"},
-					{Name: "代码库侦察员", Purpose: "搜索现有模块、测试入口和实现约定", Stage: "planning", Tool: "pi", Subagent: "explore"},
-					{Name: "外部资料研究员", Purpose: "查询外部库文档和开源实现", Stage: "planning", Tool: "pi", Subagent: "librarian"},
-				},
-			},
-			"implementation_context": {
-				Mode: "advisory",
-				Members: []ParallelMemberConfig{
-					{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式", Stage: "before_execution", Tool: "pi", Subagent: "explore"},
-					{Name: "外部资料研究员", Purpose: "查询 execution 依赖的外部库文档和开源实现", Stage: "before_execution", Tool: "pi", Subagent: "librarian"},
-				},
-			},
-			"review": {
-				Mode: "gate_input",
-				Members: []ParallelMemberConfig{
-					{Name: "目标核对审核员", Purpose: "核对 proposal/spec/task 是否满足"},
-					{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"},
-					{Name: "测试有效性审核员", Purpose: "判断测试是否真实覆盖场景"},
-					{Name: "安全风险审核员", Purpose: "检查权限、输入、泄漏和破坏性操作"},
-					{Name: "上下文一致性审核员", Purpose: "检查是否违背现有架构约定"},
-				},
-			},
-			"qa": {
-				Mode: "gate_input",
-				Members: []ParallelMemberConfig{
-					{Name: "CLI/API 测试员", Purpose: "执行命令行或接口真实路径"},
-					{Name: "浏览器路径测试员", Purpose: "执行页面真实用户路径"},
-					{Name: "证据采集员", Purpose: "采集截图、trace、console、network 或 runtime log"},
-					{Name: "回归场景测试员", Purpose: "覆盖邻近功能回归"},
-				},
-			},
-		},
+func cloneValidationCommands(commands []ValidationCommand) []ValidationCommand {
+	cloned := make([]ValidationCommand, 0, len(commands))
+	for _, command := range commands {
+		cloned = append(cloned, ValidationCommand{Executable: command.Executable, Args: append([]string(nil), command.Args...)})
 	}
+	return cloned
+}
+
+func defaultParallelConfig() ParallelConfig {
+	return ParallelConfig{}
 }
 
 func normalizePromptConfig(prompts map[string]string) {
@@ -600,107 +644,11 @@ func defaultPromptSet() map[string]string {
 }
 
 func mustDefaultWorkflowConfigYAML() string {
-	prompts := defaultPromptSet()
-	return strings.Join([]string{
-		"wo:",
-		"  workflow:",
-		"    engine: go-dag",
-		"    max_review_iterations: 5",
-		"    stages:",
-		"      planning:",
-		"        cli: codex",
-		"        reasoning: xhigh",
-		"      execution:",
-		"        cli: codex",
-		"        reasoning: low",
-		"      fix:",
-		"        cli: codex",
-		"        reasoning: low",
-		"      review:",
-		"        cli: codex",
-		"        reasoning: high",
-		"      qa:",
-		"        cli: codex",
-		"        reasoning: high",
-		"      archive:",
-		"        cli: codex",
-		"        reasoning: low",
-		"    parallel:",
-		"      enabled: true",
-		"      groups:",
-		"        planning_context:",
-		"          mode: advisory",
-		"          members:",
-		"            - name: 需求分析员",
-		"              purpose: 找出需求歧义、风险和遗漏",
-		"              stage: planning",
-		"              tool: pi",
-		"              subagent: metis",
-		"            - name: 代码库侦察员",
-		"              purpose: 搜索现有模块、测试入口和实现约定",
-		"              stage: planning",
-		"              tool: pi",
-		"              subagent: explore",
-		"            - name: 外部资料研究员",
-		"              purpose: 查询外部库文档和开源实现",
-		"              stage: planning",
-		"              tool: pi",
-		"              subagent: librarian",
-		"        implementation_context:",
-		"          mode: advisory",
-		"          members:",
-		"            - name: 代码库侦察员",
-		"              purpose: 汇总 execution 需要读取的文件和测试模式",
-		"              stage: before_execution",
-		"              tool: pi",
-		"              subagent: explore",
-		"            - name: 外部资料研究员",
-		"              purpose: 查询 execution 依赖的外部库文档和开源实现",
-		"              stage: before_execution",
-		"              tool: pi",
-		"              subagent: librarian",
-		"        review:",
-		"          mode: gate_input",
-		"          members:",
-		"            - name: 目标核对审核员",
-		"              purpose: 核对 proposal/spec/task 是否满足",
-		"            - name: 代码质量审核员",
-		"              purpose: 检查类型、边界和可维护性",
-		"            - name: 测试有效性审核员",
-		"              purpose: 判断测试是否真实覆盖场景",
-		"            - name: 安全风险审核员",
-		"              purpose: 检查权限、输入、泄漏和破坏性操作",
-		"            - name: 上下文一致性审核员",
-		"              purpose: 检查是否违背现有架构约定",
-		"        qa:",
-		"          mode: gate_input",
-		"          members:",
-		"            - name: CLI/API 测试员",
-		"              purpose: 执行命令行或接口真实路径",
-		"            - name: 浏览器路径测试员",
-		"              purpose: 执行页面真实用户路径",
-		"            - name: 证据采集员",
-		"              purpose: 采集截图、trace、console、network 或 runtime log",
-		"            - name: 回归场景测试员",
-		"              purpose: 覆盖邻近功能回归",
-		"    validation:",
-		"      max_attempts_per_stage: 3",
-		"      commands: []",
-		"  prompts:",
-		"    planning: |",
-		indentPrompt(prompts["planning"]),
-		"    execution: |",
-		indentPrompt(prompts["execution"]),
-		"    review: |",
-		indentPrompt(prompts["review"]),
-		"    qa: |",
-		indentPrompt(prompts["qa"]),
-		"    fix: |",
-		indentPrompt(prompts["fix"]),
-		"    archive: |",
-		indentPrompt(prompts["archive"]),
-		"",
-	}, "\n")
+	body, err := WorkflowProfileYAML("default")
+	if err != nil {
+		panic(err)
+	}
+	return body
 }
 
 func indentPrompt(body string) string {
@@ -713,4 +661,33 @@ func indentPrompt(body string) string {
 		lines[i] = "      " + lines[i]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func renderWorkflowProfileTemplate(template string) string {
+	prompts := defaultPromptSet()
+	for _, key := range rolePromptKeys() {
+		template = strings.ReplaceAll(template, fmt.Sprintf(`{{ prompt "%s" }}`, key), indentPrompt(prompts[key]))
+	}
+	if !strings.HasSuffix(template, "\n") {
+		template += "\n"
+	}
+	return template
+}
+
+func knownWorkflowProfile(profile string) bool {
+	for _, item := range BuiltInWorkflowProfiles() {
+		if item.Name == profile {
+			return true
+		}
+	}
+	return false
+}
+
+func workflowProfileNames() []string {
+	profiles := BuiltInWorkflowProfiles()
+	names := make([]string, 0, len(profiles))
+	for _, item := range profiles {
+		names = append(names, item.Name)
+	}
+	return names
 }

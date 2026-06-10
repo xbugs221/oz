@@ -65,7 +65,14 @@ if printf '%s\n' "$json_out" | grep "更新可用\\|wo update" >/dev/null; then
   exit 1
 fi
 
-offline_out="$(XDG_STATE_HOME="$STATE_HOME" WO_UPDATE_CACHE="$TMP/missing-cache.json" WO_GITHUB_BASE_URL="http://127.0.0.1:1" "$BIN" status)"
+cat >"$TMP/offline-cache.json" <<JSON
+{
+  "checked_at": "2999-01-01T00:00:00Z",
+  "ttl_seconds": 21600,
+  "tools": {}
+}
+JSON
+offline_out="$(XDG_STATE_HOME="$STATE_HOME" WO_UPDATE_CACHE="$TMP/offline-cache.json" "$BIN" status)"
 printf '%s\n' "$offline_out" | grep -- "执行阶段 - → -" >/dev/null
 if printf '%s\n' "$offline_out" | grep "更新失败\\|GitHub\\|更新可用" >/dev/null; then
   echo "offline status should stay silent about update checks" >&2
@@ -79,7 +86,14 @@ cat >"$FAKE_PATH/oz" <<'SH'
 exit 0
 SH
 chmod +x "$FAKE_PATH/oz"
-empty_oz_out="$(PATH="$FAKE_PATH:$PATH" XDG_STATE_HOME="$STATE_HOME" WO_UPDATE_CACHE="$TMP/empty-oz-cache.json" WO_GITHUB_BASE_URL="http://127.0.0.1:1" "$BIN" status)"
+cat >"$TMP/empty-oz-cache.json" <<JSON
+{
+  "checked_at": "2999-01-01T00:00:00Z",
+  "ttl_seconds": 21600,
+  "tools": {}
+}
+JSON
+empty_oz_out="$(PATH="$FAKE_PATH:$PATH" XDG_STATE_HOME="$STATE_HOME" WO_UPDATE_CACHE="$TMP/empty-oz-cache.json" "$BIN" status)"
 printf '%s\n' "$empty_oz_out" | grep -- "执行阶段 - → -" >/dev/null
 if printf '%s\n' "$empty_oz_out" | grep "panic\\|更新失败\\|更新可用" >/dev/null; then
   echo "empty oz --version should not break status" >&2

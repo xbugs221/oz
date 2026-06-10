@@ -156,151 +156,70 @@ func (e *Engine) RunBatch(ctx context.Context, batchID string) error {
 	if batch.Status != batchStatusRunning {
 		return fmt.Errorf("批量任务 %s 状态 %s 不能直接继续，请使用 wo restart", batchID, batch.Status)
 	}
-	for batch.Status == batchStatusRunning && batch.CurrentIndex < len(batch.Changes) {
-		changeName := batch.Changes[batch.CurrentIndex]
-		runID := batch.RunIDs[changeName]
-		if runID == "" {
-			state, err := e.createRun(changeName)
-			if err != nil {
-				return e.failBatch(batch.BatchID, changeName, "", err)
-			}
-			state.BatchID = batch.BatchID
-			state.BatchIndex = batch.CurrentIndex + 1
-			state.BatchTotal = len(batch.Changes)
-			if err := saveState(e.Repo, state); err != nil {
-				return err
-			}
-			runID = state.RunID
-			if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
-				b.RunIDs[changeName] = runID
-				return nil
-			}); err != nil {
-				return err
-			}
-			batch.RunIDs[changeName] = runID
-		}
-		state, err := loadState(e.Repo, runID)
-		if err != nil {
-			return e.failBatch(batch.BatchID, changeName, runID, err)
-		}
-		if state.Status == statusDone {
-			if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
-				b.CurrentIndex++
-				return nil
-			}); err != nil {
-				return err
-			}
-			batch.CurrentIndex++
-		} else if isBatchTerminalState(state) {
-			return e.failBatch(batch.BatchID, changeName, runID, fmt.Errorf("run %s 已停止：%s/%s", runID, state.Status, state.Stage))
-		} else {
-			if err := e.resumeRun(ctx, runID, true, nil); err != nil {
-				if isRunLockedError(err) {
+	for {
+		for batch.Status == batchStatusRunning && batch.CurrentIndex < len(batch.Changes) {
+			changeName := batch.Changes[batch.CurrentIndex]
+			runID := batch.RunIDs[changeName]
+			if runID == "" {
+				state, err := e.createRun(changeName)
+				if err != nil {
+					return e.failBatch(batch.BatchID, changeName, "", err)
+				}
+				state.BatchID = batch.BatchID
+				state.BatchIndex = batch.CurrentIndex + 1
+				state.BatchTotal = len(batch.Changes)
+				if err := saveState(e.Repo, state); err != nil {
 					return err
 				}
-				latest, loadErr := loadState(e.Repo, runID)
-				if loadErr == nil {
-					latest = failedState(latest, err)
-					_ = saveState(e.Repo, latest)
+				runID = state.RunID
+				if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
+					b.RunIDs[changeName] = runID
+					return nil
+				}); err != nil {
+					return err
 				}
+				batch.RunIDs[changeName] = runID
+			}
+			state, err := loadState(e.Repo, runID)
+			if err != nil {
 				return e.failBatch(batch.BatchID, changeName, runID, err)
 			}
+			if state.Status == statusDone {
+				if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
+					b.CurrentIndex++
+					return nil
+				}); err != nil {
+					return err
+				}
+				batch.CurrentIndex++
+			} else if isBatchTerminalState(state) {
+				return e.failBatch(batch.BatchID, changeName, runID, fmt.Errorf("run %s 已停止：%s/%s", runID, state.Status, state.Stage))
+			} else {
+				if err := e.resumeRun(ctx, runID, true, nil); err != nil {
+					if isRunLockedError(err) {
+						return err
+					}
+					latest, loadErr := loadState(e.Repo, runID)
+					if loadErr == nil {
+						latest = failedState(latest, err)
+						_ = saveState(e.Repo, latest)
+					}
+					return e.failBatch(batch.BatchID, changeName, runID, err)
+				}
+			}
+			// Reload batch state to pick up any appended changes.
+			batch, err = loadBatchState(e.Repo, batchID)
+			if err != nil {
+				return err
+			}
 		}
-		// Reload batch state to pick up any appended changes.
-		batch, err = loadBatchState(e.Repo, batchID)
-		if err != nil {
-			return err
+		if batch.Status != batchStatusRunning {
+			return nil
 		}
-	}
-	if batch.Status == batchStatusRunning {
 		// Guard the final done transition inside the lock to avoid
 		// skipping changes appended between the last reload and write.
 		if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
 			if b.CurrentIndex < len(b.Changes) {
-				// New changes were appended; do not mark done yet.
-				return nil
-			}
-			b.Status = batchStatusDone
-			b.CurrentIndex = len(b.Changes)
-			return nil
-		}); err != nil {
-			return err
-		}
-		// Reload to decide whether more work remains.
-		batch, err = loadBatchState(e.Repo, batchID)
-		if err != nil {
-			return err
-		}
-		if batch.Status == batchStatusRunning && batch.CurrentIndex < len(batch.Changes) {
-			goto continueBatch
-		}
-	}
-	return nil
-
-continueBatch:
-	// Someone appended changes after the last iteration; jump back into the loop.
-	goto batchLoopStart
-
-batchLoopStart:
-	for batch.Status == batchStatusRunning && batch.CurrentIndex < len(batch.Changes) {
-		changeName := batch.Changes[batch.CurrentIndex]
-		runID := batch.RunIDs[changeName]
-		if runID == "" {
-			state, err := e.createRun(changeName)
-			if err != nil {
-				return e.failBatch(batch.BatchID, changeName, "", err)
-			}
-			state.BatchID = batch.BatchID
-			state.BatchIndex = batch.CurrentIndex + 1
-			state.BatchTotal = len(batch.Changes)
-			if err := saveState(e.Repo, state); err != nil {
-				return err
-			}
-			runID = state.RunID
-			if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
-				b.RunIDs[changeName] = runID
-				return nil
-			}); err != nil {
-				return err
-			}
-			batch.RunIDs[changeName] = runID
-		}
-		state, err := loadState(e.Repo, runID)
-		if err != nil {
-			return e.failBatch(batch.BatchID, changeName, runID, err)
-		}
-		if state.Status == statusDone {
-			if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
-				b.CurrentIndex++
-				return nil
-			}); err != nil {
-				return err
-			}
-			batch.CurrentIndex++
-		} else if isBatchTerminalState(state) {
-			return e.failBatch(batch.BatchID, changeName, runID, fmt.Errorf("run %s 已停止：%s/%s", runID, state.Status, state.Stage))
-		} else {
-			if err := e.resumeRun(ctx, runID, true, nil); err != nil {
-				if isRunLockedError(err) {
-					return err
-				}
-				latest, loadErr := loadState(e.Repo, runID)
-				if loadErr == nil {
-					latest = failedState(latest, err)
-					_ = saveState(e.Repo, latest)
-				}
-				return e.failBatch(batch.BatchID, changeName, runID, err)
-			}
-		}
-		// Reload batch state to pick up any appended changes.
-		batch, err = loadBatchState(e.Repo, batchID)
-		if err != nil {
-			return err
-		}
-	}
-	if batch.Status == batchStatusRunning {
-		if err := withBatchState(e.Repo, batchID, func(b *BatchState) error {
-			if b.CurrentIndex < len(b.Changes) {
 				return nil
 			}
 			b.Status = batchStatusDone
@@ -313,11 +232,10 @@ batchLoopStart:
 		if err != nil {
 			return err
 		}
-		if batch.Status == batchStatusRunning && batch.CurrentIndex < len(batch.Changes) {
-			goto batchLoopStart
+		if batch.Status != batchStatusRunning || batch.CurrentIndex >= len(batch.Changes) {
+			return nil
 		}
 	}
-	return nil
 }
 
 // AbortBatch marks a batch aborted and aborts its current run when present.
@@ -488,16 +406,18 @@ func FindLatestBatch(repo string) (*BatchState, error) {
 // batchStatusLines formats a batch overview with change queue and run states.
 func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []StatusRef) []string {
 	var lines []string
-	currentPos := batch.CurrentIndex + 1
-	if batch.Status == batchStatusDone {
-		currentPos = len(batch.Changes)
-	}
 	if batchAlias == "" {
 		batchAlias = batch.BatchID
 	}
-	lines = append(lines, fmt.Sprintf("→ %s %d/%d", batchAlias, currentPos, len(batch.Changes)))
-	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
-		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
+	if batch.Status == batchStatusRunning {
+		total := len(batch.Changes)
+		current := batch.CurrentIndex + 1
+		if total == 0 {
+			current = 0
+		} else if current > total {
+			current = total
+		}
+		lines = append(lines, fmt.Sprintf("批量任务 %s %s %d/%d", batchAlias, batch.Status, current, total))
 	}
 
 	for _, changeName := range batch.Changes {
@@ -507,11 +427,14 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 			if state, err := loadState(repo, runID); err == nil {
 				runRefs, _ := ListRunRefs(repo)
 				runAlias := RunAliasForID(runRefs, runID)
-				for _, line := range compactStatusLines(buildStatusView(repo, state, runAlias, "→")) {
+				for _, line := range compactStatusLines(buildHumanStatusView(repo, state, runAlias, "→")) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
 			}
 		}
+	}
+	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
+		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
 	}
 
 	return lines

@@ -3,6 +3,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -49,19 +50,45 @@ var compactStageSpecs = []compactStageSpec{
 }
 
 // buildStatusView converts durable workflow state into one reusable compact view.
-func buildStatusView(repo string, state State, displayID, indicator string) statusView {
+func buildStatusView(repo string, state State, displayID, runningMarker string) statusView {
 	ensureWorkflowConfig(&state)
 	normalizeStateMaps(&state)
 	view := statusView{
 		DisplayID:      nonEmpty(displayID, state.RunID),
-		Indicator:      indicator,
+		Indicator:      runningMarker,
 		Engine:         statusViewEngine(state),
 		RunArtifactDir: runDir(repo, state.RunID),
 		Artifacts:      statusRootArtifacts(repo, state),
 	}
 	for _, spec := range compactStageSpecs {
 		row := statusStageRow(repo, state, spec)
+		if runningMarker != "" && row.Marker == "→" {
+			row.Marker = runningMarker
+		}
 		view.Rows = append(view.Rows, row)
+		view.Rows = append(view.Rows, statusSubagentRows(repo, state, spec.stage)...)
+	}
+	return view
+}
+
+// buildHumanStatusView adds human-only parallel fan-in summaries to the compact view.
+func buildHumanStatusView(repo string, state State, displayID, runningMarker string) statusView {
+	ensureWorkflowConfig(&state)
+	normalizeStateMaps(&state)
+	view := statusView{
+		DisplayID:      nonEmpty(displayID, state.RunID),
+		Indicator:      runningMarker,
+		Engine:         statusViewEngine(state),
+		RunArtifactDir: runDir(repo, state.RunID),
+		Artifacts:      statusRootArtifacts(repo, state),
+	}
+	for _, spec := range compactStageSpecs {
+		row := statusStageRow(repo, state, spec)
+		if runningMarker != "" && row.Marker == "→" {
+			row.Marker = runningMarker
+		}
+		view.Rows = append(view.Rows, row)
+		view.Rows = append(view.Rows, statusParallelGroupRows(repo, state, spec.stage)...)
 		view.Rows = append(view.Rows, statusSubagentRows(repo, state, spec.stage)...)
 	}
 	return view
@@ -259,7 +286,10 @@ func statusSubagentRows(repo string, state State, parentStage string) []statusVi
 		if !ok {
 			continue
 		}
-		iteration := statusGroupIteration(parentStage, groupName)
+		iteration, err := statusGroupIteration(parentStage, groupName)
+		if err != nil {
+			continue
+		}
 		groupArtifact := parallelArtifactPath(runDir(repo, state.RunID), groupName, iteration)
 		for index, member := range group.Members {
 			_, node, hasNode := statusSubagentNode(state, groupName, parentStage, iteration, index)
@@ -294,6 +324,93 @@ func statusSubagentRows(repo string, state State, parentStage string) []statusVi
 	return rows
 }
 
+// statusParallelGroupRows summarizes configured fan-in artifacts for human status.
+func statusParallelGroupRows(repo string, state State, parentStage string) []statusViewRow {
+	if !state.Workflow.Parallel.Enabled || !statusParallelParentReached(state, parentStage) {
+		return nil
+	}
+	var rows []statusViewRow
+	for _, groupName := range statusGroupsForStage(parentStage) {
+		group, ok := state.Workflow.Parallel.Groups[groupName]
+		if !ok || len(group.Members) == 0 {
+			continue
+		}
+		iteration, err := statusGroupIteration(parentStage, groupName)
+		if err != nil {
+			continue
+		}
+		groupArtifact := parallelArtifactPath(runDir(repo, state.RunID), groupName, iteration)
+		total := len(group.Members)
+		artifact, err := ReadParallelArtifact(groupArtifact)
+		if err != nil {
+			rows = append(rows, statusParallelGroupRow(parentStage, groupName, groupArtifact, fmt.Sprintf("0/%d", total), "missing "+filepath.Base(groupArtifact)))
+			if !os.IsNotExist(err) {
+				rows[len(rows)-1].Marker = "invalid " + filepath.Base(groupArtifact)
+			}
+			continue
+		}
+		if err := ValidateParallelArtifactForGroup(artifact, groupName, group); err != nil {
+			rows = append(rows, statusParallelGroupRow(parentStage, groupName, groupArtifact, fmt.Sprintf("0/%d", total), "invalid "+filepath.Base(groupArtifact)))
+			continue
+		}
+		successCount := 0
+		for _, member := range artifact.Members {
+			if memberStatusSucceeded(member.Status) {
+				successCount++
+			}
+		}
+		status := "failed"
+		if successCount == total {
+			status = "success"
+		}
+		rows = append(rows, statusParallelGroupRow(parentStage, groupName, groupArtifact, fmt.Sprintf("%d/%d", successCount, total), status))
+		for _, member := range artifact.Members {
+			rows = append(rows, statusViewRow{
+				Kind:      "parallel_member",
+				Name:      member.Name,
+				FullName:  member.Name + ":parallel-summary",
+				Stage:     parentStage,
+				Group:     groupName,
+				SessionID: member.Status,
+				Marker:    "",
+				Indent:    4,
+				Artifacts: map[string]string{
+					"group_artifact": groupArtifact,
+				},
+			})
+		}
+	}
+	return rows
+}
+
+// statusParallelParentReached reports whether a parent stage should expose configured helper artifacts.
+func statusParallelParentReached(state State, parentStage string) bool {
+	if statusStageReached(state, parentStage) {
+		return true
+	}
+	if parentStage == "execution" && state.Stages["execution"] == "completed" {
+		return true
+	}
+	return false
+}
+
+// statusParallelGroupRow builds the single fan-in summary line for a helper group.
+func statusParallelGroupRow(parentStage, groupName, groupArtifact, progress, marker string) statusViewRow {
+	return statusViewRow{
+		Kind:      "parallel_group",
+		Name:      "并行 " + groupName,
+		FullName:  groupName + ":parallel-summary",
+		Stage:     parentStage,
+		Group:     groupName,
+		SessionID: progress,
+		Marker:    marker,
+		Indent:    2,
+		Artifacts: map[string]string{
+			"group_artifact": groupArtifact,
+		},
+	}
+}
+
 // statusGroupsForStage maps compact parent stages to configured parallel helper groups.
 func statusGroupsForStage(stage string) []string {
 	if stage == "planning" {
@@ -312,14 +429,14 @@ func statusGroupsForStage(stage string) []string {
 }
 
 // statusGroupIteration returns the artifact iteration for one helper group.
-func statusGroupIteration(stage, group string) int {
+func statusGroupIteration(stage, group string) (int, error) {
 	if group == "review" {
 		return stageIteration(stage)
 	}
 	if group == "qa" {
 		return stageIteration(stage)
 	}
-	return 0
+	return 0, nil
 }
 
 // statusSubagentNode finds the DAG node for a configured member index.
@@ -415,26 +532,14 @@ func statusNodeDuration(node DAGNodeState) (float64, bool) {
 
 // compactSubagentName shortens configured helper names for dense human output.
 func compactSubagentName(name string) string {
-	known := map[string]string{
-		"需求分析员":       "需求分析",
-		"代码库侦察员":      "代码侦察",
-		"外部资料研究员":     "外部资料",
-		"目标核对审核员":     "目标核对",
-		"代码质量审核员":     "代码质量",
-		"测试有效性审核员":    "测试有效",
-		"安全风险审核员":     "风险检查",
-		"上下文一致性审核员":   "上下文",
-		"CLI/API 测试员": "CLI/API",
-		"浏览器路径测试员":    "浏览器",
-		"证据采集员":       "证据采集",
-		"回归场景测试员":     "回归场景",
-	}
-	if short, ok := known[name]; ok {
-		return short
-	}
 	short := strings.TrimSpace(name)
-	for _, suffix := range []string{"研究员", "审核员", "测试员", "分析员", "侦察员", "采集员", "员"} {
+	short = strings.ReplaceAll(short, "代码库", "代码")
+	short = strings.ReplaceAll(short, "一致性", "")
+	for _, suffix := range []string{"研究员", "审核员", "测试员", "采集员", "员"} {
 		short = strings.TrimSuffix(short, suffix)
+	}
+	if strings.Contains(short, "风险") {
+		short = "风险检查"
 	}
 	if utf8.RuneCountInString(short) <= 4 || isASCII(short) {
 		return short
@@ -456,12 +561,16 @@ func statusRootArtifacts(repo string, state State) map[string]string {
 	}
 }
 
-// compactStatusLines renders the fixed-column human rows for status and watch.
+// compactStatusLines renders the fixed-column human workflow rows for status and watch.
 func compactStatusLines(view statusView) []string {
-	lines := []string{strings.TrimSpace(view.Indicator + " " + view.DisplayID)}
+	var lines []string
 	for _, row := range view.Rows {
 		prefix := strings.Repeat(" ", row.Indent)
-		lines = append(lines, fmt.Sprintf("%s%s %s %s %s", prefix, row.Name, statusText(row.SessionID), statusText(row.Marker), statusDurationText(row.DurationMinutes)))
+		name := row.Name
+		if row.Kind == "parallel_group" || row.Kind == "parallel_member" {
+			name = "- " + name
+		}
+		lines = append(lines, fmt.Sprintf("%s%s %s %s %s", prefix, name, statusText(row.SessionID), statusText(row.Marker), statusDurationText(row.DurationMinutes)))
 	}
 	return lines
 }

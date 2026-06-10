@@ -69,8 +69,9 @@ go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 # Check that status shows Chinese summary with change name and stage role.
 "$WO" status > status.txt
 
-# Must show batch header with failed status.
-grep -qF "→ b1 1/2" status.txt
+# Must start directly from the proposal list without a batch header.
+head -1 status.txt | grep -qF -- "- 1-演示变更"
+! grep -qF "→ b1 1/2" status.txt
 
 # Must show Chinese failure summary with change name and stage role.
 grep -qF "1-演示变更" status.txt

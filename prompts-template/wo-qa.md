@@ -38,7 +38,10 @@
 - 只输出一个 JSON 对象，不得输出 Markdown、注释、代码块或任何 JSON 以外文本。
 - `decision` 只允许 `clean` 或 `needs_fix`。
 - `clean` 时 `findings` 为空，`evidence` 必须包含可复核的测试、截图、trace、控制台或运行时证据。
+- `clean` 时需先核对 `acceptance_contract`，并补齐 `acceptance_matrix` 对应 required tests/evidence。
 - `clean` 时 `acceptance_matrix` 必须覆盖 `{{.AcceptancePath}}` 中每个 `required_tests[].id` 和 `required_evidence[].id`，且每项 `status` 必须为 `passed`。
+- `clean` 时可选使用 `non_blocking_findings`，仅允许 `scope` 为 `out_of_scope_existing` 的历史债务；该字段不参与 clean 强制阻断。
+- 所有 finding 与每条 finding 的可选 `scope`，取值为 `current_change` / `out_of_scope_existing` / `introduced_regression`，缺省按 `current_change` 处理。
 - `acceptance_matrix[].id` 只能逐字使用 `{{.AcceptancePath}}` 中已经定义的 id，不得新增、概括、合并或改写 id。
 - `needs_fix` 时 `findings` 至少一项，finding 必须包含 `title`、`severity`、`evidence`、`recommendation`。
 - `severity` 仅允许 `blocker`、`major`、`minor`（内部会归一化 `high/medium/low/nit/critical`）。

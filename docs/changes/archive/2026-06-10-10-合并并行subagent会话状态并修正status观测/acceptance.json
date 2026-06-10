@@ -1,0 +1,59 @@
+{
+  "summary": "验证 go-dag 并行 subagent 的 session 和 DAG 观测状态使用增量合并写入，完成后 status 能显示所有 member session，运行中 session started 事件也能提前进入 state.json。",
+  "coverage": [
+    {
+      "spec": "需求：并行 subagent 会话状态不互相覆盖 / 场景：implementation_context 多成员并发完成后保留全部 session",
+      "tests": ["parallel-subagent-session-state"],
+      "evidence": ["parallel-subagent-session-log", "parallel-subagent-final-state"],
+      "risk": "只验证新 run 的写入一致性，不恢复历史 run 已丢失 session。"
+    },
+    {
+      "spec": "需求：status 展示完成 subagent 的真实 session / 场景：已完成 member artifact 对应的 status 行显示 session ID",
+      "tests": ["parallel-subagent-session-state"],
+      "evidence": ["parallel-subagent-session-log", "parallel-subagent-final-state"],
+      "risk": "status 仍以 state.json 为权威来源，不从外部 agent 数据库反查。"
+    },
+    {
+      "spec": "需求：运行中 subagent session 可提前观测 / 场景：backend 输出 session started 后，artifact 完成前 state 已包含 session",
+      "tests": ["parallel-subagent-session-state"],
+      "evidence": ["parallel-subagent-session-log", "parallel-subagent-running-state"],
+      "risk": "只要求 session started 后可观测，不要求未完成 member 显示成功 marker。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "parallel-subagent-session-state",
+      "source": "change_contract",
+      "path": "docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh",
+      "command": "bash docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh",
+      "purpose": "证明并发 subagent session 写入不会互相覆盖，status 能展示完成 member 的 session，并且 running session started 事件会提前持久化。",
+      "assertions": [
+        "多个 implementation_context subagent 使用旧 state 快照并发完成后，最终 state.json.sessions 包含全部 subagent session key",
+        "主 executor session 在 subagent 并发保存后仍保留",
+        "compact status view 中每个完成 member 行都显示对应 session ID，marker 为 ✓",
+        "subagent runner 写 artifact 前输出 session started 后，state.json 已经包含该 running subagent session"
+      ],
+      "expected_initial_failure": "当前实现会用 subagent 启动时的旧 state 整份保存，导致同组并发 member session 互相覆盖；同时 subagent runner 的 session started 事件不会在 artifact 完成前进入 state.json。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "parallel-subagent-session-log",
+      "kind": "runtime_log",
+      "path": "test-results/10-parallel-subagent-session-state/parallel-subagent-session-state.log",
+      "purpose": "记录合同测试命令输出、失败点和通过后的关键断言。"
+    },
+    {
+      "id": "parallel-subagent-final-state",
+      "kind": "state_snapshot",
+      "path": "test-results/10-parallel-subagent-session-state/final-state.json",
+      "purpose": "保存并发 subagent 完成后的最终 state.json，用于复查所有 session key 是否保留。"
+    },
+    {
+      "id": "parallel-subagent-running-state",
+      "kind": "state_snapshot",
+      "path": "test-results/10-parallel-subagent-session-state/running-state.json",
+      "purpose": "保存 subagent artifact 完成前的 running state.json，用于复查 session started 是否提前持久化。"
+    }
+  ]
+}

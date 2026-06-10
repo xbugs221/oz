@@ -51,6 +51,40 @@ func TestChangeTasksDoneUsesOzStatus(t *testing.T) {
 	}
 }
 
+// TestRunOzJSONMissingExecutableFails verifies oz absence cannot fabricate success.
+func TestRunOzJSONMissingExecutableFails(t *testing.T) {
+	previous := ozCommand
+	previousPrefix := ozCommandPrefix
+	ozCommand = "wo-missing-oz-for-test"
+	ozCommandPrefix = nil
+	t.Cleanup(func() {
+		ozCommand = previous
+		ozCommandPrefix = previousPrefix
+	})
+	if err := ValidateChange(t.TempDir(), "demo"); err == nil {
+		t.Fatal("ValidateChange succeeded without oz executable")
+	}
+	if done, err := ChangeTasksDone(t.TempDir(), "demo"); err == nil || done {
+		t.Fatalf("ChangeTasksDone = %v, %v; want missing oz error and not done", done, err)
+	}
+}
+
+// TestChangeNameRejectsPathTraversal verifies local path boundaries do not rely on oz alone.
+func TestChangeNameRejectsPathTraversal(t *testing.T) {
+	repo := t.TempDir()
+	for _, name := range []string{"", "../demo", "nested/demo", `nested\demo`, "demo..backup"} {
+		if err := ValidateChange(repo, name); err == nil {
+			t.Fatalf("ValidateChange(%q) succeeded, want path validation error", name)
+		}
+		if done, err := ChangeTasksDone(repo, name); err == nil || done {
+			t.Fatalf("ChangeTasksDone(%q) = %v, %v; want path validation error", name, done, err)
+		}
+		if _, err := promptForStage(repo, State{RunID: "run-1", ChangeName: name, Stage: "execution", Sealed: true, Workflow: DefaultWorkflowConfig()}); err == nil {
+			t.Fatalf("promptForStage(%q) succeeded, want path validation error", name)
+		}
+	}
+}
+
 // TestParseChangeSelectionSupportsSingleListRangeAndDedup verifies user-facing menu syntax.
 func TestParseChangeSelectionSupportsSingleListRangeAndDedup(t *testing.T) {
 	changes := []Change{{Name: "1-a"}, {Name: "2-b"}, {Name: "3-c"}}

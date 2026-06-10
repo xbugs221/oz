@@ -1,0 +1,140 @@
+{
+  "summary": "验证 review、QA 和 parallel gate 能把历史债务记录为非阻断 finding，同时继续严格阻断当前提案范围内问题，并保持未运行旧提案兼容。",
+  "coverage": [
+    {
+      "spec": "需求：历史债务非阻断记录 / 场景：clean review 可以记录 out-of-scope 历史债务",
+      "tests": ["review-non-blocking-debt"],
+      "evidence": ["review-non-blocking-debt-log"],
+      "risk": "只验证 review artifact，执行阶段需同步 QA schema。"
+    },
+    {
+      "spec": "需求：parallel gate 按 scope 阻断 / 场景：out-of-scope severe finding 不阻断 clean",
+      "tests": ["parallel-scope-gate"],
+      "evidence": ["parallel-scope-gate-log"],
+      "risk": "成员失败仍然阻断，不在本场景放宽。"
+    },
+    {
+      "spec": "需求：parallel gate 按 scope 阻断 / 场景：当前变更和旧格式 severe finding 仍阻断 clean",
+      "tests": ["parallel-scope-gate"],
+      "evidence": ["parallel-scope-gate-log"],
+      "risk": "缺省 scope 选择保守策略，避免旧 artifact 被误放行。"
+    },
+    {
+      "spec": "需求：QA 验收矩阵保持严格 / 场景：QA 可记录历史债务但 acceptance_matrix 不得新增无关 id",
+      "tests": ["qa-acceptance-scope"],
+      "evidence": ["qa-acceptance-scope-log"],
+      "risk": "不覆盖浏览器截图，只覆盖 QA artifact gate 逻辑。"
+    },
+    {
+      "spec": "需求：旧提案兼容 / 场景：未运行旧提案不增加新必填字段",
+      "tests": ["legacy-active-change-compatibility"],
+      "evidence": ["legacy-active-change-compatibility-log"],
+      "risk": "只验证 oz validate，不启动完整 sealed run。"
+    },
+    {
+      "spec": "需求：Prompt 范围合同 / 场景：review/QA prompt 明确要求 scope 分类",
+      "tests": ["prompt-scope-contract"],
+      "evidence": ["prompt-scope-contract-log"],
+      "risk": "该测试只验证 prompt 明确性，最终 gate 行为由 Go 合同测试证明。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "review-non-blocking-debt",
+      "source": "change_contract",
+      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh",
+      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh",
+      "purpose": "证明 clean review 可以记录 out-of-scope 历史债务，但 blocking findings 仍不能出现在 clean review。",
+      "assertions": [
+        "包含 non_blocking_findings 且 scope=out_of_scope_existing 的 clean review artifact 可以被 ReadReview 和 ValidateReview 接受",
+        "该 clean review 不触发 NeedsFix",
+        "clean review 继续拒绝普通 blocking findings"
+      ],
+      "expected_initial_failure": "当前 Review schema 不支持 non_blocking_findings，也没有 finding scope 字段，因此应失败于目标 artifact 合同缺失。"
+    },
+    {
+      "id": "parallel-scope-gate",
+      "source": "change_contract",
+      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh",
+      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh",
+      "purpose": "证明 parallel review gate 只阻断当前提案范围内 severe finding，且旧格式 missing scope 保持硬阻断。",
+      "assertions": [
+        "scope=out_of_scope_existing 的 major finding 不阻断 clean review",
+        "scope=current_change 的 major finding 继续阻断 clean review",
+        "缺少 scope 的旧格式 major finding 继续阻断 clean review"
+      ],
+      "expected_initial_failure": "当前 parallel finding schema 不支持 scope 字段，因此 out-of-scope severe finding 仍无法被 gate 识别为非阻断债务。"
+    },
+    {
+      "id": "qa-acceptance-scope",
+      "source": "change_contract",
+      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh",
+      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh",
+      "purpose": "证明 QA 可以记录非阻断历史债务，但 acceptance_matrix 仍只能覆盖 acceptance.json 已定义 id。",
+      "assertions": [
+        "clean QA artifact 的 acceptance_matrix 覆盖 required_tests 和 required_evidence 后通过",
+        "non_blocking_findings 中的 out_of_scope_existing 债务不需要进入 acceptance_matrix",
+        "acceptance_matrix 引用未知历史债务 id 时继续失败"
+      ],
+      "expected_initial_failure": "当前 QA schema 不支持 non_blocking_findings，因此应失败于目标 artifact 合同缺失。"
+    },
+    {
+      "id": "legacy-active-change-compatibility",
+      "source": "change_contract",
+      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh",
+      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh",
+      "purpose": "证明已创建但未运行的旧提案不需要补 scope 或 non_blocking 字段，仍能通过 oz validate。",
+      "assertions": [
+        "临时旧格式 active change 包含既有文档、tests 和 acceptance.json 后通过 oz validate",
+        "旧格式 acceptance.json 不包含 scope 字段也不包含 non_blocking_findings 字段",
+        "oz validate 输出成功 JSON"
+      ],
+      "expected_initial_failure": "该兼容性测试当前应通过；执行阶段必须保持通过，防止新增字段被误设为 acceptance 必填项。"
+    },
+    {
+      "id": "prompt-scope-contract",
+      "source": "change_contract",
+      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh",
+      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh",
+      "purpose": "证明 review 和 QA prompt 明确要求 scope 分类、非阻断历史债务和当前范围硬阻断边界。",
+      "assertions": [
+        "review prompt 包含 non_blocking_findings 和 out_of_scope_existing",
+        "QA prompt 包含 non_blocking_findings 和 out_of_scope_existing",
+        "prompt 明确 current_change、acceptance_contract、introduced_regression 仍为 hard block"
+      ],
+      "expected_initial_failure": "当前 prompt 只要求 blocker/major gate_input finding 阻断 clean，缺少 scope 分类和非阻断历史债务字段。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "review-non-blocking-debt-log",
+      "kind": "runtime_log",
+      "path": "test-results/12-scope-gate/review-non-blocking-debt.log",
+      "purpose": "记录 review 非阻断历史债务合同测试的命令输出。"
+    },
+    {
+      "id": "parallel-scope-gate-log",
+      "kind": "runtime_log",
+      "path": "test-results/12-scope-gate/parallel-scope-gate.log",
+      "purpose": "记录 parallel gate scope 合同测试的命令输出。"
+    },
+    {
+      "id": "qa-acceptance-scope-log",
+      "kind": "runtime_log",
+      "path": "test-results/12-scope-gate/qa-acceptance-scope.log",
+      "purpose": "记录 QA acceptance matrix 与非阻断债务合同测试的命令输出。"
+    },
+    {
+      "id": "legacy-active-change-compatibility-log",
+      "kind": "runtime_log",
+      "path": "test-results/12-scope-gate/legacy-active-change-compatibility.log",
+      "purpose": "记录旧格式 active change 通过 oz validate 的输出。"
+    },
+    {
+      "id": "prompt-scope-contract-log",
+      "kind": "runtime_log",
+      "path": "test-results/12-scope-gate/prompt-scope-contract.log",
+      "purpose": "记录 prompt scope 合同静态检查输出。"
+    }
+  ]
+}

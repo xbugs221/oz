@@ -1,0 +1,99 @@
+wo:
+  workflow:
+    engine: go-dag
+    max_review_iterations: 5
+    stages:
+      planning:
+        cli: codex
+        reasoning: xhigh
+        permissions: default
+      execution:
+        cli: codex
+        reasoning: high
+        permissions: default
+      fix:
+        cli: codex
+        reasoning: high
+        permissions: default
+      review:
+        cli: codex
+        reasoning: high
+        permissions: default
+      qa:
+        cli: codex
+        reasoning: high
+        permissions: default
+      archive:
+        cli: pi
+        reasoning: low
+        permissions: default
+    parallel:
+      enabled: true
+      groups:
+        planning_context:
+          mode: advisory
+          members:
+            - name: 研究问题拆解员
+              purpose: 拆解调研问题、证据口径和不可混淆概念
+              stage: planning
+              tool: pi
+              subagent: metis
+            - name: 来源地图研究员
+              purpose: 找出一手资料、权威文档、数据集和可替代来源
+              stage: planning
+              tool: pi
+              subagent: librarian
+            - name: 方法约束评估员
+              purpose: 评估采样偏差、时间范围、定义差异和证据等级
+              stage: planning
+              tool: pi
+              subagent: explore
+        implementation_context:
+          mode: advisory
+          members:
+            - name: 一手资料研究员
+              purpose: 汇总 execution 所需的一手资料、发布时间和引用路径
+              stage: before_execution
+              tool: pi
+              subagent: librarian
+            - name: 交叉验证研究员
+              purpose: 寻找独立来源对关键事实进行交叉验证
+              stage: before_execution
+              tool: pi
+              subagent: librarian
+        review:
+          mode: gate_input
+          members:
+            - name: 证据链评审员
+              purpose: 检查结论是否能追溯到可靠证据
+            - name: 反例评审员
+              purpose: 查找与结论冲突的资料和边界条件
+            - name: 时效性评审员
+              purpose: 检查信息日期、版本和近期变化风险
+            - name: 引用合规评审员
+              purpose: 检查引用、摘录长度和来源标注是否合规
+        qa:
+          mode: gate_input
+          members:
+            - name: 证据审计员
+              purpose: 核对关键事实、来源链接和证据等级
+            - name: 结论复算员
+              purpose: 复核数据推导、口径转换和结论一致性
+            - name: 缺口测试员
+              purpose: 标记未覆盖来源、未验证假设和待确认风险
+    validation:
+      max_attempts_per_stage: 3
+      commands: []
+  prompts:
+    planning: |
+{{ prompt "planning" }}
+    execution: |
+{{ prompt "execution" }}
+    review: |
+{{ prompt "review" }}
+    qa: |
+{{ prompt "qa" }}
+    fix: |
+{{ prompt "fix" }}
+    archive: |
+{{ prompt "archive" }}

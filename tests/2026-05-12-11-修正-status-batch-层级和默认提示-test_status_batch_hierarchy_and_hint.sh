@@ -71,8 +71,9 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status-default.txt
-head -n 1 status-default.txt | grep -qF "正在查看 repo 最近一次批量工作流，如需查看普通工作流，请使用 wo status -w1"
-grep -qF "→ b1 2/3" status-default.txt
+head -n 1 status-default.txt | grep -qF -- "- 1-a"
+! grep -qF "正在查看 repo 最近一次批量工作流，如需查看普通工作流，请使用 wo status -w1" status-default.txt
+! grep -qF "→ b1 2/3" status-default.txt
 grep -qF -- "- 1-a" status-default.txt
 grep -qF -- "- 2-b" status-default.txt
 grep -qF -- "- 3-c" status-default.txt

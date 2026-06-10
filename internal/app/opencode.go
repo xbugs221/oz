@@ -37,14 +37,15 @@ func (OpenCodeTool) PlanningCommand(ctx context.Context, repo, prompt string, st
 
 // NewRunner returns an OpenCode sealed-run runner.
 func (OpenCodeTool) NewRunner() AgentRunner {
-	path, _ := resolveCommand("opencode")
-	return &OpenCodeCLI{Path: path}
+	path, err := resolveCommand("opencode")
+	return &OpenCodeCLI{Path: path, ResolveErr: err}
 }
 
 // OpenCodeCLI invokes the real opencode executable.
 type OpenCodeCLI struct {
-	Path     string
-	Progress io.Writer
+	Path       string
+	ResolveErr error
+	Progress   io.Writer
 }
 
 // SetProgress redirects concise process progress for callers that own the UI.
@@ -54,6 +55,9 @@ func (o *OpenCodeCLI) SetProgress(progress io.Writer) {
 
 // Run executes opencode run, extracts session metadata, and waits for process exit.
 func (o OpenCodeCLI) Run(ctx context.Context, repo, prompt, sessionID string, options StageOptions) (string, error) {
+	if o.ResolveErr != nil {
+		return "", o.ResolveErr
+	}
 	if o.Path == "" {
 		return "", fmt.Errorf("找不到 opencode 可执行文件")
 	}
@@ -96,7 +100,7 @@ func opencodePlanningArgs(repo, prompt string, options StageOptions) []string {
 
 // opencodeRunArgs builds shell-free sealed-run arguments.
 func opencodeRunArgs(repo, prompt, sessionID string, options StageOptions) []string {
-	args := []string{"run", "--format", "json", "--dangerously-skip-permissions", "--dir", repo}
+	args := []string{"run", "--format", "json", "--dir", repo}
 	if sessionID != "" {
 		args = append(args, "--session", sessionID)
 	}

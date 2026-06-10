@@ -58,8 +58,9 @@ go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 timeout -s INT 2s "$WO" watch > watch_output.txt 2>&1 || true
 
 # Watch should show compact single-run content.
-grep -qF "| w1" watch_output.txt
-grep -qF "执行阶段 - → -" watch_output.txt
+head -1 watch_output.txt | grep -qF -- "- x-独立变更"
+grep -qF "  执行阶段 - | -" watch_output.txt
+! grep -qF "| w1" watch_output.txt
 ! grep -qF "工作流 w1 running" watch_output.txt
 
 echo "PASS"

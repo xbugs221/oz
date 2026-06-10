@@ -70,10 +70,11 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status.txt
-grep -qF "→ b1 1/2" status.txt
+head -1 status.txt | grep -qF -- "- 15-隐藏-status-内部网络错误"
 grep -qF "智能体后端连接失败" status.txt
 grep -qF -- "- 15-隐藏-status-内部网络错误" status.txt
 grep -qF -- "- 16-下一个任务" status.txt
+! grep -qF "→ b1 1/2" status.txt
 ! grep -qF "backend-api" status.txt
 ! grep -qF "chatgpt.com" status.txt
 ! grep -qF "tls handshake eof" status.txt

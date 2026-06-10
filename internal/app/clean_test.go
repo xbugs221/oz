@@ -323,7 +323,7 @@ func TestCleanFailedBatchPreservesReferencedRunningRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := CleanRuntimeState(repo)
+	result, err := CleanRuntimeStateWithOptions(repo, CleanOptions{CleanAgentSessions: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,6 +380,26 @@ func TestCleanRemovesCorruptedRunState(t *testing.T) {
 		if _, err := os.Stat(runDir(repo, id)); !os.IsNotExist(err) {
 			t.Fatalf("run %s still exists", id)
 		}
+	}
+}
+
+// TestLoadCleanRunStateValidatesRunID verifies clean cannot read outside the requested run.
+func TestLoadCleanRunStateValidatesRunID(t *testing.T) {
+	repo := gitRepo(t)
+	if _, err := loadCleanRunState(repo, "../escape"); err == nil {
+		t.Fatal("loadCleanRunState accepted path-traversal run_id")
+	}
+
+	dir := runDir(repo, "run-mismatch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"run_id":"other-run","change_name":"demo","status":"failed","stage":"execution"}` + "\n")
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadCleanRunState(repo, "run-mismatch"); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("loadCleanRunState mismatch error = %v, want run_id mismatch", err)
 	}
 }
 
@@ -698,8 +718,55 @@ func TestCleanOutputWithSkippedRunning(t *testing.T) {
 	}
 }
 
-// TestCleanRemovesAgentSessionRecords verifies failed runs clean referenced Codex/Pi records.
-func TestCleanRemovesAgentSessionRecords(t *testing.T) {
+// TestCleanPreservesAgentSessionRecordsByDefault verifies default clean stays inside wo state.
+func TestCleanPreservesAgentSessionRecordsByDefault(t *testing.T) {
+	repo := gitRepo(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+
+	codexID := "019edefault-bbbb-7ccc-8ddd-eeeeeeeeeeee"
+	piID := "019edefault-1111-7222-8333-444444444444"
+	state := State{
+		RunID:      "run-failed-agent-default",
+		ChangeName: "demo",
+		Sealed:     true,
+		Status:     statusFailed,
+		Stage:      "execution",
+		Sessions:   map[string]string{"codex:executor": codexID, "pi:archiver": piID},
+		Workflow:   DefaultWorkflowConfig(),
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	codexFile := filepath.Join(home, ".codex", "sessions", "2026", "05", "26", "rollout-"+codexID+".jsonl")
+	piFile := filepath.Join(home, ".pi", "agent", "sessions", "repo", "turn_"+piID+".jsonl")
+	for _, path := range []string{codexFile, piFile} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := CleanRuntimeState(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CleanedRuns != 1 || result.CleanedAgentRecords != 0 {
+		t.Fatalf("result = %+v, want run cleanup without external agent cleanup", result)
+	}
+	for _, path := range []string{codexFile, piFile} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("default clean removed external agent record %s: %v", path, err)
+		}
+	}
+}
+
+// TestCleanRemovesAgentSessionRecordsWithExplicitOption verifies opted-in cleanup of referenced Codex/Pi records.
+func TestCleanRemovesAgentSessionRecordsWithExplicitOption(t *testing.T) {
 	repo := gitRepo(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -732,7 +799,7 @@ func TestCleanRemovesAgentSessionRecords(t *testing.T) {
 		}
 	}
 
-	result, err := CleanRuntimeState(repo)
+	result, err := CleanRuntimeStateWithOptions(repo, CleanOptions{CleanAgentSessions: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,7 +875,7 @@ func TestCleanBatchReferencedRunRemovesAgentSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := CleanRuntimeState(repo)
+	result, err := CleanRuntimeStateWithOptions(repo, CleanOptions{CleanAgentSessions: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -850,7 +917,7 @@ db.commit()
 db.close()
 `)
 
-	result, err := CleanRuntimeState(repo)
+	result, err := CleanRuntimeStateWithOptions(repo, CleanOptions{CleanAgentSessions: true})
 	if err != nil {
 		t.Fatal(err)
 	}
