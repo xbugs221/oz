@@ -51,6 +51,47 @@ func TestBuildStatusViewAggregatesFixStages(t *testing.T) {
 	}
 }
 
+// TestBuildStatusViewInfersCompletedStagesFromDAGAndTimings verifies resumed sealed runs keep prior progress visible.
+func TestBuildStatusViewInfersCompletedStagesFromDAGAndTimings(t *testing.T) {
+	repo := gitRepo(t)
+	state := State{
+		RunID:      "run-resumed-dag-view",
+		ChangeName: "7-统一-状态视图",
+		Status:     statusRunning,
+		Stage:      "qa_1",
+		Sessions: map[string]string{
+			"codex:executor": "executor-session",
+			"codex:reviewer": "reviewer-session",
+			"codex:qa":       "qa-session",
+		},
+		Stages: map[string]string{},
+		StageTimings: map[string]StageTiming{
+			"review_1": {StartedAt: "2026-06-09T00:04:00Z", FinishedAt: "2026-06-09T00:06:00Z"},
+			"qa_1":     {StartedAt: "2026-06-09T00:06:00Z"},
+		},
+		DAGNodes: map[string]DAGNodeState{
+			"execution": {Status: "success", StartedAt: "2026-06-09T00:00:00Z", FinishedAt: "2026-06-09T00:04:00Z"},
+			"review_1":  {Status: "success", StartedAt: "2026-06-09T00:04:00Z", FinishedAt: "2026-06-09T00:06:00Z"},
+			"qa_1":      {Status: statusRunning, StartedAt: "2026-06-09T00:06:00Z"},
+		},
+		Workflow: DefaultWorkflowConfig(),
+	}
+
+	view := buildHumanStatusView(repo, state, "w1", "|")
+	execution := statusViewRowByName(t, view, "执行阶段")
+	if execution.Marker != "✓" {
+		t.Fatalf("execution marker = %q, want completed from DAG node", execution.Marker)
+	}
+	review := statusViewRowByName(t, view, "审核阶段")
+	if review.Marker != "✓" {
+		t.Fatalf("review marker = %q, want completed from DAG node or finished timing", review.Marker)
+	}
+	qa := statusViewRowByName(t, view, "测试阶段")
+	if qa.Marker != "|" {
+		t.Fatalf("qa marker = %q, want spinner for running DAG node", qa.Marker)
+	}
+}
+
 // TestBuildStatusViewReadsReviewAndQADAGSubagentNodes verifies status uses graph.go visual node ids.
 func TestBuildStatusViewReadsReviewAndQADAGSubagentNodes(t *testing.T) {
 	repo := gitRepo(t)
@@ -109,6 +150,50 @@ func TestBuildStatusViewReadsReviewAndQADAGSubagentNodes(t *testing.T) {
 	cli := statusViewRowByFullName(t, view, "CLI/API 测试员")
 	if cli.Marker != "→" || cli.SessionID != "qa-cli-session" {
 		t.Fatalf("qa CLI row = %#v, want running row with session", cli)
+	}
+}
+
+// TestBuildHumanStatusViewReplacesRunningMarkersInsideRows verifies watch spinners update every active indicator.
+func TestBuildHumanStatusViewReplacesRunningMarkersInsideRows(t *testing.T) {
+	repo := gitRepo(t)
+	workflow := DefaultWorkflowConfig()
+	workflow.Parallel.Enabled = true
+	workflow.Parallel.Groups = map[string]ParallelGroupConfig{
+		"review": {
+			Mode: "gate_input",
+			Members: []ParallelMemberConfig{
+				{Name: "目标核对审核员", Purpose: "核对目标"},
+			},
+		},
+	}
+	state := State{
+		RunID:      "run-review-spin",
+		ChangeName: "7-统一-状态视图",
+		Status:     statusRunning,
+		Stage:      "review_2",
+		Sessions: map[string]string{
+			"codex:reviewer": "reviewer-session",
+			"pi:subagent:review:目标核对审核员:2": "review-target-session",
+		},
+		Stages: map[string]string{"execution": "completed", "review_1": "completed"},
+		DAGNodes: map[string]DAGNodeState{
+			"review_2":          {Status: statusRunning},
+			"before_review_2_1": {Status: statusRunning},
+		},
+		Workflow: workflow,
+	}
+
+	view := buildHumanStatusView(repo, state, "w1", "|")
+	review := statusViewRowByName(t, view, "审核阶段")
+	if review.Marker != "✓|" {
+		t.Fatalf("review marker = %q, want spinner inside multi-round marker", review.Marker)
+	}
+	target := statusViewRowByFullName(t, view, "目标核对审核员")
+	if target.Marker != "|" {
+		t.Fatalf("subagent marker = %q, want spinner", target.Marker)
+	}
+	if strings.Contains(strings.Join(compactStatusLines(view), "\n"), "→") {
+		t.Fatalf("watch compact view should not contain static arrow:\n%s", strings.Join(compactStatusLines(view), "\n"))
 	}
 }
 

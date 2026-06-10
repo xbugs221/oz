@@ -155,13 +155,14 @@ func configuredParallelMember(workflow WorkflowConfig, groupName, memberName str
 
 func subagentPrompt(groupName string, member ParallelMemberConfig, output string) string {
 	return strings.Join([]string{
-		"你是只读 subagent。不得修改源码、测试、文档或运行态之外的文件。",
+		"只读，聚焦当前提案范围，" + member.Purpose,
+		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
 		"SUBAGENT_OUTPUT=" + output,
 		"",
-		"请将单成员 JSON artifact 写入 SUBAGENT_OUTPUT，只写一个 JSON object，不要 Markdown 或解释文字。",
+		"把一个 JSON object 写到 SUBAGENT_OUTPUT，字段：",
 		memberArtifactSchemaPrompt(),
 	}, "\n") + "\n"
 }
@@ -279,7 +280,7 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 			if !isObj {
 				return ParallelMemberResult{}, fmt.Errorf("findings 第 %d 项必须是对象", i+1)
 			}
-			for _, field := range []string{"title", "severity", "evidence", "recommendation"} {
+			for _, field := range []string{"title", "severity", "scope", "evidence", "recommendation"} {
 				if v, ok := obj[field]; ok && v != nil {
 					if _, isString := v.(string); !isString {
 						return ParallelMemberResult{}, fmt.Errorf("findings 第 %d 项的 %s 必须是字符串", i+1, field)
@@ -300,26 +301,21 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 // artifactRetryPrompt builds a prompt that resumes the same subagent session to rewrite only SUBAGENT_OUTPUT.
 func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifactPath string, schemaErr error) string {
 	return strings.Join([]string{
-		"你是只读 subagent。不得修改源码、测试、文档或运行态之外的文件。",
+		"只读，聚焦当前提案范围，" + member.Purpose,
+		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
 		"SUBAGENT_OUTPUT=" + artifactPath,
 		"",
-		"之前生成的 SUBAGENT_OUTPUT 格式不正确：" + schemaErr.Error(),
+		"SUBAGENT_OUTPUT 格式错误：" + schemaErr.Error(),
 		memberArtifactSchemaPrompt(),
-		"请只重写 SUBAGENT_OUTPUT，修正上述格式错误，不要修改其他文件。",
-		"请将修正后的单成员 JSON artifact 写入 SUBAGENT_OUTPUT。",
+		"只重写 SUBAGENT_OUTPUT。",
 	}, "\n") + "\n"
 }
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		"JSON 顶层只允许字段：name, purpose, status, summary, evidence, findings。",
-		"name 必须等于 SUBAGENT_NAME；purpose/status/summary 必须是非空字符串。",
-		"evidence 必须是字符串数组。",
-		"findings 必须是对象数组；每个对象只允许 title, severity, evidence, recommendation 四个字符串字段。",
-		"findings[].severity 使用 blocker/major/minor；info、warning、note 这类低风险口径写成 minor。",
-		"不要使用 category、description、detail、location、level、type 等额外字段；需要分类或位置时写入 title/evidence/recommendation 字符串。",
+		"name, purpose, status, summary, evidence[], findings[{title,severity,scope,evidence,recommendation}]",
 	}, "\n")
 }

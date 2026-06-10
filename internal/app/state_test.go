@@ -706,10 +706,13 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 	retry := artifactRetryPrompt("planning_context", member, "/tmp/member.json", fmt.Errorf(`json: unknown field "category"`))
 	for label, prompt := range map[string]string{"initial": initial, "retry": retry} {
 		for _, want := range []string{
-			"只允许字段：name, purpose, status, summary, evidence, findings",
-			"每个对象只允许 title, severity, evidence, recommendation",
-			"不要使用 category、description、detail、location、level、type",
-			"需要分类或位置时写入 title/evidence/recommendation",
+			"只读",
+			"聚焦当前提案范围",
+			member.Purpose,
+			"SUBAGENT_OUTPUT=/tmp/member.json",
+			"当前提案问题写 findings",
+			"历史债务或无关问题写 scope=out_of_scope_existing",
+			"findings[{title,severity,scope,evidence,recommendation}]",
 		} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("%s prompt missing %q:\n%s", label, want, prompt)
@@ -718,6 +721,36 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 	}
 	if !strings.Contains(retry, `json: unknown field "category"`) {
 		t.Fatalf("retry prompt missing concrete schema error:\n%s", retry)
+	}
+}
+
+// TestSubagentMemberArtifactAcceptsFindingScope verifies the prompt's scope field is accepted by the strict reader.
+func TestSubagentMemberArtifactAcceptsFindingScope(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	if err := os.WriteFile(path, []byte(`{
+		"name": "目标核对审核员",
+		"purpose": "核对 proposal/spec/task 是否满足",
+		"status": "success",
+		"summary": "scoped finding recorded",
+		"findings": [
+			{
+				"title": "历史债务",
+				"severity": "major",
+				"scope": "out_of_scope_existing",
+				"evidence": "baseline already had this issue before the current proposal",
+				"recommendation": "track separately"
+			}
+		]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "目标核对审核员", Purpose: "核对 proposal/spec/task 是否满足"})
+	if err != nil {
+		t.Fatalf("member artifact with scope should pass strict schema: %v", err)
+	}
+	if result.Findings[0].Scope != findingScopeOutOfScope {
+		t.Fatalf("scope = %q, want %q", result.Findings[0].Scope, findingScopeOutOfScope)
 	}
 }
 
