@@ -66,21 +66,28 @@ wo:
           members:
             - name: 反方评审员
               purpose: 主动寻找推荐方案的反例、失败条件和隐藏成本
+              tool: pi
             - name: 运维部署评审员
               purpose: 检查部署、迁移、监控、回滚和长期维护影响
+              tool: pi
             - name: 学习路线评审员
               purpose: 检查学习成本、团队吸收路径和文档可获得性
+              tool: pi
             - name: 安全合规评审员
               purpose: 检查权限、数据、许可和供应链风险
+              tool: pi
         qa:
           mode: gate_input
           members:
             - name: 证据审计员
               purpose: 核对关键结论是否有来源、日期和可复查证据
+              tool: pi
             - name: 决策矩阵测试员
               purpose: 验证候选方案比较是否覆盖硬约束和关键取舍
+              tool: pi
             - name: 反事实测试员
               purpose: 验证推荐在需求变化或约束变化下是否仍合理
+              tool: pi
     validation:
       max_attempts_per_stage: 3
       commands: []

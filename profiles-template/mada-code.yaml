@@ -66,25 +66,34 @@ wo:
           members:
             - name: 目标核对审核员
               purpose: 核对 proposal/spec/task 是否满足
+              tool: pi
             - name: 代码质量审核员
               purpose: 检查类型、边界、错误处理和可维护性
+              tool: pi
             - name: 测试有效性审核员
               purpose: 判断测试是否真实覆盖用户路径和失败模式
+              tool: pi
             - name: 安全风险审核员
               purpose: 检查权限、输入、泄漏和破坏性操作
+              tool: pi
             - name: 架构一致性审核员
               purpose: 检查是否符合现有模块边界和配置约定
+              tool: pi
         qa:
           mode: gate_input
           members:
             - name: CLI/API 测试员
               purpose: 执行命令行或接口真实路径
+              tool: pi
             - name: 回归场景测试员
               purpose: 覆盖邻近功能和历史合同回归
+              tool: pi
             - name: 证据采集员
               purpose: 采集 runtime log、trace 或测试产物
+              tool: pi
             - name: 边界条件测试员
               purpose: 验证错误路径、空输入和重复执行行为
+              tool: pi
     validation:
       max_attempts_per_stage: 3
       commands: []

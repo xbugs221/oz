@@ -74,6 +74,16 @@ assert_profile_config() {
   assert_contains "$yaml" "mode: advisory"
   assert_contains "$yaml" "mode: gate_input"
 
+  local member_count
+  local pi_tool_count
+  member_count="$(grep -c '^            - name:' "$yaml" || true)"
+  pi_tool_count="$(grep -c '^              tool: pi$' "$yaml" || true)"
+  [[ "$member_count" -gt 0 ]] || fail "$profile wo.yaml 缺少 subagent members"
+  [[ "$pi_tool_count" -eq "$member_count" ]] || fail "$profile wo.yaml 必须为每个 subagent member 显式写 tool: pi，当前 $pi_tool_count/$member_count"
+  if grep -Eq '^[[:space:]]+tool: (codex|opencode)$' "$yaml"; then
+    fail "$profile wo.yaml 不应包含非 pi subagent tool"
+  fi
+
   note "运行 wo graph 验证 $profile 可加载"
   (
     cd "$repo"

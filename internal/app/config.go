@@ -459,6 +459,9 @@ func parallelGroupConfigFromInput(input parallelGroupConfigInput) (ParallelGroup
 		if tool == "" {
 			tool = member.CLI
 		}
+		if tool == "" {
+			tool = "pi"
+		}
 		if strings.TrimSpace(member.Name) == "" {
 			return ParallelGroupConfig{}, fmt.Errorf("members[%d].name 不能为空", i)
 		}
@@ -535,6 +538,15 @@ func normalizeWorkflowConfig(config *WorkflowConfig) {
 	normalizeValidationConfig(&config.Validation)
 	if len(config.Parallel.Groups) == 0 {
 		config.Parallel = defaultParallelConfig()
+	}
+	for groupName, group := range config.Parallel.Groups {
+		for i, member := range group.Members {
+			if member.Tool == "" {
+				member.Tool = "pi"
+			}
+			group.Members[i] = member
+		}
+		config.Parallel.Groups[groupName] = group
 	}
 }
 

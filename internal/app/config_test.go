@@ -45,7 +45,7 @@ func TestLoadWorkflowConfigUsesDefaults(t *testing.T) {
 	if !strings.Contains(config.Prompts["planning"], "oz-plan") ||
 		!strings.Contains(config.Prompts["execution"], "oz-exec") ||
 		!strings.Contains(config.Prompts["execution"], "acceptance.json") ||
-			!strings.Contains(config.Prompts["execution"], "不要超出当前提案范围") ||
+		!strings.Contains(config.Prompts["execution"], "不要超出当前提案范围") ||
 		!strings.Contains(config.Prompts["qa"], "截图") ||
 		!strings.Contains(config.Prompts["fix"], "只修复当前 review/QA artifact 中列出的 findings") {
 		t.Fatalf("default prompts missing built-in oz guidance: %#v", config.Prompts)
@@ -276,6 +276,31 @@ wo:
 	member := group.Members[0]
 	if member.Name != "代码库侦察员" || member.Tool != "codex" || !member.Required {
 		t.Fatalf("member = %#v, want required codex code scout", member)
+	}
+}
+
+// TestLoadWorkflowConfigDefaultsParallelMemberToolToPi verifies omitted subagent tools use the pi CLI.
+func TestLoadWorkflowConfigDefaultsParallelMemberToolToPi(t *testing.T) {
+	repo := t.TempDir()
+	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), `
+wo:
+  workflow:
+    parallel:
+      enabled: true
+      groups:
+        review:
+          mode: gate_input
+          members:
+            - name: 目标核对审核员
+              purpose: 核对 proposal/spec/task 是否满足
+`)
+	config, err := LoadWorkflowConfig(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := config.Parallel.Groups["review"].Members[0]
+	if member.Tool != "pi" {
+		t.Fatalf("member tool = %q, want pi", member.Tool)
 	}
 }
 

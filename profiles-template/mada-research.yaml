@@ -66,21 +66,28 @@ wo:
           members:
             - name: 证据链评审员
               purpose: 检查结论是否能追溯到可靠证据
+              tool: pi
             - name: 反例评审员
               purpose: 查找与结论冲突的资料和边界条件
+              tool: pi
             - name: 时效性评审员
               purpose: 检查信息日期、版本和近期变化风险
+              tool: pi
             - name: 引用合规评审员
               purpose: 检查引用、摘录长度和来源标注是否合规
+              tool: pi
         qa:
           mode: gate_input
           members:
             - name: 证据审计员
               purpose: 核对关键事实、来源链接和证据等级
+              tool: pi
             - name: 结论复算员
               purpose: 复核数据推导、口径转换和结论一致性
+              tool: pi
             - name: 缺口测试员
               purpose: 标记未覆盖来源、未验证假设和待确认风险
+              tool: pi
     validation:
       max_attempts_per_stage: 3
       commands: []
