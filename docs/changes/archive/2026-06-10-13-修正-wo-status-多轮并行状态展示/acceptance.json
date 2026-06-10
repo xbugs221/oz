@@ -1,0 +1,65 @@
+{
+  "summary": "验证 wo status/watch 在 go-dag 并行 subagent 和多轮 review/fix 交错时不再显示内部 fan-in summary，能正确表达规划完成态、多轮 marker 和当前轮次 subagent 明细。",
+  "coverage": [
+    {
+      "spec": "需求：极简 human status 不泄漏 parallel fan-in / 场景：多轮 run 不显示并行 summary/raw member status",
+      "tests": ["status-multiround-parallel-display-contract"],
+      "evidence": ["status-multiround-parallel-display-log"],
+      "risk": "不验证真实 TTY 原地刷新，只验证 status/watch 共用 compact view 内容。"
+    },
+    {
+      "spec": "需求：规划阶段完成态正确 / 场景：execution 起跑且 planning_context fan-in 成功时规划行显示完成且隐藏规划 subagent",
+      "tests": ["status-multiround-parallel-display-contract"],
+      "evidence": ["status-multiround-parallel-display-log"],
+      "risk": "历史 run 如果缺少 planning fan-in artifact 或 DAG node，仍允许保守显示未完成。"
+    },
+    {
+      "spec": "需求：多轮阶段 marker 保留历史 / 场景：第三轮 review 失败时审核行显示 `✓✓x`",
+      "tests": ["status-multiround-parallel-display-contract", "status-watch-compact-output-regression"],
+      "evidence": ["status-multiround-parallel-display-log"],
+      "risk": "契约重点覆盖 review/fix，QA 使用同一多轮 marker helper，执行阶段需确保 helper 共用或补充邻近测试。"
+    },
+    {
+      "spec": "需求：子代理明细绑定当前轮次 / 场景：review_3 失败时显示第三轮 review subagent session 且不把主阶段 node 误判为 subagent",
+      "tests": ["status-multiround-parallel-display-contract", "status-watch-compact-output-regression"],
+      "evidence": ["status-multiround-parallel-display-log"],
+      "risk": "不要求展示全部历史轮次 subagent，只要求当前代表轮次正确。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "status-multiround-parallel-display-contract",
+      "source": "change_contract",
+      "path": "docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh",
+      "command": "bash docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh",
+      "purpose": "证明 human status/watch 在多轮 review/fix 与 parallel subagent 并存时输出极简、准确、当前轮次一致的状态视图。",
+      "assertions": [
+        "输出不包含 parallel fan-in summary、internal group name 或 raw member status",
+        "planning_context fan-in 成功时规划阶段显示 `✓` 且不展开规划 subagent",
+        "review_1/review_2 完成且 review_3 失败时审核阶段显示 `✓✓x`",
+        "review_3 失败时审核 subagent 行使用第三轮 session，且成功 helper 不会因主 review_3 节点失败被标成 x"
+      ],
+      "expected_initial_failure": "当前实现会显示 `- 并行 implementation_context/review`、规划行 `-`、审核行单独 `x`，并混入第一轮 review subagent 或错误标记 helper，应失败于目标状态展示缺失。"
+    },
+    {
+      "id": "status-watch-compact-output-regression",
+      "source": "existing_regression",
+      "path": "tests/specs/codex-workflow-cli/test_status_watch_compact_output_contract.sh",
+      "command": "bash tests/specs/codex-workflow-cli/test_status_watch_compact_output_contract.sh",
+      "purpose": "证明 status/watch 聚合修正没有破坏既有 compact output 和 batch 组合输出合同。",
+      "assertions": [
+        "既有 status/watch compact output 合同通过",
+        "受新 human status 合同影响的旧测试按本提案新意图更新，而不是删除状态覆盖"
+      ],
+      "expected_initial_failure": "执行前可能因旧 status/watch 测试仍期待 fan-in summary 或旧 marker 语义而失败。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "status-multiround-parallel-display-log",
+      "kind": "runtime_log",
+      "path": "test-results/13-status-multiround-parallel-display/status-multiround-parallel-display.log",
+      "purpose": "记录多轮 parallel status 合同测试输出、实际 compact lines 和失败/通过结果。"
+    }
+  ]
+}

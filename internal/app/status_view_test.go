@@ -175,8 +175,8 @@ func TestBuildStatusViewMarksRunningIteratedStages(t *testing.T) {
 
 			view := buildStatusView(repo, state, "w1", "→")
 			row := statusViewRowByName(t, view, tc.rowName)
-			if row.Marker != "→" {
-				t.Fatalf("%s marker = %q, want running marker", tc.rowName, row.Marker)
+			if row.Marker != "✓→" {
+				t.Fatalf("%s marker = %q, want historical completion plus running marker", tc.rowName, row.Marker)
 			}
 			if row.SessionID != tc.sessionValue {
 				t.Fatalf("%s session = %q, want %q", tc.rowName, row.SessionID, tc.sessionValue)
@@ -184,7 +184,7 @@ func TestBuildStatusViewMarksRunningIteratedStages(t *testing.T) {
 			if !strings.HasSuffix(row.Artifacts["stage_artifact"], tc.artifact) {
 				t.Fatalf("%s artifact = %q, want suffix %q", tc.rowName, row.Artifacts["stage_artifact"], tc.artifact)
 			}
-			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), tc.rowName+" "+tc.sessionValue+" →") {
+			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), tc.rowName+" "+tc.sessionValue+" ✓→") {
 				t.Fatalf("human status missing running %s row:\n%s", tc.rowName, strings.Join(compactStatusLines(view), "\n"))
 			}
 		})
@@ -253,8 +253,8 @@ func TestBuildStatusViewMarksFailedIteratedStages(t *testing.T) {
 
 			view := buildStatusView(repo, state, "w1", "→")
 			row := statusViewRowByName(t, view, tc.rowName)
-			if row.Marker != "x" {
-				t.Fatalf("%s marker = %q, want failed marker", tc.rowName, row.Marker)
+			if row.Marker != "✓x" {
+				t.Fatalf("%s marker = %q, want historical completion plus failed marker", tc.rowName, row.Marker)
 			}
 			if row.SessionID != tc.sessionValue {
 				t.Fatalf("%s session = %q, want %q", tc.rowName, row.SessionID, tc.sessionValue)
@@ -262,7 +262,7 @@ func TestBuildStatusViewMarksFailedIteratedStages(t *testing.T) {
 			if !strings.HasSuffix(row.Artifacts["stage_artifact"], tc.artifact) {
 				t.Fatalf("%s artifact = %q, want suffix %q", tc.rowName, row.Artifacts["stage_artifact"], tc.artifact)
 			}
-			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), tc.rowName+" "+tc.sessionValue+" x") {
+			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), tc.rowName+" "+tc.sessionValue+" ✓x") {
 				t.Fatalf("human status missing failed %s row:\n%s", tc.rowName, strings.Join(compactStatusLines(view), "\n"))
 			}
 		})

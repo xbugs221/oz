@@ -1334,7 +1334,7 @@
 - **且** execution 和 fix_1 已完成
 - **当** 调用 `wo status -w1`
 - **则** `执行阶段` 行显示 executor session id 和 `✓`
-- **且** `修正阶段` 行显示 fixer session id 和 `→`
+- **且** `修正阶段` 行显示 fixer session id 和 `✓→`
 - **且** `执行阶段` 行不得显示 `→`
 - **且** `审核阶段` 行不得显示 `→`
 
@@ -1345,7 +1345,7 @@
 - **当** 调用 `wo status -w1`
 - **则** stdout 必须只包含一条聚合后的 `修正阶段` 行
 - **且** `修正阶段` 行显示 `<tool>:fixer` 对应 session id
-- **且** `修正阶段` 行显示 `✓`
+- **且** `修正阶段` 行 marker 保留历史轮次状态，显示 `✓✓`
 
 #### 场景：历史修复缺少 fixer session
 
@@ -1362,7 +1362,7 @@
 - **且** review_1 和 review_2 已完成
 - **当** 调用 `wo status -w1`
 - **则** `审核阶段` 行显示 reviewer session id
-- **且** `审核阶段` 行显示 `→`
+- **且** `审核阶段` 行 marker 保留历史轮次状态，显示 `✓✓→`
 - **且** `执行阶段` 行不得显示 `→`
 - **且** `修正阶段` 行不得显示 `→`
 
@@ -2177,41 +2177,92 @@
 - **且** 测试说明必须能解释每个新增测试覆盖的用户风险
 - **且** 不要求达到 100% 覆盖率
 
-### 需求：人类 status 展示并行成员摘要
+### 需求：极简 human status 不泄漏 parallel fan-in
 
-系统必须在人类可读 `wo status` 中展示已到达或已产出的 parallel group 摘要，让用户不用进入 run 目录也能判断并行成员是否真正产出有效 artifact。
+// Sources: 13-修正-wo-status-多轮并行状态展示
 
-#### 场景：单 workflow 展示并行成员摘要
+系统必须让 human `wo status` 和 `wo watch` 保持固定列极简输出。parallel fan-in artifact 是内部聚合产物，不得以 `- 并行 <group>` 或 fan-in member raw status 的形式显示给用户。短名 subagent 行仍通过 `DAGNodes` 和 `sessions` 表达真实 helper 执行状态。
 
-- **给定** 当前 workflow 启用了 `implementation_context` 或 `review` parallel group
+#### 场景：多轮 run 不显示并行 summary/raw member status
+
+- **给定** 当前 run 启用了 `implementation_context` 或 `review` parallel group
 - **且** run 目录存在合法 `parallel-implementation-context.json` 或 `parallel-review-<n>.json`
-- **当** 用户运行 `wo status -wN`
-- **则** 输出必须保留既有 `规/写/审/测` 主阶段行
-- **且** 对应主阶段行下方必须展示 `并行 <group> <成功数>/<成员数> <状态>`
-- **且** 必须使用配置中的用户可见成员名称和成员 artifact status
+- **当** 用户运行 `wo status -wN` 或 `wo watch -wN`
+- **则** 输出不包含 `- 并行`、`implementation_context`、`parallel-review`、`LGTM_WITH_MINOR_CONCERNS` 或 `completed - -`
+- **且** 输出仍保留短名 subagent 行和固定列阶段行
+- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
+- **关键断言**：human 输出不泄漏 fan-in summary、internal group name 或 raw member status
+- **剩余风险**：不验证真实 TTY 原地刷新，只验证 status/watch 共用 compact view 内容
 
-#### 场景：缺失或非法 parallel artifact 不得显示 success
-
-- **给定** run state 中存在 parallel 子会话记录
-- **且** 已到达对应 parallel group 所属阶段
-- **当** 目标 `parallel-*.json` 缺失或不是合法 artifact
-- **则** `wo status -wN` 必须继续成功输出
-- **且** 对应并行摘要必须显示 `missing <artifact>` 或 `invalid <artifact>`
-- **且** 不得仅凭 session id 显示 `success`
-
-#### 场景：batch status 在 change 下展示并行摘要
+#### 场景：batch status 不展示并行摘要
 
 - **给定** 当前 batch 中某个 change 已创建 run
 - **且** 该 run 已到达或已产出 parallel group artifact
 - **当** 用户运行 `wo status` 或 `wo status -bN`
-- **则** 并行摘要必须展示在该 change 的主阶段明细下方
-- **且** 不得把所有 parallel 摘要统一堆到 batch 底部
+- **则** batch 输出不包含 `- 并行`、group name 或 fan-in summary
+- **且** 短名 subagent 行仍正常显示
+- **且** 不得把所有 subagent 行统一堆到 batch 底部
 
-#### 场景：JSON status 不包含并行摘要
+#### 场景：JSON status 保留机器可读 artifact 路径
 
 - **当** 用户运行 `wo status --run-id <run-id> --json`
 - **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
-- **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`
+- **且** JSON 不得将 fan-in summary 注入 human 可读字段
+- **且** JSON observability 可继续包含机器可读 artifact 路径
+
+### 需求：规划阶段完成态正确
+
+// Sources: 13-修正-wo-status-多轮并行状态展示
+
+系统必须把 execution 起跑的 sealed run 中已完成的 `planning_context` fan-in 视为规划准备完成。human status 不得因为没有真实 `planning` main_stage 而显示 `规划阶段 - - -`，也不得展开已完成的规划 subagent 明细。
+
+#### 场景：execution 起跑且 planning_context fan-in 成功时规划行显示完成
+
+- **给定** sealed run 从 execution 阶段起跑
+- **且** `planning_context_*` fan-in 节点全部成功且 `parallel-planning-context.json` 存在
+- **当** 用户运行 `wo status -wN`
+- **则** `规划阶段` 行显示 `✓` marker
+- **且** `规划阶段` 行不展开 `需求分析`、`代码侦察`、`外部资料` 等已完成的 planning subagent 明细
+- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
+- **关键断言**：规划阶段 marker 为 `✓` 且不显示 planning subagent
+- **剩余风险**：历史 run 如果没有 planning fan-in artifact 或 DAG node，仍可保守显示未完成
+
+### 需求：多轮阶段 marker 保留历史
+
+// Sources: 13-修正-wo-status-多轮并行状态展示
+
+系统必须在 compact 阶段行展示已发生轮次的历史状态。当前轮次失败不能抹掉前序成功轮次。`review_*`、`qa_*`、`fix_*` 已完成轮次显示 `✓`，当前失败轮次显示 `x`，当前运行轮次显示 `→` 或 watch spinner。
+
+#### 场景：第三轮 review 失败时审核行显示 ✓✓x
+
+- **给定** run 的 `review_1` 和 `review_2` 已完成
+- **且** `review_3` 失败
+- **当** 用户运行 `wo status -wN`
+- **则** `审核阶段` 行显示 reviewer session id
+- **且** `审核阶段` 行 marker 显示 `✓✓x`
+- **且** `修正阶段` 行 marker 显示 `✓✓`（fix_1 和 fix_2 已完成）
+- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
+- **关键断言**：审核行包含 `✓✓x`，修正行包含 `✓✓`
+- **剩余风险**：本场景覆盖 review/fix；多轮 QA 使用同一 marker 逻辑
+
+### 需求：子代理明细绑定当前轮次
+
+// Sources: 13-修正-wo-status-多轮并行状态展示
+
+系统必须让 review/qa 子代理明细跟随当前 compact stage 代表轮次。`review_3` 失败时，审核阶段下的子代理应显示第三轮 subagent session 和 DAG node 状态，不得固定读取第一轮或把主阶段 `review_3` node 误判为 subagent。
+
+#### 场景：review_3 失败时显示第三轮 review subagent 且不误判主阶段节点
+
+- **给定** `before_review_1_*`、`before_review_2_*`、`before_review_3_*` 三轮 helper DAG node 均存在
+- **且** 第三轮 helper 全部 success，但主阶段 `review_3` node failed
+- **当** 用户运行 `wo status -wN`
+- **则** 审核阶段下子代理行使用第三轮 session（如 `review3-target`、`review3-quality` 等）
+- **且** 输出不包含第一轮 session（如 `review1-target`）
+- **且** helper 如 `测试有效 review3-test ✓` 不能因为主阶段 `review_3` failed 被标成 `x`
+- **且** review helper 只匹配 `before_review_<iteration>_<index>`，不把 `review_3` main_stage node 当成 subagent
+- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
+- **关键断言**：当前轮次 subagent session 正确，不包含旧轮次 session，helper 独立于主阶段 node 状态
+- **剩余风险**：不要求展示所有历史轮次 subagent，仅要求当前代表轮次正确
 
 ### 需求：默认纯 Go DAG engine
 
@@ -2223,7 +2274,7 @@
 - **则** 默认运行必须成功推进 workflow
 - **且** run state 必须记录 `engine: go-dag`
 - **且** 默认 workflow 配置必须启用 `parallel.enabled: true`
-- **且** `wo status -wN` 必须展示 `引擎 go-dag` 和并行 group 摘要
+- **且** `wo status -wN` 必须展示 `引擎 go-dag`，不得展示并行 group fan-in summary
 
 ### 需求：默认 parallel subagents 与 DAG 图
 

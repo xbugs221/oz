@@ -3,7 +3,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -61,17 +60,18 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 		Artifacts:      statusRootArtifacts(repo, state),
 	}
 	for _, spec := range compactStageSpecs {
+		stages := matchingStatusStages(state, spec)
 		row := statusStageRow(repo, state, spec)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
 		}
 		view.Rows = append(view.Rows, row)
-		view.Rows = append(view.Rows, statusSubagentRows(repo, state, spec.stage)...)
+		view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages))...)
 	}
 	return view
 }
 
-// buildHumanStatusView adds human-only parallel fan-in summaries to the compact view.
+// buildHumanStatusView builds the compact human view without internal parallel fan-in rows.
 func buildHumanStatusView(repo string, state State, displayID, runningMarker string) statusView {
 	ensureWorkflowConfig(&state)
 	normalizeStateMaps(&state)
@@ -83,13 +83,15 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 		Artifacts:      statusRootArtifacts(repo, state),
 	}
 	for _, spec := range compactStageSpecs {
+		stages := matchingStatusStages(state, spec)
 		row := statusStageRow(repo, state, spec)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
 		}
 		view.Rows = append(view.Rows, row)
-		view.Rows = append(view.Rows, statusParallelGroupRows(repo, state, spec.stage)...)
-		view.Rows = append(view.Rows, statusSubagentRows(repo, state, spec.stage)...)
+		if spec.stage != "planning" {
+			view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages))...)
+		}
 	}
 	return view
 }
@@ -116,6 +118,9 @@ func statusStageRow(repo string, state State, spec compactStageSpec) statusViewR
 		SessionID: statusRoleSessionID(state, spec.role),
 		Marker:    statusStageMarker(state, stages),
 		Artifacts: map[string]string{"stage_artifact": statusStageArtifact(repo, state, statusStageArtifactStage(state, spec, stages))},
+	}
+	if spec.role == "planner" && row.Marker == "-" && statusPlanningContextCompleted(repo, state) {
+		row.Marker = "✓"
 	}
 	if state.Status == statusBlocked && spec.role == "reviewer" {
 		row.Marker = "x"
@@ -199,26 +204,39 @@ func statusRoleSessionID(state State, role string) string {
 
 // statusStageMarker converts durable stage state into the compact progress marker.
 func statusStageMarker(state State, stages []string) string {
-	for _, stage := range stages {
-		if state.Stage == stage && state.Status == statusRunning && state.Stages[stage] != "completed" {
-			return "→"
-		}
-	}
-	for _, stage := range stages {
-		if state.Stage == stage && state.Status != "" && state.Status != statusRunning && state.Status != statusDone {
-			return "x"
-		}
-	}
-	completed := 0
+	var marker strings.Builder
 	for _, stage := range stages {
 		if state.Stages[stage] == "completed" {
-			completed++
+			marker.WriteString("✓")
+			continue
+		}
+		if state.Stage == stage && state.Status == statusRunning {
+			marker.WriteString("→")
+			continue
+		}
+		if state.Stage == stage && state.Status != "" && state.Status != statusRunning && state.Status != statusDone {
+			marker.WriteString("x")
 		}
 	}
-	if completed > 0 {
-		return strings.Repeat("✓", completed)
+	if marker.Len() > 0 {
+		return marker.String()
 	}
 	return "-"
+}
+
+// statusPlanningContextCompleted treats execution preflight context fan-in as the completed planning marker.
+func statusPlanningContextCompleted(repo string, state State) bool {
+	for _, id := range []string{"planning_context_fanin"} {
+		if node, ok := state.DAGNodes[id]; ok && statusDAGNodeSucceeded(node.Status) {
+			return true
+		}
+	}
+	return fileExists(parallelArtifactPath(runDir(repo, state.RunID), "planning_context", 0))
+}
+
+// statusDAGNodeSucceeded normalizes durable DAG node success values used across runners.
+func statusDAGNodeSucceeded(status string) bool {
+	return status == "success" || status == "completed" || status == statusDone
 }
 
 // statusStageDuration sums timing records for the concrete stages in one compact row.
@@ -324,93 +342,6 @@ func statusSubagentRows(repo string, state State, parentStage string) []statusVi
 	return rows
 }
 
-// statusParallelGroupRows summarizes configured fan-in artifacts for human status.
-func statusParallelGroupRows(repo string, state State, parentStage string) []statusViewRow {
-	if !state.Workflow.Parallel.Enabled || !statusParallelParentReached(state, parentStage) {
-		return nil
-	}
-	var rows []statusViewRow
-	for _, groupName := range statusGroupsForStage(parentStage) {
-		group, ok := state.Workflow.Parallel.Groups[groupName]
-		if !ok || len(group.Members) == 0 {
-			continue
-		}
-		iteration, err := statusGroupIteration(parentStage, groupName)
-		if err != nil {
-			continue
-		}
-		groupArtifact := parallelArtifactPath(runDir(repo, state.RunID), groupName, iteration)
-		total := len(group.Members)
-		artifact, err := ReadParallelArtifact(groupArtifact)
-		if err != nil {
-			rows = append(rows, statusParallelGroupRow(parentStage, groupName, groupArtifact, fmt.Sprintf("0/%d", total), "missing "+filepath.Base(groupArtifact)))
-			if !os.IsNotExist(err) {
-				rows[len(rows)-1].Marker = "invalid " + filepath.Base(groupArtifact)
-			}
-			continue
-		}
-		if err := ValidateParallelArtifactForGroup(artifact, groupName, group); err != nil {
-			rows = append(rows, statusParallelGroupRow(parentStage, groupName, groupArtifact, fmt.Sprintf("0/%d", total), "invalid "+filepath.Base(groupArtifact)))
-			continue
-		}
-		successCount := 0
-		for _, member := range artifact.Members {
-			if memberStatusSucceeded(member.Status) {
-				successCount++
-			}
-		}
-		status := "failed"
-		if successCount == total {
-			status = "success"
-		}
-		rows = append(rows, statusParallelGroupRow(parentStage, groupName, groupArtifact, fmt.Sprintf("%d/%d", successCount, total), status))
-		for _, member := range artifact.Members {
-			rows = append(rows, statusViewRow{
-				Kind:      "parallel_member",
-				Name:      member.Name,
-				FullName:  member.Name + ":parallel-summary",
-				Stage:     parentStage,
-				Group:     groupName,
-				SessionID: member.Status,
-				Marker:    "",
-				Indent:    4,
-				Artifacts: map[string]string{
-					"group_artifact": groupArtifact,
-				},
-			})
-		}
-	}
-	return rows
-}
-
-// statusParallelParentReached reports whether a parent stage should expose configured helper artifacts.
-func statusParallelParentReached(state State, parentStage string) bool {
-	if statusStageReached(state, parentStage) {
-		return true
-	}
-	if parentStage == "execution" && state.Stages["execution"] == "completed" {
-		return true
-	}
-	return false
-}
-
-// statusParallelGroupRow builds the single fan-in summary line for a helper group.
-func statusParallelGroupRow(parentStage, groupName, groupArtifact, progress, marker string) statusViewRow {
-	return statusViewRow{
-		Kind:      "parallel_group",
-		Name:      "并行 " + groupName,
-		FullName:  groupName + ":parallel-summary",
-		Stage:     parentStage,
-		Group:     groupName,
-		SessionID: progress,
-		Marker:    marker,
-		Indent:    2,
-		Artifacts: map[string]string{
-			"group_artifact": groupArtifact,
-		},
-	}
-}
-
 // statusGroupsForStage maps compact parent stages to configured parallel helper groups.
 func statusGroupsForStage(stage string) []string {
 	if stage == "planning" {
@@ -441,15 +372,18 @@ func statusGroupIteration(stage, group string) (int, error) {
 
 // statusSubagentNode finds the DAG node for a configured member index.
 func statusSubagentNode(state State, groupName, parentStage string, iteration, index int) (string, DAGNodeState, bool) {
-	candidates := []string{fmt.Sprintf("%s_%d", groupName, index+1)}
-	if groupName == "implementation_context" {
+	var candidates []string
+	switch groupName {
+	case "planning_context":
+		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
+	case "implementation_context":
 		candidates = append(candidates, fmt.Sprintf("before_execution_%d", index+1))
-	}
-	if iteration > 0 {
-		candidates = append(candidates, fmt.Sprintf("%s_%d_%d", groupName, iteration, index+1))
-		if visualGroup := statusVisualGroupName(groupName); visualGroup != groupName {
-			candidates = append(candidates, fmt.Sprintf("%s_%d_%d", visualGroup, iteration, index+1))
+	case "review", "qa":
+		if iteration > 0 {
+			candidates = append(candidates, fmt.Sprintf("%s_%d_%d", statusVisualGroupName(groupName), iteration, index+1))
 		}
+	default:
+		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
 	}
 	for _, id := range candidates {
 		if node, ok := state.DAGNodes[id]; ok {

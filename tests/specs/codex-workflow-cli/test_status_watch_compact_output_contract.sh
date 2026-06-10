@@ -55,9 +55,6 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 		"- 7-统一输出",
 		"  规划阶段 planner-session ✓ 2.00",
 		"  执行阶段 writer-session → 6.50",
-		"    - 并行 implementation_context 2/2 success -",
-		"      - 代码库侦察员 success - -",
-		"      - 外部资料研究员 success - -",
 		"    代码侦察 subagent-session-1 ✓ 1.10",
 		"    外部资料 subagent-session-2 ✓ 0.80",
 		"  审核阶段 reviewer-session - -",
@@ -72,7 +69,7 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 	if !strings.HasPrefix(gotStatus, "- 7-统一输出\n") {
 		t.Fatalf("status first line must be proposal list item:\n%s", gotStatus)
 	}
-	for _, banned := range []string{"工作流", "批量任务", "引擎", "耗时"} {
+	for _, banned := range []string{"工作流", "批量任务", "引擎", "耗时", "- 并行", "implementation_context", "代码库侦察员 success"} {
 		if strings.Contains(gotStatus, banned) {
 			t.Fatalf("status output should not contain %q:\n%s", banned, gotStatus)
 		}
@@ -84,7 +81,6 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 		"- 7-统一输出",
 		"  规划阶段 planner-session ✓ 2.00",
 		"  执行阶段 writer-session | 6.50",
-		"    - 并行 implementation_context 2/2 success -",
 		"    代码侦察 subagent-session-1 ✓ 1.10",
 		"    外部资料 subagent-session-2 ✓ 0.80",
 	} {
@@ -113,7 +109,6 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 		"- 7-统一输出",
 		"  规划阶段 planner-session ✓ 2.00",
 		"  执行阶段 writer-session | 6.50",
-		"    - 并行 implementation_context 2/2 success -",
 		"    代码侦察 subagent-session-1 ✓ 1.10",
 		"- 8-待执行",
 	} {

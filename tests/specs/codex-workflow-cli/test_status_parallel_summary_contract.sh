@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo status 人类输出能展示 parallel 并行成员摘要，并且 success 不能只由子会话记录推断。
+# 文件功能目的：验证 wo status 人类输出不泄漏 parallel fan-in 摘要，同时机器 gate 仍严格校验 parallel artifact。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -26,10 +26,13 @@ import (
 	"testing"
 )
 
-// TestHumanStatusShowsParallelMemberSummary 验证单 workflow status 在对应主阶段下展示并行组和成员摘要。
-func TestHumanStatusShowsParallelMemberSummary(t *testing.T) {
+// TestHumanStatusHidesParallelFanInSummary 验证单 workflow status 只展示极简阶段和 helper 行，不展示 fan-in 摘要。
+func TestHumanStatusHidesParallelFanInSummary(t *testing.T) {
 	repo := gitRepo(t)
 	workflow := statusParallelWorkflowForTest()
+	runPath := runDir(repo, "parallel-status-single")
+	targetArtifact := filepath.Join(runPath, "parallel-members", "review", "1", "target.json")
+	riskArtifact := filepath.Join(runPath, "parallel-members", "review", "1", "risk.json")
 	state := State{
 		RunID:      "parallel-status-single",
 		ChangeName: "demo",
@@ -40,13 +43,24 @@ func TestHumanStatusShowsParallelMemberSummary(t *testing.T) {
 		Sessions: map[string]string{
 			"codex:executor": "writer-session",
 			"codex:reviewer": "reviewer-session",
+			"pi:subagent:review:目标核对审核员:1": "target-session",
+			"pi:subagent:review:安全风险审核员:1": "risk-session",
+		},
+		DAGNodes: map[string]DAGNodeState{
+			"before_review_1_1": {Status: "success", Artifact: targetArtifact},
+			"before_review_1_2": {Status: "failed", Artifact: riskArtifact},
 		},
 		Workflow: workflow,
 	}
 	if err := saveState(repo, state); err != nil {
 		t.Fatal(err)
 	}
-	runPath := runDir(repo, state.RunID)
+	if err := writeJSONFile(targetArtifact, ParallelMemberResult{Name: "目标核对审核员", Purpose: "核对目标", Status: "success", Summary: "target matches"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(riskArtifact, ParallelMemberResult{Name: "安全风险审核员", Purpose: "检查风险", Status: "failed", Summary: "found a risk"}); err != nil {
+		t.Fatal(err)
+	}
 	statusWriteParallelArtifact(t, filepath.Join(runPath, "parallel-implementation-context.json"), ParallelArtifact{
 		Group:   "implementation_context",
 		Mode:    "advisory",
@@ -74,81 +88,44 @@ func TestHumanStatusShowsParallelMemberSummary(t *testing.T) {
 	statusSaveResult(t, "status-single.txt", got)
 	for _, want := range []string{
 		"  执行阶段 writer-session ✓",
-		"  - 并行 implementation_context 2/2 success",
-		"    - 代码库侦察员 success",
-		"    - 外部资料研究员 success",
 		"  审核阶段 reviewer-session →",
-		"  - 并行 review 1/2 failed",
-		"    - 目标核对审核员 success",
-		"    - 安全风险审核员 failed",
+		"    目标核对 target-session ✓",
+		"    风险检查 risk-session x",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status output missing %q:\n%s", want, got)
 		}
 	}
-	for _, banned := range []string{"Sisyphus", "Prometheus", "Metis", "Momus", "Oracle", "Explore"} {
+	for _, banned := range []string{"- 并行", "implementation_context", "parallel-review", "代码库侦察员 success", "安全风险审核员 failed", "Sisyphus", "Prometheus", "Metis", "Momus", "Oracle", "Explore"} {
 		if strings.Contains(got, banned) {
 			t.Fatalf("status output leaked internal agent name %q:\n%s", banned, got)
 		}
 	}
 }
 
-// TestHumanStatusDoesNotTreatSubagentSessionAsSuccess 验证有子会话记录但缺失或非法 artifact 时不能显示 success。
-func TestHumanStatusDoesNotTreatSubagentSessionAsSuccess(t *testing.T) {
+// TestParallelReviewGateRejectsMissingOrInvalidArtifact 验证缺失或非法 fan-in artifact 仍通过机器 gate 暴露为非成功。
+func TestParallelReviewGateRejectsMissingOrInvalidArtifact(t *testing.T) {
 	repo := gitRepo(t)
 	workflow := statusParallelWorkflowForTest()
-	state := State{
-		RunID:      "parallel-status-missing",
-		ChangeName: "demo",
-		Sealed:     true,
-		Status:     statusRunning,
-		Stage:      "review_1",
-		Sessions: map[string]string{
-			"codex:reviewer": "reviewer-session",
-			"codex:subagent:review:目标核对审核员:1": "subagent-session",
-		},
-		Workflow: workflow,
-	}
-	if err := saveState(repo, state); err != nil {
-		t.Fatal(err)
+	runPath := runDir(repo, "parallel-status-missing")
+	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err == nil || !strings.Contains(err.Error(), "parallel-review-1.json") {
+		t.Fatalf("missing artifact should block clean review with path, got %v", err)
 	}
 
-	var missing bytes.Buffer
-	if err := printHumanStatus(&missing, repo, "-w1"); err != nil {
-		t.Fatal(err)
-	}
-	missingText := missing.String()
-	statusSaveResult(t, "status-missing.txt", missingText)
-	if !strings.Contains(missingText, "  - 并行 review 0/2 missing parallel-review-1.json") {
-		t.Fatalf("missing artifact should be visible and non-success:\n%s", missingText)
-	}
-	if strings.Contains(missingText, "并行 review 2/2 success") {
-		t.Fatalf("missing artifact was treated as success:\n%s", missingText)
-	}
-
-	artifactPath := filepath.Join(runDir(repo, state.RunID), "parallel-review-1.json")
+	artifactPath := filepath.Join(runPath, "parallel-review-1.json")
 	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(artifactPath, []byte("{not-json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var invalid bytes.Buffer
-	if err := printHumanStatus(&invalid, repo, "-w1"); err != nil {
-		t.Fatal(err)
-	}
-	invalidText := invalid.String()
-	statusSaveResult(t, "status-invalid.txt", invalidText)
-	if !strings.Contains(invalidText, "  - 并行 review 0/2 invalid parallel-review-1.json") {
-		t.Fatalf("invalid artifact should be visible and non-success:\n%s", invalidText)
-	}
-	if strings.Contains(invalidText, "并行 review 2/2 success") {
-		t.Fatalf("invalid artifact was treated as success:\n%s", invalidText)
+	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err == nil || !strings.Contains(err.Error(), "parseError") {
+		t.Fatalf("invalid artifact should block clean review as parse error, got %v", err)
 	}
 }
 
-// TestHumanStatusRejectsUnconfiguredParallelMembers 验证 artifact 成员集合必须等于配置成员集合，不能展示或统计未配置成员。
-func TestHumanStatusRejectsUnconfiguredParallelMembers(t *testing.T) {
+// TestParallelReviewGateRejectsUnconfiguredParallelMembers 验证 artifact 成员集合必须等于配置成员集合，不能信任未配置成员。
+func TestParallelReviewGateRejectsUnconfiguredParallelMembers(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		status string
@@ -159,19 +136,8 @@ func TestHumanStatusRejectsUnconfiguredParallelMembers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := gitRepo(t)
 			workflow := statusParallelWorkflowForTest()
-			state := State{
-				RunID:      "parallel-status-unconfigured-" + tc.name,
-				ChangeName: "demo",
-				Sealed:     true,
-				Status:     statusRunning,
-				Stage:      "review_1",
-				Sessions:   map[string]string{"codex:reviewer": "reviewer-session"},
-				Workflow:   workflow,
-			}
-			if err := saveState(repo, state); err != nil {
-				t.Fatal(err)
-			}
-			statusWriteParallelArtifact(t, filepath.Join(runDir(repo, state.RunID), "parallel-review-1.json"), ParallelArtifact{
+			runPath := runDir(repo, "parallel-status-unconfigured-"+tc.name)
+			statusWriteParallelArtifact(t, filepath.Join(runPath, "parallel-review-1.json"), ParallelArtifact{
 				Group:   "review",
 				Mode:    "gate_input",
 				Summary: "review helpers completed",
@@ -181,27 +147,15 @@ func TestHumanStatusRejectsUnconfiguredParallelMembers(t *testing.T) {
 					{Name: "未配置审核员", Purpose: "should not be visible", Status: tc.status, Summary: "poisoned member"},
 				},
 			})
-
-			var stdout bytes.Buffer
-			if err := printHumanStatus(&stdout, repo, "-w1"); err != nil {
-				t.Fatal(err)
-			}
-			got := stdout.String()
-			statusSaveResult(t, "status-unconfigured-"+tc.name+".txt", got)
-			if !strings.Contains(got, "  - 并行 review 0/2 invalid parallel-review-1.json") {
-				t.Fatalf("unconfigured member should make artifact invalid:\n%s", got)
-			}
-			for _, banned := range []string{"未配置审核员", "并行 review 2/2 success", "并行 review 3/2 failed"} {
-				if strings.Contains(got, banned) {
-					t.Fatalf("status output should not trust unconfigured member %q:\n%s", banned, got)
-				}
+			if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err == nil || !strings.Contains(err.Error(), "未配置成员") {
+				t.Fatalf("unconfigured member should make artifact invalid, got %v", err)
 			}
 		})
 	}
 }
 
-// TestBatchHumanStatusShowsParallelSummaryUnderChange 验证 batch status 保持 change 层级并在对应 run 下展示并行摘要。
-func TestBatchHumanStatusShowsParallelSummaryUnderChange(t *testing.T) {
+// TestBatchHumanStatusHidesParallelSummaryUnderChange 验证 batch status 保持 change 层级且不展示 fan-in 摘要。
+func TestBatchHumanStatusHidesParallelSummaryUnderChange(t *testing.T) {
 	repo := gitRepo(t)
 	workflow := statusParallelWorkflowForTest()
 	state := State{
@@ -247,12 +201,14 @@ func TestBatchHumanStatusShowsParallelSummaryUnderChange(t *testing.T) {
 		"批量任务 b1 running 1/1",
 		"- 1-demo",
 		"  执行阶段 writer-session →",
-		"    - 并行 implementation_context 2/2 success",
-		"      - 代码库侦察员 success",
-		"      - 外部资料研究员 success",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("batch status output missing %q:\n%s", want, got)
+		}
+	}
+	for _, banned := range []string{"- 并行", "implementation_context", "代码库侦察员 success", "外部资料研究员 success"} {
+		if strings.Contains(got, banned) {
+			t.Fatalf("batch status output leaked fan-in %q:\n%s", banned, got)
 		}
 	}
 }
@@ -284,6 +240,26 @@ func statusWriteParallelArtifact(t *testing.T, path string, artifact ParallelArt
 	}
 }
 
+// cleanReviewForParallelStatusTest 构造 clean review，专门触发 parallel gate 对 fan-in artifact 的校验。
+func cleanReviewForParallelStatusTest() Review {
+	return Review{
+		Summary:  "review clean",
+		Decision: "clean",
+		Checks: ReviewChecks{
+			OzAligned:                true,
+			TasksVerified:            true,
+			TestsMeaningful:          true,
+			ImplementationScoped:     true,
+			RuntimeBehaviorVerified:  true,
+			PreviousFindingsResolved: true,
+		},
+		Evidence: []string{
+			"validation artifact passed: validation-review-1.json",
+			"runtime evidence: QA trace test-results/status-parallel.json",
+		},
+	}
+}
+
 func statusSaveResult(t *testing.T, name string, text string) {
 	t.Helper()
 	resultDir := os.Getenv("WO_STATUS_PARALLEL_RESULT_DIR")
@@ -299,4 +275,4 @@ func statusSaveResult(t *testing.T, name string, text string) {
 }
 GO
 
-WO_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR" go test ./internal/app -run 'TestHumanStatusShowsParallelMemberSummary|TestHumanStatusDoesNotTreatSubagentSessionAsSuccess|TestHumanStatusRejectsUnconfiguredParallelMembers|TestBatchHumanStatusShowsParallelSummaryUnderChange' -count=1 -v | tee "$RESULT_DIR/contract.log"
+WO_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR" go test ./internal/app -run 'TestHumanStatusHidesParallelFanInSummary|TestParallelReviewGateRejectsMissingOrInvalidArtifact|TestParallelReviewGateRejectsUnconfiguredParallelMembers|TestBatchHumanStatusHidesParallelSummaryUnderChange' -count=1 -v | tee "$RESULT_DIR/contract.log"
