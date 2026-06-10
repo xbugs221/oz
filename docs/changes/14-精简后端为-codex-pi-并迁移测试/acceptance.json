@@ -1,0 +1,121 @@
+{
+  "summary": "验收后端 CLI 彻底精简为 codex/pi、启动前检查两个 CLI、测试迁出 internal、文档和发布门禁同步。",
+  "coverage": [
+    {
+      "spec": "需求：后端集合只保留 Codex/Pi / 场景：仓库无旧后端残留",
+      "tests": ["contract-backend-removal"],
+      "evidence": ["backend-removal-log"],
+      "risk": "源码扫描不覆盖已经发布的历史二进制包。"
+    },
+    {
+      "spec": "需求：后端集合只保留 Codex/Pi / 场景：配置只接受 Codex/Pi",
+      "tests": ["contract-cli-preflight"],
+      "evidence": ["cli-preflight-log"],
+      "risk": "测试覆盖 CLI 行为，不逐个断言内部 helper。"
+    },
+    {
+      "spec": "需求：启动前检查 CLI 工具 / 场景：任一必需 CLI 缺失时失败且不创建运行态",
+      "tests": ["contract-cli-preflight"],
+      "evidence": ["cli-preflight-log", "state-clean-snapshot"],
+      "risk": "安装指引只验证可读提示，不锁定具体安装 URL。"
+    },
+    {
+      "spec": "需求：源码和测试分离 / 场景：`internal/` 不再保存长期测试",
+      "tests": ["contract-root-test-layout"],
+      "evidence": ["root-test-layout-log"],
+      "risk": "迁移后覆盖强度还需要执行阶段通过长期回归测试确认。"
+    },
+    {
+      "spec": "需求：文档和发布门禁同步 / 场景：主规格和发布测试只承诺 Codex/Pi 与根目录测试",
+      "tests": ["contract-docs-release-gate"],
+      "evidence": ["docs-release-gate-log"],
+      "risk": "未来新增外部 README 时需要另行纳入扫描。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-backend-removal",
+      "source": "change_contract",
+      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh",
+      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh",
+      "purpose": "证明旧后端实现、测试、文档和状态兼容已经从仓库移除。",
+      "assertions": [
+        "仓库扫描不到旧后端名称残留",
+        "旧后端实现文件不存在",
+        "agent registry 不再注册第三个后端"
+      ],
+      "expected_initial_failure": "当前仓库仍存在旧后端代码、测试和规格文字。"
+    },
+    {
+      "id": "contract-cli-preflight",
+      "source": "change_contract",
+      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh",
+      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh",
+      "purpose": "证明 sealed run 启动前强制检查 codex/pi，并拒绝第三后端配置。",
+      "assertions": [
+        "PATH 中缺少 pi 时 run 失败并提示安装",
+        "缺失 CLI 时不创建 runs 状态目录",
+        "配置第三后端时按未知 agent tool 失败"
+      ],
+      "expected_initial_failure": "当前实现只检查实际使用的工具，且仍接受旧后端配置。"
+    },
+    {
+      "id": "contract-root-test-layout",
+      "source": "change_contract",
+      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh",
+      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh",
+      "purpose": "证明生产源码和长期测试已经物理分离。",
+      "assertions": [
+        "internal 目录下不存在 *_test.go",
+        "根目录 tests 下存在长期业务测试入口",
+        "根目录 tests 下存在 app 或 specs 分组"
+      ],
+      "expected_initial_failure": "当前 internal/app 下仍存在大量 Go 测试文件。"
+    },
+    {
+      "id": "contract-docs-release-gate",
+      "source": "change_contract",
+      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh",
+      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh",
+      "purpose": "证明主规格和发布门禁与 Codex/Pi 以及根目录测试布局一致。",
+      "assertions": [
+        "主规格声明后端 CLI 只支持 codex 和 pi",
+        "主规格包含启动前检查 codex/pi 的要求",
+        "发布门禁测试仍以根目录 tests 为入口"
+      ],
+      "expected_initial_failure": "当前主规格仍承诺第三后端，且未声明启动前同时检查 codex/pi。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "backend-removal-log",
+      "kind": "runtime_log",
+      "path": "test-results/14-backend-removal.log",
+      "purpose": "记录旧后端仓库扫描和实现文件检查结果。"
+    },
+    {
+      "id": "cli-preflight-log",
+      "kind": "runtime_log",
+      "path": "test-results/14-cli-preflight.log",
+      "purpose": "记录缺失 pi 和无效工具配置时的真实 CLI 输出。"
+    },
+    {
+      "id": "state-clean-snapshot",
+      "kind": "state_snapshot",
+      "path": "test-results/14-state-clean.txt",
+      "purpose": "证明启动前检查失败后没有创建 runs 运行态。"
+    },
+    {
+      "id": "root-test-layout-log",
+      "kind": "runtime_log",
+      "path": "test-results/14-root-test-layout.log",
+      "purpose": "记录 internal 测试残留扫描和根目录测试入口检查。"
+    },
+    {
+      "id": "docs-release-gate-log",
+      "kind": "runtime_log",
+      "path": "test-results/14-docs-release-gate.log",
+      "purpose": "记录规格文档和发布门禁检查结果。"
+    }
+  ]
+}
