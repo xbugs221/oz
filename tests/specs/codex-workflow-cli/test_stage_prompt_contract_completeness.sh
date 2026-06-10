@@ -35,7 +35,10 @@ func renderChangeSixPrompt(t *testing.T, templateFile, templateName, stage strin
 		Workflow:   DefaultWorkflowConfig(),
 		Sessions:   sessions,
 	}
-	context := promptContext(t.TempDir(), state)
+	context, err := promptContext(t.TempDir(), state)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := renderPromptTemplate(templateName, string(data), context)
 	if err != nil {
 		t.Fatal(err)
@@ -69,24 +72,16 @@ func TestChangeSixDiscussPromptKeepsPlanningEntry(t *testing.T) {
 	requireChangeSixPromptContains(t, prompt, "讨论规划阶段", "oz-plan")
 }
 
-// TestChangeSixExecutionPromptKeepsFullFirstTurnContract prevents start prompts from collapsing to state.json only.
-func TestChangeSixExecutionPromptKeepsFullFirstTurnContract(t *testing.T) {
+// TestChangeSixExecutionPromptDelegatesToOzExec prevents start prompts from duplicating oz-exec.
+func TestChangeSixExecutionPromptDelegatesToOzExec(t *testing.T) {
 	prompt := renderChangeSixPrompt(t, "wo-start.md", "wo-start", "execution", nil)
 	requireChangeSixPromptContains(t, prompt,
 		"state.json.change_name",
 		"oz-exec",
-		"proposal.md",
-		"design.md",
-		"spec.md",
-		"task.md",
 		"acceptance.json",
-		"tests/",
-		"required_tests",
-		"不得删除、弱化、跳过或改写",
-		"oz status",
-		"tasks.done",
+		"不要超出当前提案范围",
 	)
-	requireChangeSixPromptOmits(t, prompt, "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings")
+	requireChangeSixPromptOmits(t, prompt, "proposal.md", "design.md", "spec.md", "required_tests", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings")
 }
 
 // TestChangeSixReviewPromptKeepsFirstTurnAuditContract verifies review has inputs, output, schema, and evidence rules.
@@ -96,16 +91,15 @@ func TestChangeSixReviewPromptKeepsFirstTurnAuditContract(t *testing.T) {
 		"state.json",
 		"acceptance.json",
 		"完整变更",
-		"proposal/design/spec",
-		"tasks 是否全部完成",
 		"review-1.json",
-		"只输出一个 JSON 对象",
-		"JSON schema：",
-		"如需修复，使用：",
+		"严格 JSON",
+		"decision",
+		"scope",
+		"non_blocking_findings",
 	)
 
 	resumed := renderChangeSixPrompt(t, "wo-review.md", "wo-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
-	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "review-2.json", "review-1.json", "fix-1-summary.md", "只输出一个 JSON 对象")
+	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "review-2.json", "review-1.json", "fix-1-summary.md", "JSON object")
 	requireChangeSixPromptOmits(t, resumed, "JSON schema：", "如需修复，使用：", "如需提前终止无效循环，使用：")
 }
 
@@ -121,13 +115,12 @@ func TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract(t *testing.T) {
 		"acceptance_matrix",
 		"qa-1.json",
 		"不修改源码",
-		"不修改",
-		"clean 示例：",
-		"needs_fix 示例：",
+		"decision",
+		"scope",
 	)
 
 	resumed := renderChangeSixPrompt(t, "wo-qa.md", "wo-qa", "qa_2", map[string]string{"codex:qa": "qa-session"})
-	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "qa-2.json", "acceptance_matrix", "只输出一个 JSON 对象")
+	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "qa-2.json", "schema")
 	requireChangeSixPromptOmits(t, resumed, "clean 示例：", "needs_fix 示例：")
 }
 
@@ -151,20 +144,14 @@ func TestChangeSixFixPromptKeepsFirstTurnRootCauseContract(t *testing.T) {
 	requireChangeSixPromptOmits(t, resumed, "充分理解评审意见", "必须做根因分析", "禁止只按错误文本打补丁")
 }
 
-// TestChangeSixArchivePromptKeepsDeliveryContract verifies archive still checks review, QA, evidence, and delivery output.
+// TestChangeSixArchivePromptDelegatesToOzArchive verifies archive prompt stays as a skill entry point.
 func TestChangeSixArchivePromptKeepsDeliveryContract(t *testing.T) {
 	prompt := renderChangeSixPrompt(t, "wo-done.md", "wo-done", "archive", nil)
 	requireChangeSixPromptContains(t, prompt,
 		"state.json.change_name",
 		"oz-archive",
-		"最新 review 为 clean",
-		"最新 QA 为 clean",
-		"acceptance_matrix",
-		"required_tests",
-		"required_evidence",
 		"delivery-summary.md",
-		"docs/changes/archive",
-		"git commit 只包含本次 oz 变更相关内容",
+		"最终审核",
 	)
 }
 GO

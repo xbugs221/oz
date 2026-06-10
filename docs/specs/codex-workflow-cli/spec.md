@@ -132,10 +132,9 @@
 #### 场景：执行阶段默认聚焦硬合同
 
 - **当** execution prompt 发给执行智能体
-- **则** prompt 默认要求读取 `brief.md`、`acceptance.json` 和 `tests/`
-- **且** prompt 必须要求先运行 `acceptance.json.required_tests[].command`
-- **且** `proposal.md`、`design.md`、`spec.md` 和 `task.md` 只能作为冲突排查、架构分歧或历史测试更新时的按需上下文
-- **且** prompt 不得继续把所有长文档列为 execution 默认必读上下文
+- **则** prompt 必须调用 `oz-exec` 技能执行当前 oz change
+- **且** prompt 只保留 `state.json`、change 目录、`acceptance.json` 和并行上下文 artifact 读取入口
+- **且** prompt 不得重复 `oz-exec` 技能已定义的 required_tests、任务完成标准或长文档读取策略
 
 #### 场景：审核提前通过
 
@@ -158,6 +157,15 @@
 - **且** `i < max_review_iterations`
 - **则** 系统进入 `fix_i`
 - **则** 修复完成后进入 `review_{i+1}`
+
+#### 场景：Artifact 枚举值支持 KISS 数字码
+
+- **当** review、QA 或 parallel subagent artifact 使用数字码表达状态、严重级别或范围
+- **则** 系统必须在读入时归一化为内部标准值，保持历史英文 artifact 兼容
+- **且** `decision`、subagent `status` 和 `acceptance_matrix[].status` 必须支持 `0=通过`、`1=失败或需修复`
+- **且** `findings[].severity` 必须支持 `1=blocker`、`2=major`、`3=minor`
+- **且** `findings[].scope` 必须支持 `1=current_change`、`2=introduced_regression`、`0=out_of_scope_existing`
+- **且** `out_of_scope_existing` 仍表示历史债务或无关问题，不得阻断当前提案 clean
 
 ### 需求：agent tool JSONL 事件驱动
 
@@ -676,15 +684,13 @@
 - **且** prompt 不得默认列出 `fix-1-summary.md`、`fix-2-summary.md`、`fix-3-summary.md`
 - **且** prompt 必须说明旧历史只在重复 finding、证据矛盾、最新 artifact 引用旧 finding 或升级原因不清时按需追溯
 
-#### 场景：execution 首轮提示词保留完整执行合同
+#### 场景：execution 首轮提示词委托 oz-exec
 
 - **给定** 当前阶段为 `execution`
 - **当** 系统渲染默认 execution prompt
 - **则** prompt 必须调用 `oz-exec` 技能并指向当前 run 的 `state.json`
-- **且** prompt 必须要求读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`
-- **且** prompt 必须要求先运行 `acceptance.json` 中的 `required_tests[].command`
-- **且** prompt 必须禁止删除、弱化、跳过或改写创建阶段契约测试和 `acceptance.json`
-- **且** prompt 必须说明 execution 完成标准来自 `oz status <change> --json` 的 `tasks.total` 和 `tasks.done`
+- **且** prompt 必须保留当前 change、acceptance 和并行上下文 artifact 的读取路径
+- **且** prompt 不得重复 `proposal.md`、`design.md`、`spec.md`、`task.md`、`required_tests` 或 `tasks.done` 等 oz-exec 技能正文
 - **且** prompt 不得混入 review/fix 当前轮 artifact，例如 `review-1.json`、`fix-1-summary.md` 或“只修复当前 review/QA artifact”
 
 #### 场景：review 续轮隐藏 JSON 示例

@@ -1,7 +1,11 @@
 // Package app tests structured acceptance and QA evidence contracts.
 package app
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // TestValidateAcceptanceRequiresExecutableContracts keeps acceptance from becoming prose.
 func TestValidateAcceptanceRequiresExecutableContracts(t *testing.T) {
@@ -77,5 +81,29 @@ func TestValidateQAAgainstAcceptanceRequiresEveryMatrixItem(t *testing.T) {
 	})
 	if err := ValidateQAAgainstAcceptance(qa, acceptance); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestReadQAAcceptsKISSNumericCodes verifies terse QA values are normalized.
+func TestReadQAAcceptsKISSNumericCodes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "qa-1.json")
+	body := `{
+		"summary": "qa ok",
+		"decision": 0,
+		"evidence": ["runtime evidence: screenshot.png"],
+		"findings": [],
+		"acceptance_matrix": [
+			{"id":"contract-checkout","status":0,"artifact":"contract.log","evidence":"passed"}
+		]
+	}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	qa, err := ReadQA(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if qa.Decision != "clean" || qa.AcceptanceMatrix[0].Status != "passed" {
+		t.Fatalf("qa numeric codes normalized to %#v", qa)
 	}
 }

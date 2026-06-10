@@ -45,7 +45,7 @@ func TestLoadWorkflowConfigUsesDefaults(t *testing.T) {
 	if !strings.Contains(config.Prompts["planning"], "oz-plan") ||
 		!strings.Contains(config.Prompts["execution"], "oz-exec") ||
 		!strings.Contains(config.Prompts["execution"], "acceptance.json") ||
-		!strings.Contains(config.Prompts["execution"], "task.md") ||
+			!strings.Contains(config.Prompts["execution"], "不要超出当前提案范围") ||
 		!strings.Contains(config.Prompts["qa"], "截图") ||
 		!strings.Contains(config.Prompts["fix"], "只修复当前 review/QA artifact 中列出的 findings") {
 		t.Fatalf("default prompts missing built-in oz guidance: %#v", config.Prompts)

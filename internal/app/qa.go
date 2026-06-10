@@ -12,12 +12,12 @@ import (
 
 // QA is the strict JSON contract used by QA stages.
 type QA struct {
-	Summary          string             `json:"summary"`
-	Decision         string             `json:"decision"`
-	Evidence         []string           `json:"evidence"`
-	Findings         []Finding          `json:"findings"`
-	NonBlockingFindings []Finding        `json:"non_blocking_findings,omitempty"`
-	AcceptanceMatrix []AcceptanceResult `json:"acceptance_matrix,omitempty"`
+	Summary             string             `json:"summary"`
+	Decision            string             `json:"decision"`
+	Evidence            []string           `json:"evidence"`
+	Findings            []Finding          `json:"findings"`
+	NonBlockingFindings []Finding          `json:"non_blocking_findings,omitempty"`
+	AcceptanceMatrix    []AcceptanceResult `json:"acceptance_matrix,omitempty"`
 }
 
 // AcceptanceResult maps one acceptance contract item to QA proof.
@@ -26,6 +26,46 @@ type AcceptanceResult struct {
 	Status   string `json:"status"`
 	Artifact string `json:"artifact"`
 	Evidence string `json:"evidence"`
+}
+
+// UnmarshalJSON accepts KISS numeric status codes while storing canonical words.
+func (r *AcceptanceResult) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ID       string      `json:"id"`
+		Status   interface{} `json:"status"`
+		Artifact string      `json:"artifact"`
+		Evidence string      `json:"evidence"`
+	}
+	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
+		return err
+	}
+	r.ID = raw.ID
+	r.Status = normalizeAcceptanceStatus(artifactScalarText(raw.Status))
+	r.Artifact = raw.Artifact
+	r.Evidence = raw.Evidence
+	return nil
+}
+
+// UnmarshalJSON accepts KISS numeric decision codes while storing canonical words.
+func (qa *QA) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Summary             string             `json:"summary"`
+		Decision            interface{}        `json:"decision"`
+		Evidence            []string           `json:"evidence"`
+		Findings            []Finding          `json:"findings"`
+		NonBlockingFindings []Finding          `json:"non_blocking_findings,omitempty"`
+		AcceptanceMatrix    []AcceptanceResult `json:"acceptance_matrix,omitempty"`
+	}
+	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
+		return err
+	}
+	qa.Summary = raw.Summary
+	qa.Decision = normalizeDecision(artifactScalarText(raw.Decision))
+	qa.Evidence = raw.Evidence
+	qa.Findings = raw.Findings
+	qa.NonBlockingFindings = raw.NonBlockingFindings
+	qa.AcceptanceMatrix = raw.AcceptanceMatrix
+	return nil
 }
 
 // ReadQA loads and validates a QA JSON file.
@@ -121,6 +161,7 @@ func ValidateQAAgainstAcceptance(qa QA, acceptance Acceptance) error {
 }
 
 func normalizeQA(qa QA) QA {
+	qa.Decision = normalizeDecision(qa.Decision)
 	for i := range qa.Findings {
 		if severity, ok := normalizeFindingSeverity(qa.Findings[i].Severity); ok {
 			qa.Findings[i].Severity = severity
@@ -136,6 +177,9 @@ func normalizeQA(qa QA) QA {
 		if scope, ok := normalizeFindingScope(qa.NonBlockingFindings[i].Scope); ok {
 			qa.NonBlockingFindings[i].Scope = scope
 		}
+	}
+	for i := range qa.AcceptanceMatrix {
+		qa.AcceptanceMatrix[i].Status = normalizeAcceptanceStatus(qa.AcceptanceMatrix[i].Status)
 	}
 	return qa
 }

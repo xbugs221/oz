@@ -80,6 +80,22 @@ func TestReadReviewNormalizesSeverityAliases(t *testing.T) {
 	}
 }
 
+// TestReadReviewAcceptsKISSNumericCodes verifies terse review values are normalized.
+func TestReadReviewAcceptsKISSNumericCodes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "review-1.json")
+	body := `{"summary":"fix","decision":1,"checks":{},"evidence":[],"findings":[{"title":"bug","severity":1,"scope":2,"evidence":"regression failed","recommendation":"fix it"}]}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	review, err := ReadReview(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review.Decision != "needs_fix" || review.Findings[0].Severity != "blocker" || review.Findings[0].Scope != findingScopeIntroduced {
+		t.Fatalf("review numeric codes normalized to %#v", review)
+	}
+}
+
 // TestValidateReviewAcceptsWorkflowFailure verifies strict JSON can stop futile loops.
 func TestValidateReviewAcceptsWorkflowFailure(t *testing.T) {
 	review := Review{

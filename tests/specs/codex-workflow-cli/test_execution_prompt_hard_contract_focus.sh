@@ -34,7 +34,10 @@ func renderChangeEightPrompt(t *testing.T) string {
 		Stage:      "execution",
 		Workflow:   DefaultWorkflowConfig(),
 	}
-	context := promptContext(t.TempDir(), state)
+	context, err := promptContext(t.TempDir(), state)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := renderPromptTemplate("wo-start", string(data), context)
 	if err != nil {
 		t.Fatal(err)
@@ -62,18 +65,21 @@ func requireOmits(t *testing.T, prompt string, rejects ...string) {
 	}
 }
 
-// TestChangeEightExecutionPromptDefaultsToHardContract verifies the execution context hierarchy.
-func TestChangeEightExecutionPromptDefaultsToHardContract(t *testing.T) {
+// TestChangeEightExecutionPromptDelegatesToOzExec verifies the execution prompt stays as an entry point.
+func TestChangeEightExecutionPromptDelegatesToOzExec(t *testing.T) {
 	prompt := renderChangeEightPrompt(t)
 	requireContains(t, prompt,
-		"brief.md",
+		"oz-exec",
+		"state.json.change_name",
 		"acceptance.json",
-		"tests/",
-		"required_tests[].command",
+		"不要超出当前提案范围",
 	)
 	requireOmits(t, prompt,
-		"读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`",
-		"读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/` 中创建阶段写好的契约测试",
+		"proposal.md",
+		"design.md",
+		"spec.md",
+		"required_tests",
+		"tasks.done",
 	)
 }
 
@@ -116,5 +122,5 @@ GO
 
 (
   cd "$repo_root"
-  go test ./internal/app -run 'TestChangeEight(ExecutionPromptDefaultsToHardContract|OzExecSkillMatchesPromptContract|OzCreateSkillCreatesBrief)' -count=1
+  go test ./internal/app -run 'TestChangeEight(ExecutionPromptDelegatesToOzExec|OzExecSkillMatchesPromptContract|OzCreateSkillCreatesBrief)' -count=1
 ) | tee "$log"

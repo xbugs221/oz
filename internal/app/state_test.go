@@ -712,7 +712,9 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 			"SUBAGENT_OUTPUT=/tmp/member.json",
 			"当前提案问题写 findings",
 			"历史债务或无关问题写 scope=out_of_scope_existing",
-			"findings[{title,severity,scope,evidence,recommendation}]",
+			"status(0=ok,1=fail)",
+			"severity(1/2/3)",
+			"scope(1=当前,2=回归,0=无关)",
 		} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("%s prompt missing %q:\n%s", label, want, prompt)
@@ -751,6 +753,66 @@ func TestSubagentMemberArtifactAcceptsFindingScope(t *testing.T) {
 	}
 	if result.Findings[0].Scope != findingScopeOutOfScope {
 		t.Fatalf("scope = %q, want %q", result.Findings[0].Scope, findingScopeOutOfScope)
+	}
+}
+
+// TestSubagentMemberArtifactNormalizesNaturalScopeAlias keeps real subagent wording from failing review.
+func TestSubagentMemberArtifactNormalizesNaturalScopeAlias(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	if err := os.WriteFile(path, []byte(`{
+		"name": "代码质量审核员",
+		"purpose": "检查类型、边界和可维护性",
+		"status": "success",
+		"summary": "in-scope finding recorded",
+		"findings": [
+			{
+				"title": "当前提案问题",
+				"severity": "major",
+				"scope": "in_scope",
+				"evidence": "current change introduced this behavior",
+				"recommendation": "fix it in this proposal"
+			}
+		]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"})
+	if err != nil {
+		t.Fatalf("member artifact with in_scope alias should pass strict schema: %v", err)
+	}
+	if result.Findings[0].Scope != findingScopeCurrentChange {
+		t.Fatalf("scope = %q, want %q", result.Findings[0].Scope, findingScopeCurrentChange)
+	}
+}
+
+// TestSubagentMemberArtifactAcceptsKISSNumericCodes verifies terse numeric artifact values.
+func TestSubagentMemberArtifactAcceptsKISSNumericCodes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	if err := os.WriteFile(path, []byte(`{
+		"name": "代码质量审核员",
+		"purpose": "检查类型、边界和可维护性",
+		"status": 0,
+		"summary": "numeric codes recorded",
+		"findings": [
+			{
+				"title": "当前提案问题",
+				"severity": 2,
+				"scope": 1,
+				"evidence": "current change introduced this behavior",
+				"recommendation": "fix it in this proposal"
+			}
+		]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"})
+	if err != nil {
+		t.Fatalf("member artifact with numeric codes should pass strict schema: %v", err)
+	}
+	if result.Status != "success" || result.Findings[0].Severity != "major" || result.Findings[0].Scope != findingScopeCurrentChange {
+		t.Fatalf("normalized result = %#v", result)
 	}
 }
 
@@ -2148,17 +2210,17 @@ func TestPlanningPromptReadsDiscussTemplate(t *testing.T) {
 	}
 }
 
-// TestPlanningPromptCarriesPlanningContext verifies interactive planning consumes enabled planning helpers.
-func TestPlanningPromptCarriesPlanningContext(t *testing.T) {
+// TestPlanningPromptOmitsSealedRunArtifacts verifies interactive planning has no run-local artifacts yet.
+func TestPlanningPromptOmitsSealedRunArtifacts(t *testing.T) {
 	repo := t.TempDir()
 	mustWritePrompt(t, filepath.Join(repo, "wo.yaml"), "wo:\n  workflow:\n    parallel:\n      enabled: true\n")
 	got, _, err := planningPrompt(repo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"parallel-planning-context.json", "planning_context", "advisory 成员失败"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("planning prompt missing %q:\n%s", want, got)
+	for _, reject := range []string{"parallel-planning-context.json", "planning_context", "advisory 成员失败"} {
+		if strings.Contains(got, reject) {
+			t.Fatalf("planning prompt should not mention sealed-run artifact %q:\n%s", reject, got)
 		}
 	}
 }
@@ -2304,19 +2366,14 @@ func TestDefaultExecutionPromptKeepsFullFirstTurnContract(t *testing.T) {
 	if !strings.Contains(got, "oz-exec") {
 		t.Fatalf("execution prompt should reference oz-exec:\n%s", got)
 	}
-	for _, want := range []string{
-		"proposal.md",
-		"design.md",
-		"spec.md",
-		"task.md",
-		"acceptance.json",
-		"required_tests",
-		"不得删除、弱化、跳过或改写",
-		"oz status",
-		"tasks.done",
-	} {
+	for _, want := range []string{"state.json", "docs/changes", "acceptance.json", "当前 oz change", "不要超出当前提案范围"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("execution prompt missing full first-turn contract %q:\n%s", want, got)
+			t.Fatalf("execution prompt missing entry contract %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("execution prompt duplicated oz-exec detail %q:\n%s", forbidden, got)
 		}
 	}
 }
@@ -2332,9 +2389,9 @@ func TestParallelEnabledPromptsCarryFanoutArtifacts(t *testing.T) {
 		stage string
 		want  []string
 	}{
-		{stage: "planning", want: []string{"parallel-planning-context.json", "planning_context", "advisory 成员失败"}},
-		{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "implementation_context", "advisory 成员失败"}},
-		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "gate_input 成员报告 blocker/major"}},
+		{stage: "planning", want: []string{"讨论规划阶段", "oz-plan"}},
+			{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json"}},
+		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "gate_input 成员报告 severity=1/2"}},
 		{stage: "qa_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-qa-1.json", "acceptance_matrix"}},
 	}
 	for _, tc := range cases {
@@ -2473,7 +2530,7 @@ func TestBundledReviewPromptUsesLatestHistoryOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"完整变更", "docs/changes/demo", "review-5.json", "review-4.json", "fix-4-summary.md", "历史 review 数量：4", "严格 JSON", "evidence 必须可复核", "workflow_failure"} {
+		for _, want := range []string{"完整变更", "docs/changes/demo", "review-5.json", "review-4.json", "fix-4-summary.md", "历史 review 数量：4", "严格 JSON", "evidence 必须可复核", "workflow_failure"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("review prompt missing %q:\n%s", want, got)
 		}
@@ -2526,16 +2583,16 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 			mustHave:   []string{"oz-plan", "讨论规划阶段"},
 			mustReject: []string{"change-name", "open questions"},
 		},
-		{
-			name:       "wo-start",
-			mustHave:   []string{"oz-exec", "state.json.change_name", "当前 oz change", "proposal.md", "acceptance.json", "required_tests", "oz status", "tasks.done"},
-			mustReject: []string{"review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"},
-		},
-		{
-			name:       "wo-done",
-			mustHave:   []string{"oz-archive", "delivery-summary.md", "git commit"},
-			mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs"},
-		},
+			{
+				name:       "wo-start",
+				mustHave:   []string{"oz-exec", "state.json.change_name", "当前 oz change", "acceptance.json", "不要超出当前提案范围"},
+				mustReject: []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"},
+			},
+			{
+				name:       "wo-done",
+				mustHave:   []string{"oz-archive", "delivery-summary.md", "最终审核"},
+				mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"},
+			},
 	} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", tc.name+".md"))
 		if err != nil {

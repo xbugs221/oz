@@ -32,6 +32,30 @@ type ParallelMemberResult struct {
 	Required bool      `json:"required,omitempty"`
 }
 
+// UnmarshalJSON accepts KISS numeric status codes while storing canonical words.
+func (m *ParallelMemberResult) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Name     string      `json:"name"`
+		Purpose  string      `json:"purpose"`
+		Status   interface{} `json:"status"`
+		Summary  string      `json:"summary"`
+		Evidence []string    `json:"evidence,omitempty"`
+		Findings []Finding   `json:"findings,omitempty"`
+		Required bool        `json:"required,omitempty"`
+	}
+	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
+		return err
+	}
+	m.Name = raw.Name
+	m.Purpose = raw.Purpose
+	m.Status = normalizeMemberStatus(artifactScalarText(raw.Status))
+	m.Summary = raw.Summary
+	m.Evidence = raw.Evidence
+	m.Findings = raw.Findings
+	m.Required = raw.Required
+	return nil
+}
+
 // ReadParallelArtifact loads the run-local helper result for an enabled group.
 func ReadParallelArtifact(path string) (ParallelArtifact, error) {
 	data, err := os.ReadFile(path)
@@ -223,11 +247,22 @@ func artifactHasMemberFailure(artifact ParallelArtifact) bool {
 }
 
 func memberStatusSucceeded(status string) bool {
-	switch strings.TrimSpace(strings.ToLower(status)) {
+	switch normalizeMemberStatus(status) {
 	case "success", "passed", "clean", "completed", "ok":
 		return true
 	default:
 		return false
+	}
+}
+
+func normalizeMemberStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "0", "success", "passed", "clean", "completed", "ok", "pass":
+		return "success"
+	case "1", "failed", "fail", "failure", "error":
+		return "failed"
+	default:
+		return strings.TrimSpace(status)
 	}
 }
 

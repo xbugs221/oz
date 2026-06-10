@@ -218,6 +218,7 @@ func readNormalizeValidateMemberArtifact(path string, group string, member Paral
 		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
 	}
 	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
+	result.Status = normalizeMemberStatus(result.Status)
 	result.Required = member.Required
 	if strings.TrimSpace(result.Name) == "" {
 		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=name artifact=%s: name 不能为空", group, member.Name, path)
@@ -231,6 +232,11 @@ func readNormalizeValidateMemberArtifact(path string, group string, member Paral
 			return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=findings[%d].severity value=%q artifact=%s: severity 无法归一化", group, member.Name, i, result.Findings[i].Severity, path)
 		}
 		result.Findings[i].Severity = severity
+		scope, ok := normalizeFindingScope(result.Findings[i].Scope)
+		if !ok {
+			return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=findings[%d].scope value=%q artifact=%s: scope 无法归一化", group, member.Name, i, result.Findings[i].Scope, path)
+		}
+		result.Findings[i].Scope = scope
 	}
 	if err := validateMemberResult(result); err != nil {
 		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
@@ -280,10 +286,17 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 			if !isObj {
 				return ParallelMemberResult{}, fmt.Errorf("findings 第 %d 项必须是对象", i+1)
 			}
-			for _, field := range []string{"title", "severity", "scope", "evidence", "recommendation"} {
+			for _, field := range []string{"title", "evidence", "recommendation"} {
 				if v, ok := obj[field]; ok && v != nil {
 					if _, isString := v.(string); !isString {
 						return ParallelMemberResult{}, fmt.Errorf("findings 第 %d 项的 %s 必须是字符串", i+1, field)
+					}
+				}
+			}
+			for _, field := range []string{"severity", "scope"} {
+				if v, ok := obj[field]; ok && v != nil {
+					if !isStringOrNumber(v) {
+						return ParallelMemberResult{}, fmt.Errorf("findings 第 %d 项的 %s 必须是字符串或数字", i+1, field)
 					}
 				}
 			}
@@ -316,6 +329,15 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		"name, purpose, status, summary, evidence[], findings[{title,severity,scope,evidence,recommendation}]",
+		"name, purpose, status(0=ok,1=fail), summary, evidence[], findings[{title,severity(1/2/3),scope(1=当前,2=回归,0=无关),evidence,recommendation}]",
 	}, "\n")
+}
+
+func isStringOrNumber(value interface{}) bool {
+	switch value.(type) {
+	case string, float64:
+		return true
+	default:
+		return false
+	}
 }
