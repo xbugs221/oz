@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// TestAdvanceBlocksCleanReviewWhenParallelGateInputHasFinding verifies reviewer output cannot ignore helper blockers.
-func TestAdvanceBlocksCleanReviewWhenParallelGateInputHasFinding(t *testing.T) {
+// TestAdvanceLetsCleanReviewNormalizeParallelGateInputFinding verifies raw helper findings do not override the reviewer.
+func TestAdvanceLetsCleanReviewNormalizeParallelGateInputFinding(t *testing.T) {
 	// Given: a review stage with parallel review enabled and a clean review artifact.
 	repo := gitRepo(t)
 	runID := "parallel-review-gate-run"
@@ -30,17 +30,17 @@ func TestAdvanceBlocksCleanReviewWhenParallelGateInputHasFinding(t *testing.T) {
 	// When: the state machine advances the review stage.
 	err := (&Engine{Repo: repo}).advance(&state)
 
-	// Then: the clean review is rejected before entering QA.
-	if err == nil || !strings.Contains(err.Error(), "blocker/major") {
-		t.Fatalf("advance should reject ignored parallel review finding, got %v", err)
+	// Then: the main reviewer's clean artifact advances; raw helper findings are advisory input.
+	if err != nil {
+		t.Fatalf("advance should accept normalized clean review, got %v", err)
 	}
-	if state.Stage != "review_1" {
-		t.Fatalf("stage advanced despite parallel review gate: %s", state.Stage)
+	if state.Stage != "qa_1" {
+		t.Fatalf("stage should advance to QA after clean review, got %s", state.Stage)
 	}
 }
 
-// TestAdvanceBlocksCleanReviewWhenParallelRequiredMemberFails verifies review cannot ignore failed gate input.
-func TestAdvanceBlocksCleanReviewWhenParallelRequiredMemberFails(t *testing.T) {
+// TestAdvanceLetsCleanReviewNormalizeParallelRequiredMemberFailure verifies member status is reviewer input.
+func TestAdvanceLetsCleanReviewNormalizeParallelRequiredMemberFailure(t *testing.T) {
 	// Given: a review stage with a clean review artifact and a failed required helper.
 	repo := gitRepo(t)
 	runID := "parallel-review-required-gate-run"
@@ -61,12 +61,12 @@ func TestAdvanceBlocksCleanReviewWhenParallelRequiredMemberFails(t *testing.T) {
 	// When: the state machine advances the review stage.
 	err := (&Engine{Repo: repo}).advance(&state)
 
-	// Then: QA remains blocked because clean review ignored a failed required gate input.
-	if err == nil || !strings.Contains(err.Error(), "parallel-review-1.json") {
-		t.Fatalf("advance should reject ignored parallel review failure, got %v", err)
+	// Then: QA can proceed because the main review owns the normalized decision.
+	if err != nil {
+		t.Fatalf("advance should accept normalized clean review despite raw helper failure, got %v", err)
 	}
-	if state.Stage != "review_1" {
-		t.Fatalf("stage advanced despite failed required review helper: %s", state.Stage)
+	if state.Stage != "qa_1" {
+		t.Fatalf("stage should advance to QA after clean review, got %s", state.Stage)
 	}
 }
 

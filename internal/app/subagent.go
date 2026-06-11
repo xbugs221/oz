@@ -157,6 +157,8 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 	return strings.Join([]string{
 		"只读，聚焦当前提案范围，" + member.Purpose,
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
+		"正向确认、已满足项或无操作项不要写入 findings；只能写入 summary/evidence。",
+		"只有违反 acceptance/spec 的可复现行为失败才能标为 blocker/major；更深覆盖建议、可维护性建议或未承诺扩展写 minor 或 out_of_scope_existing。",
 		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,

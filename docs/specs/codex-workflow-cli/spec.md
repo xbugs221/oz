@@ -361,7 +361,8 @@
 - **当** go-dag 在进程内执行 fan-in 节点
 - **则** `wo` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
 - **当** go-dag 在进程内执行 gate 节点
-- **则** review/QA clean 不得忽略 gate_input subagent 的 blocker/major finding 或成员失败
+- **则** review clean 必须由主审核归一化 gate_input subagent 结论后决定，原始 subagent finding 或成员失败不得直接覆盖主 review artifact
+- **且** QA clean 不得忽略 gate_input subagent 的 blocker/major finding、成员失败或 required evidence 缺失
 - **且** clean review/QA 必须跳过未激活 fix 分支，needs_fix 必须激活下一轮 fix/review/QA 分支
 
 #### 场景：并行层开启时主阶段不变
@@ -400,12 +401,13 @@
 
 // Sources: 12-收窄验收gate到提案范围
 
-#### 场景：并行 review gate 不得被 clean 忽略
+#### 场景：并行 review gate 由主审核归一化
 
 - **给定** `review` 并行组已启用
-- **当** `parallel-review-i.json` 中任一配置成员缺失、成员失败，或 gate_input 成员报告 blocker/major finding
-- **则** 同轮 `review_i.json.decision` 不得为 `clean`
-- finding scope 缺省按 `current_change` 处理；`out_of_scope_existing` 只能作为历史债务记录（`non_blocking_findings`），不阻断 clean。
+- **当** `parallel-review-i.json` 中任一配置成员报告 blocker/major finding、成员失败或把正向确认误写为 blocker
+- **则** 主 review 必须先归一化这些 gate_input 结论
+- **且** 只有主 review 复核后写入 `review_i.json.findings` 的当前提案 acceptance/spec 可复现 blocker/major 行为失败才触发修复轮
+- **且** 正向确认、其它提案内容、历史债务、无操作项、更深覆盖建议、可维护性建议和未承诺扩展只能进入 `evidence` 或 `non_blocking_findings`
 
 #### 场景：out-of-scope severe finding 不阻断 clean
 
@@ -417,18 +419,18 @@
 - **真实数据来源**：脚本临时写入真实 parallel review artifact JSON，调用真实 `ValidateParallelReviewGate`
 - **入口路径**：`internal/app/parallel.go`
 - **关键断言**：out-of-scope major finding 不阻断；成员 status 全部 success
-- **剩余风险**：成员失败仍按既有硬阻断处理
+- **剩余风险**：该 gate 只能校验 artifact 结构，是否采纳为当前提案 finding 由主审核负责
 
-#### 场景：当前变更和旧格式 severe finding 仍阻断 clean
+#### 场景：当前变更和旧格式 severe finding 只是主审核输入
 
 - **给定** `parallel-review-1.json` 中存在 `scope=current_change` 的 major finding
 - **当**主 review artifact 为 clean
-- **则** gate 必须拒绝 clean
-- **并且**缺少 `scope` 的旧格式 major finding 也必须继续拒绝 clean
+- **则** gate 必须允许主 review 的归一化 clean 决策继续
+- **并且**缺少 `scope` 的旧格式 major finding 也必须保持解析兼容，并作为主审核输入而不是直接阻断
 - **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
 - **真实数据来源**：同一脚本构造 current-change artifact 和 legacy artifact
 - **入口路径**：`internal/app/parallel.go`
-- **关键断言**：当前变更 severe finding 阻断；legacy missing scope 保持旧阻断行为
+- **关键断言**：当前变更 severe finding 不覆盖主 review；legacy missing scope 保持解析兼容；无操作 blocker 被 artifact 边界拒绝
 - **剩余风险**：不会自动判断真实 git blame，scope 仍由 reviewer/QA 给出并接受 review
 
 #### 场景：并行 QA 覆盖 acceptance 合同

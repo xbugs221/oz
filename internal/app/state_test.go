@@ -2391,7 +2391,7 @@ func TestParallelEnabledPromptsCarryFanoutArtifacts(t *testing.T) {
 	}{
 		{stage: "planning", want: []string{"讨论规划阶段", "oz-plan"}},
 			{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json"}},
-		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "gate_input 成员报告 severity=1/2"}},
+		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "先把 gate_input 成员结论归一化"}},
 		{stage: "qa_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-qa-1.json", "acceptance_matrix"}},
 	}
 	for _, tc := range cases {

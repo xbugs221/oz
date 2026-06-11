@@ -104,19 +104,20 @@ func ValidateParallelArtifact(artifact ParallelArtifact) error {
 			if _, ok := normalizeFindingScope(finding.Scope); !ok {
 				return fmt.Errorf("parallel artifact member %d finding %d 的 scope 无效：%q", i, j, finding.Scope)
 			}
+			if isNoActionBlockingFinding(finding) {
+				return fmt.Errorf("parallel artifact member %d finding %d 不能把无操作项标为 blocker/major current_change", i, j)
+			}
 		}
 	}
 	return nil
 }
 
-// ValidateParallelReviewGate blocks clean review when enabled helper findings were ignored.
+// ValidateParallelReviewGate validates review helper artifacts without letting raw helper noise
+// override the main reviewer's normalized decision.
 func ValidateParallelReviewGate(runPath string, workflow WorkflowConfig, iteration int, review Review) error {
-	artifact, ok, err := readEnabledParallelArtifact(runPath, workflow, "review", iteration)
+	_, ok, err := readEnabledParallelArtifact(runPath, workflow, "review", iteration)
 	if err != nil || !ok {
 		return err
-	}
-	if review.Decision == "clean" && (artifactHasSevereFinding(artifact) || artifactHasMemberFailure(artifact)) {
-		return fmt.Errorf("clean review 不得忽略 parallel-review-%d.json 中的 blocker/major gate_input finding 或成员失败", iteration)
 	}
 	return nil
 }
@@ -223,6 +224,22 @@ func artifactHasSevereFinding(artifact ParallelArtifact) bool {
 			if isCurrentChangeFindingHardBlocking(finding) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func isNoActionBlockingFinding(finding Finding) bool {
+	if !isCurrentChangeFindingHardBlocking(finding) {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(finding.Title + "\n" + finding.Recommendation))
+	for _, phrase := range []string{
+		"无操作", "无需", "不用处理", "不需要处理", "确认", "已满足", "已通过", "均已通过", "无遗漏",
+		"no action", "nothing to do", "accepted", "satisfied", "passed", "complete",
+	} {
+		if strings.Contains(text, phrase) {
+			return true
 		}
 	}
 	return false
