@@ -76,7 +76,8 @@ func TestDrainPiJSONLExtractsSessionID(t *testing.T) {
 func TestDrainPiJSONLCapturesAssistantText(t *testing.T) {
 	input := strings.Join([]string{
 		`{"type":"session","id":"pi-session-1"}`,
-		`{"type":"message","content":"{\"name\":\"代码库侦察员\",\"change_name\":\"demo\"}"}`,
+		`{"type":"message","message":{"role":"toolResult","content":[{"type":"text","text":"{\"run_id\":\"wrong-json\"}"}]}}`,
+		`{"type":"message","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hidden"},{"type":"text","text":"{\"name\":\"代码库侦察员\",\"change_name\":\"demo\"}"}]}}`,
 	}, "\n")
 	capture := &artifactCapture{}
 	sessionID, err := drainPiJSONLWithCapture(strings.NewReader(input), nil, capture)
@@ -88,6 +89,9 @@ func TestDrainPiJSONLCapturesAssistantText(t *testing.T) {
 	}
 	if !strings.Contains(capture.String(), `"change_name":"demo"`) {
 		t.Fatalf("captured text = %q", capture.String())
+	}
+	if strings.Contains(capture.String(), "wrong-json") || strings.Contains(capture.String(), "hidden") {
+		t.Fatalf("captured non-assistant text = %q", capture.String())
 	}
 }
 

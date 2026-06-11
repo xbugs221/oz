@@ -159,7 +159,7 @@ func drainPiJSONLWithCapture(stdout io.Reader, progress io.Writer, capture *arti
 	}
 }
 
-// capturePiText stores common JSONL assistant text fields without depending on one schema version.
+// capturePiText stores assistant text while ignoring tool read results.
 func capturePiText(line []byte, capture *artifactCapture) {
 	if capture == nil {
 		return
@@ -168,8 +168,39 @@ func capturePiText(line []byte, capture *artifactCapture) {
 	if err := json.Unmarshal(line, &event); err != nil {
 		return
 	}
+	if message, ok := event["message"].(map[string]interface{}); ok {
+		if role, _ := message["role"].(string); role != "" && role != "assistant" {
+			return
+		}
+		appendPiAssistantContent(capture, message["content"])
+		return
+	}
+	if role, _ := event["role"].(string); role != "" && role != "assistant" {
+		return
+	}
 	for _, field := range []string{"content", "text", "delta", "message"} {
 		appendPiTextValue(capture, event[field])
+	}
+}
+
+func appendPiAssistantContent(capture *artifactCapture, value interface{}) {
+	switch v := value.(type) {
+	case string:
+		capture.Append(v)
+	case []interface{}:
+		for _, item := range v {
+			obj, ok := item.(map[string]interface{})
+			if !ok {
+				appendPiAssistantContent(capture, item)
+				continue
+			}
+			if typ, _ := obj["type"].(string); typ != "" && typ != "text" {
+				continue
+			}
+			appendPiTextValue(capture, obj["text"])
+		}
+	default:
+		appendPiTextValue(capture, value)
 	}
 }
 
