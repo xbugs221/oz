@@ -175,6 +175,62 @@ func TestRunCommandStartsAllActiveChangesQueue(t *testing.T) {
 	}
 }
 
+// TestRunCommandReusesRunningBatch verifies repeated human run commands never compete.
+func TestRunCommandReusesRunningBatch(t *testing.T) {
+	repo := gitRepo(t)
+	chdir(t, repo)
+	mustChange(t, repo, "1-a")
+	mustChange(t, repo, "2-b")
+	mustPrompts(t, repo)
+	installRealOz(t)
+	var started []string
+	previous := startDetachedBatchCommand
+	startDetachedBatchCommand = func(_ string, batchID string) error {
+		started = append(started, batchID)
+		return nil
+	}
+	t.Cleanup(func() { startDetachedBatchCommand = previous })
+
+	var stdout bytes.Buffer
+	if err := Run([]string{"run"}, strings.NewReader("not-used\n"), &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(started) != 1 {
+		t.Fatalf("batch workers after first run = %v, want one", started)
+	}
+	firstBatchID := started[0]
+	stdout.Reset()
+	if err := Run([]string{"run"}, strings.NewReader("not-used\n"), &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(started) != 1 {
+		t.Fatalf("batch workers after duplicate run = %v, want no new worker", started)
+	}
+	if !strings.Contains(stdout.String(), "没有可追加的 active 变更提案") {
+		t.Fatalf("duplicate run stdout = %q, want no-append message", stdout.String())
+	}
+
+	mustChange(t, repo, "3-c")
+	installRealOz(t)
+	stdout.Reset()
+	if err := Run([]string{"run"}, strings.NewReader("not-used\n"), &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(started) != 1 {
+		t.Fatalf("batch workers after append run = %v, want still one", started)
+	}
+	batch, err := loadBatchState(repo, firstBatchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(batch.Changes, ","); got != "1-a,2-b,3-c" {
+		t.Fatalf("batch changes = %s, want appended active change", got)
+	}
+	if !strings.Contains(stdout.String(), "已追加 1 个变更到批量任务") {
+		t.Fatalf("append run stdout = %q, want append message", stdout.String())
+	}
+}
+
 // TestRunCommandWithNoActiveChangesDoesNotPrompt verifies the shortcut does not enter planning.
 func TestRunCommandWithNoActiveChangesDoesNotPrompt(t *testing.T) {
 	repo := gitRepo(t)

@@ -294,7 +294,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return interactive(ctx, stdin, stdout, repo, engine)
 }
 
-// submitAllActiveChanges starts a queue for every currently active oz change.
+// submitAllActiveChanges starts or extends the active change queue.
 func submitAllActiveChanges(ctx context.Context, stdout io.Writer, repo string, engine *Engine) error {
 	changes, err := ListChanges(repo)
 	if err != nil {
@@ -303,6 +303,23 @@ func submitAllActiveChanges(ctx context.Context, stdout io.Writer, repo string, 
 	if len(changes) == 0 {
 		fmt.Fprintln(stdout, "没有 active 变更提案")
 		return nil
+	}
+	batchID, err := FindUnfinishedBatch(repo)
+	if err != nil {
+		return err
+	}
+	if batchID != "" {
+		batch, err := loadBatchState(repo, batchID)
+		if err != nil {
+			return err
+		}
+		appendable := FilterChangesNotInBatch(SortChangesByNumericPrefix(changes), batch)
+		if len(appendable) == 0 {
+			fmt.Fprintf(stdout, "已有运行中的批量任务 %s，没有可追加的 active 变更提案\n", batchID)
+			return nil
+		}
+		fmt.Fprintf(stdout, "已有运行中的批量任务 %s，追加新的 active 变更提案\n", batchID)
+		return appendSelectedBatchChanges(stdout, repo, batchID, appendable)
 	}
 	return engine.SubmitBatch(ctx, changes)
 }
