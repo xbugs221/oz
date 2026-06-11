@@ -88,7 +88,7 @@ func TestAgentRegistryIncludesPiOnly(t *testing.T) {
 	if _, err := registry.Tool("pi-ai"); err == nil {
 		t.Fatal("pi-ai must not be registered")
 	}
-	if !validAgentTool("pi") || validAgentTool("pi-ai") {
-		t.Fatal("validAgentTool should accept only the real pi CLI name")
+	if !validAgentTool("pi") || !validAgentTool("agy") || validAgentTool("pi-ai") {
+		t.Fatal("validAgentTool should accept real CLI names and reject aliases")
 	}
 }

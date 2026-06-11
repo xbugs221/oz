@@ -33,6 +33,7 @@ func NewAgentRegistry() *AgentRegistry {
 	for _, tool := range []AgentTool{
 		CodexTool{},
 		PiTool{},
+		AgyTool{},
 	} {
 		registry.Register(tool)
 	}
@@ -76,12 +77,12 @@ func (r *AgentRegistry) ResolveForWorkflow(config WorkflowConfig) error {
 
 // validAgentTool reports whether a config value names a supported backend.
 func validAgentTool(name string) bool {
-	return name == "codex" || name == "pi"
+	return name == "codex" || name == "pi" || name == "agy"
 }
 
 // requiredAgentTools returns every mandatory backend checked before sealed runs.
 func requiredAgentTools() []string {
-	return []string{"codex", "pi"}
+	return []string{"codex", "pi", "agy"}
 }
 
 // limitAgentDiagnostics keeps process error messages useful without recreating log files.

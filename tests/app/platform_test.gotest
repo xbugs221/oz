@@ -190,34 +190,34 @@ func TestDefaultWorkflowConfigSetsStageOptions(t *testing.T) {
 	}
 }
 
-// TestRequiredAgentToolsUsesOnlySealedStages verifies command discovery can skip unused tools.
+// TestRequiredAgentToolsUsesOnlySealedStages verifies mandatory agent CLI preflight coverage.
 func TestRequiredAgentToolsUsesOnlySealedStages(t *testing.T) {
 	config := DefaultWorkflowConfig()
-	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
-		t.Fatalf("tools = %s, want mandatory codex/pi preflight", got)
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi,agy" {
+		t.Fatalf("tools = %s, want mandatory codex/pi/agy preflight", got)
 	}
 	config.Stages["planning"] = StageOptions{Tool: "pi"}
-	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
-		t.Fatalf("tools = %s, want mandatory codex/pi preflight", got)
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi,agy" {
+		t.Fatalf("tools = %s, want mandatory codex/pi/agy preflight", got)
 	}
 	config.Stages["execution"] = StageOptions{Tool: "pi"}
-	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi,agy" {
 		t.Fatalf("tools = %s, want mixed tools", got)
 	}
 	config.Stages["planning"] = StageOptions{Tool: "pi"}
-	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi,agy" {
 		t.Fatalf("tools = %s, planning-only pi should not be required", got)
 	}
 	config.Stages["archive"] = StageOptions{Tool: "pi"}
-	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi,agy" {
 		t.Fatalf("tools = %s, want pi when used by sealed stage", got)
 	}
 	for stage, options := range config.Stages {
 		options.Tool = "pi"
 		config.Stages[stage] = options
 	}
-	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
-		t.Fatalf("tools = %s, want mandatory codex/pi preflight", got)
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi,agy" {
+		t.Fatalf("tools = %s, want mandatory codex/pi/agy preflight", got)
 	}
 }
 

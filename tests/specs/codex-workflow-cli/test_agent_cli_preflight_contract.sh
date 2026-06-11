@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 sealed run 启动前同时检查 codex/pi，并在缺失 CLI 或无效后端配置时不创建运行态。
-# Sources: 14-精简后端为-codex-pi-并迁移测试
+# 文件功能目的：验证 sealed run 启动前同时检查 codex/pi/agy，并在缺失 CLI 或无效后端配置时不创建运行态。
+# Sources: 14-精简后端为-codex-pi-并迁移测试, 15-支持-agy-cli作为pi候选
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -125,6 +125,34 @@ grep -Eiq '安装|install' "$TMP/missing-pi.out" "$TMP/missing-pi.err" || fail "
 assert_no_run_state "$TMP/state-missing-pi" "$STATE_SNAPSHOT"
 printf 'missing pi: no run state created\n' >"$STATE_SNAPSHOT"
 
+note "缺少 agy 时必须失败且不创建 run state"
+FAKEBIN="$TMP/bin-missing-agy"
+mkdir -p "$FAKEBIN"
+cat >"$FAKEBIN/codex" <<'SH'
+#!/usr/bin/env bash
+printf '{"type":"thread.started","thread_id":"fake-thread"}\n'
+SH
+cat >"$FAKEBIN/pi" <<'SH'
+#!/usr/bin/env bash
+printf '{"type":"session","id":"fake-pi"}\n'
+SH
+chmod +x "$FAKEBIN/codex" "$FAKEBIN/pi"
+ln -s "$(command -v git)" "$FAKEBIN/git"
+ln -s "$OZ" "$FAKEBIN/oz"
+set +e
+(
+  cd "$PROJECT"
+  HOME="$TMP/home-missing-agy" XDG_STATE_HOME="$TMP/state-missing-agy" PATH="$FAKEBIN" "$WO" run --change "$CHANGE" --json
+) >"$TMP/missing-agy.out" 2>"$TMP/missing-agy.err"
+code=$?
+set -e
+cat "$TMP/missing-agy.out" "$TMP/missing-agy.err" | tee -a "$LOG"
+[[ "$code" -ne 0 ]] || fail "缺少 agy 时 run 不应成功"
+grep -Eiq 'agy' "$TMP/missing-agy.out" "$TMP/missing-agy.err" || fail "错误输出必须指出缺少 agy"
+grep -Eiq '安装|install' "$TMP/missing-agy.out" "$TMP/missing-agy.err" || fail "错误输出必须提示安装 CLI"
+assert_no_run_state "$TMP/state-missing-agy" "$TMP/missing-agy-state.txt"
+printf 'missing agy: no run state created\n' >>"$STATE_SNAPSHOT"
+
 note "缺少 codex 时必须失败且不创建 run state"
 FAKEBIN="$TMP/bin-missing-codex"
 mkdir -p "$FAKEBIN"
@@ -132,7 +160,11 @@ cat >"$FAKEBIN/pi" <<'SH'
 #!/usr/bin/env bash
 printf '{"type":"session","id":"fake-pi"}\n'
 SH
-chmod +x "$FAKEBIN/pi"
+cat >"$FAKEBIN/agy" <<'SH'
+#!/usr/bin/env bash
+printf 'fake agy\n'
+SH
+chmod +x "$FAKEBIN/pi" "$FAKEBIN/agy"
 ln -s "$(command -v git)" "$FAKEBIN/git"
 ln -s "$OZ" "$FAKEBIN/oz"
 set +e

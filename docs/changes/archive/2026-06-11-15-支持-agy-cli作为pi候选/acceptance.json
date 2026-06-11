@@ -1,0 +1,73 @@
+{
+  "summary": "验收 agy CLI 作为 pi 候选后端：配置可选、启动前预检、真实 CLI 参数映射和状态 key 隔离。",
+  "coverage": [
+    {
+      "spec": "需求：配置支持 agy 候选后端 / 场景：stage 和 parallel member 可选择 agy",
+      "tests": ["contract-agy-config-preflight"],
+      "evidence": ["agy-config-preflight-log"],
+      "risk": "使用 fake agy 验证配置和入口，不验证真实 agy 账号权限。"
+    },
+    {
+      "spec": "需求：启动前检查 agy 可用性 / 场景：缺少 agy 时不创建运行态",
+      "tests": ["contract-agy-config-preflight"],
+      "evidence": ["agy-config-preflight-log", "agy-state-snapshot"],
+      "risk": "只验证缺失 CLI 的用户可见行为，不验证安装流程。"
+    },
+    {
+      "spec": "需求：agy runner 使用真实 CLI 参数 / 场景：sealed run 和 planning 参数映射正确",
+      "tests": ["contract-agy-cli-args"],
+      "evidence": ["agy-cli-args-log"],
+      "risk": "fake agy 记录 argv，不验证真实 agy 服务端是否接受模型名。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-agy-config-preflight",
+      "source": "change_contract",
+      "path": "docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh",
+      "command": "bash docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh",
+      "purpose": "证明 agy 可作为配置候选后端，且 sealed run 启动前会检查 agy CLI。",
+      "assertions": [
+        "配置 tool: agy 或 cli: agy 不再报未知 agent tool",
+        "parallel member 可以显式选择 tool: agy",
+        "缺少 agy 时 run 在创建状态前失败并提示安装 agy",
+        "agy 会话状态 key 使用 agy 前缀而不是 pi 前缀"
+      ],
+      "expected_initial_failure": "当前实现只支持 codex/pi，validAgentTool 和 requiredAgentTools 不包含 agy。"
+    },
+    {
+      "id": "contract-agy-cli-args",
+      "source": "change_contract",
+      "path": "docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh",
+      "command": "bash docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh",
+      "purpose": "证明 agy sealed runner 和 planning command 使用真实 agy CLI 参数。",
+      "assertions": [
+        "sealed run 调用包含 --print、--model、--conversation 和权限参数",
+        "planning command 调用包含 --prompt-interactive",
+        "prompt 作为单个 argv 参数传入，没有被 shell 拆分",
+        "实现中存在独立 AgyTool，不把 agy 当作 pi 别名"
+      ],
+      "expected_initial_failure": "当前仓库没有 AgyTool、AgyCLI 或 agy 参数构造函数。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "agy-config-preflight-log",
+      "kind": "runtime_log",
+      "path": "test-results/15-agy-config-preflight.log",
+      "purpose": "记录 agy 配置读取、预检失败和错误输出。"
+    },
+    {
+      "id": "agy-state-snapshot",
+      "kind": "state_snapshot",
+      "path": "test-results/15-agy-state-snapshot.txt",
+      "purpose": "证明缺少 agy 时没有创建 run state，使用 agy 时状态 key 不写成 pi。"
+    },
+    {
+      "id": "agy-cli-args-log",
+      "kind": "runtime_log",
+      "path": "test-results/15-agy-cli-args.log",
+      "purpose": "记录 fake agy 捕获的 sealed run 和 planning argv。"
+    }
+  ]
+}

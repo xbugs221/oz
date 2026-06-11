@@ -1,0 +1,23 @@
+// Package app tests Agy CLI argument contracts through the migrated app suite.
+package app
+
+import (
+	"strings"
+	"testing"
+)
+
+// TestMigratedAgyArgContract verifies agy --print, --conversation conv-123, and --prompt-interactive.
+func TestMigratedAgyArgContract(t *testing.T) {
+	runArgs := strings.Join(agyRunArgs("prompt with spaces", "conv-123", StageOptions{Model: "agy-model", Permissions: "danger-full-access"}), "\x00")
+	for _, want := range []string{"--print", "--conversation\x00conv-123", "--model\x00agy-model", "--dangerously-skip-permissions", "prompt with spaces"} {
+		if !strings.Contains(runArgs, want) {
+			t.Fatalf("run args = %q, missing %q", runArgs, want)
+		}
+	}
+	planArgs := strings.Join(agyPlanningArgs("planning prompt", StageOptions{Permissions: "sandbox"}), "\x00")
+	for _, want := range []string{"--prompt-interactive", "--sandbox", "planning prompt"} {
+		if !strings.Contains(planArgs, want) {
+			t.Fatalf("planning args = %q, missing %q", planArgs, want)
+		}
+	}
+}

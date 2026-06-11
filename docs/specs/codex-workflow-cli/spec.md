@@ -207,6 +207,14 @@
 - **则** 系统保存当前角色的 `pi:<role>` session id 为 `pi-session-1`
 - **且** 状态展示使用统一 agent session progress 格式
 
+#### 场景：Agy 作为 Pi 候选后端
+
+- **当** workflow stage 或 parallel member 配置 `tool: agy` 或 `cli: agy`
+- **则** 系统必须接受该后端并在 sealed run 创建状态前预检 `agy` CLI
+- **且** sealed run 必须调用 `agy --print`，按配置追加 `--model`、`--conversation`、`--dangerously-skip-permissions` 或 `--sandbox`
+- **且** planning 入口必须调用 `agy --prompt-interactive`
+- **且** Agy 会话状态必须使用 `agy:<role>` key，不得复用 `pi:<role>`
+
 ### 需求：断点继续
 
 系统必须在程序中断后通过 用户状态目录中的 `runs/<run-id>/state.json` 恢复未完成 run。
@@ -550,7 +558,7 @@
 
 ### 需求：阶段级 agent tool 和模型
 
-系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 agent CLI 和模型，且未配置时默认使用 Codex。未知阶段键必须在配置读取阶段被拒绝。内置 agent tool 只支持 `codex` 和 `pi`，不支持第三后端，也不支持把 `pi-ai` 作为 `pi` 的别名。
+系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 agent CLI 和模型，且未配置时默认使用 Codex。未知阶段键必须在配置读取阶段被拒绝。内置 agent tool 只支持 `codex`、`pi` 和 `agy`，不支持其他第三后端，也不支持把 `pi-ai` 作为 `pi` 的别名。
 
 #### 场景：配置 Codex 工具和模型
 
@@ -572,7 +580,7 @@
 - **则** 系统在创建 sealed run 前报错
 - **且** 不创建 `用户状态目录 runs/` 运行态文件
 - **测试**：`tests/specs/codex-workflow-cli/test_agent_backend_allowlist_contract.sh`, `tests/specs/codex-workflow-cli/test_agent_cli_preflight_contract.sh`
-- **关键断言**：后端白名单只包含 `codex` 和 `pi`，第三后端配置按未知工具失败
+- **关键断言**：后端白名单只包含 `codex`、`pi` 和 `agy`，其他第三后端配置按未知工具失败
 
 #### 场景：Pi 别名不兼容
 

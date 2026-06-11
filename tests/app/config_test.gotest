@@ -325,18 +325,18 @@ func TestParallelArtifactPathUsesStableRunLocalNames(t *testing.T) {
 	}
 }
 
-// TestRequiredAgentToolsIgnoresPromptOnlyParallelMembers verifies helper metadata does not require a CLI.
+// TestRequiredAgentToolsIgnoresPromptOnlyParallelMembers verifies helper metadata does not change CLI preflight.
 func TestRequiredAgentToolsIgnoresPromptOnlyParallelMembers(t *testing.T) {
 	config := DefaultWorkflowConfig()
 	disabled := requiredAgentTools()
-	if strings.Join(disabled, ",") != "codex,pi" {
-		t.Fatalf("disabled parallel tools = %v, want mandatory codex/pi preflight", disabled)
+	if strings.Join(disabled, ",") != "codex,pi,agy" {
+		t.Fatalf("disabled parallel tools = %v, want mandatory codex/pi/agy preflight", disabled)
 	}
 
 	config.Parallel.Enabled = true
 	enabled := requiredAgentTools()
-	if strings.Join(enabled, ",") != "codex,pi" {
-		t.Fatalf("enabled parallel tools = %v, want mandatory codex/pi preflight", enabled)
+	if strings.Join(enabled, ",") != "codex,pi,agy" {
+		t.Fatalf("enabled parallel tools = %v, want mandatory codex/pi/agy preflight", enabled)
 	}
 }
 

@@ -19,7 +19,7 @@ const defaultMaxReviewIterations = 5
 
 var (
 	validReasoning   = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
-	validPermissions = map[string]bool{"default": true}
+	validPermissions = map[string]bool{"default": true, "danger-full-access": true, "sandbox": true}
 	stageKinds       = roleStageKinds()
 	iterationStage   = regexp.MustCompile(`^(review|qa|fix)_([1-9][0-9]*)$`)
 )

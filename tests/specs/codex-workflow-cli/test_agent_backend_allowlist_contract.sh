@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证工作流后端集合稳定收敛为 Codex/Pi，不再保留第三后端源码、文档承诺或状态 key。
-# Sources: 14-精简后端为-codex-pi-并迁移测试
+# 文件功能目的：验证工作流后端集合稳定收敛为 Codex/Pi/Agy，不再保留历史第三后端源码、文档承诺或状态 key。
+# Sources: 14-精简后端为-codex-pi-并迁移测试, 15-支持-agy-cli作为pi候选
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -35,10 +35,10 @@ if [[ -e "$ROOT/internal/app/${legacy_lower}.go" || -e "$ROOT/internal/app/${leg
   fail "internal/app 下仍存在第三后端实现或测试文件"
 fi
 
-note "确认 agent registry 只接受 codex/pi"
+note "确认 agent registry 只接受 codex/pi/agy"
 agent_file="$ROOT/internal/app/agent.go"
 [[ -f "$agent_file" ]] || fail "缺少 internal/app/agent.go"
-grep -q 'return name == "codex" || name == "pi"' "$agent_file" || fail "validAgentTool 未明确收敛为 codex/pi"
-grep -q 'return \[\]string{"codex", "pi"}' "$agent_file" || fail "agentToolNames 未明确只枚举 codex/pi"
+grep -q 'return name == "codex" || name == "pi" || name == "agy"' "$agent_file" || fail "validAgentTool 未明确收敛为 codex/pi/agy"
+grep -q 'return \[\]string{"codex", "pi", "agy"}' "$agent_file" || fail "agentToolNames 未明确只枚举 codex/pi/agy"
 
-note "contract passed: agent backend allowlist is codex/pi only"
+note "contract passed: agent backend allowlist is codex/pi/agy only"
