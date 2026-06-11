@@ -1,0 +1,66 @@
+{
+  "summary": "验收 wo 运行期间允许用户新增非当前需求，同时保留当前 run 和只读 subagent 的写保护。",
+  "coverage": [
+    {
+      "spec": "需求：运行中允许新增非当前需求 / 场景：阶段开始前发现另一个 active change",
+      "tests": ["contract-running-demand-insertion"],
+      "evidence": ["running-demand-log"],
+      "risk": "测试只验证 git snapshot 结果，不证明具体编辑器进程身份。"
+    },
+    {
+      "spec": "需求：当前 run 相关修改仍被阻断 / 场景：源码或当前 change 被修改",
+      "tests": ["contract-running-demand-insertion"],
+      "evidence": ["running-demand-log"],
+      "risk": "路径分类不能证明修改者身份，只验证保护边界。"
+    },
+    {
+      "spec": "需求：主规格表达保护边界 / 场景：文档不再承诺禁止一切工作区变化",
+      "tests": ["contract-manual-intervention-docs"],
+      "evidence": ["manual-intervention-docs-log"],
+      "risk": "文档门禁只防止规格回退，不替代实现测试。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-running-demand-insertion",
+      "source": "change_contract",
+      "path": "docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh",
+      "command": "bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh",
+      "purpose": "证明 detectManualIntervention 允许非当前 change 新增需求，但仍阻断源码和当前 change 修改。",
+      "assertions": [
+        "运行中新增 docs/changes/<非当前 change> 不会 abort 当前 run",
+        "允许的新增需求会更新 baseline，避免重复报错",
+        "源码变化仍会写入 aborted_manual_intervention",
+        "当前 change 变化仍会写入 aborted_manual_intervention"
+      ],
+      "expected_initial_failure": "当前实现按整个 git diff 判断，在 len(state.Stages)==0 时会把新增非当前 change 误判为人工干预。"
+    },
+    {
+      "id": "contract-manual-intervention-docs",
+      "source": "change_contract",
+      "path": "docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh",
+      "command": "bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh",
+      "purpose": "证明主规格明确新的路径感知保护边界。",
+      "assertions": [
+        "主规格声明允许运行中新增非当前 docs/changes 提案",
+        "主规格声明当前 change、源码和配置变化仍会中止",
+        "主规格声明 subagent 仍是只读写保护对象"
+      ],
+      "expected_initial_failure": "当前主规格只写无法归因变化会中止，没有说明非当前需求提案例外。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "running-demand-log",
+      "kind": "runtime_log",
+      "path": "test-results/16-running-demand-insertion.log",
+      "purpose": "记录临时 Go 契约测试的运行结果和失败原因。"
+    },
+    {
+      "id": "manual-intervention-docs-log",
+      "kind": "runtime_log",
+      "path": "test-results/16-manual-intervention-docs.log",
+      "purpose": "记录主规格保护边界检查结果。"
+    }
+  ]
+}

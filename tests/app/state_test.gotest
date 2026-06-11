@@ -2648,6 +2648,202 @@ func TestGitSnapshotIgnoresTestResultsRuntimeEvidence(t *testing.T) {
 	}
 }
 
+// TestDetectManualInterventionAllowsUnrelatedActiveChange verifies users can record new demand while a run is active.
+func TestDetectManualInterventionAllowsUnrelatedActiveChange(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "10-当前需求")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "current change baseline")
+	head, diff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := State{
+		RunID:        "running-demand-insertion",
+		ChangeName:   "10-当前需求",
+		Sealed:       true,
+		Status:       statusRunning,
+		Stage:        "execution",
+		BaselineHead: head,
+		BaselineDiff: diff,
+		Sessions:     map[string]string{},
+		Stages:       map[string]string{},
+		Workflow:     DefaultWorkflowConfig(),
+	}
+	mustWritePrompt(t, filepath.Join(repo, "docs", "changes", "11-运行中新需求", "brief.md"), "# 新需求\n")
+	engine := NewEngine(repo, testRegistry(fakeRunner{}))
+	if err := engine.detectManualIntervention(&state); err != nil {
+		t.Fatalf("unrelated active change should not abort current run: %v", err)
+	}
+	if state.Status == statusAborted {
+		t.Fatal("unrelated active change aborted current run")
+	}
+	if !strings.Contains(state.BaselineDiff, "11-运行中新需求") {
+		t.Fatalf("baseline diff did not absorb new demand:\n%s", state.BaselineDiff)
+	}
+}
+
+// TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff verifies only new delta paths are guarded.
+func TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "10-当前需求")
+	mustWritePrompt(t, filepath.Join(repo, "internal", "app", "existing.go"), "package app\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "current change baseline")
+	mustWritePrompt(t, filepath.Join(repo, "docs", "changes", "10-当前需求", "task.md"), "- [x] execution edit\n")
+	mustWritePrompt(t, filepath.Join(repo, "internal", "app", "existing.go"), "package app\n\nconst executionEdit = true\n")
+	head, diff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "10-当前需求") || !strings.Contains(diff, "existing.go") {
+		t.Fatalf("test baseline did not include protected dirty paths:\n%s", diff)
+	}
+	state := State{
+		RunID:        "running-demand-existing-baseline",
+		ChangeName:   "10-当前需求",
+		Sealed:       true,
+		Status:       statusRunning,
+		Stage:        "review_1",
+		BaselineHead: head,
+		BaselineDiff: diff,
+		Sessions:     map[string]string{},
+		Stages:       map[string]string{"execution": "completed"},
+		Workflow:     DefaultWorkflowConfig(),
+	}
+	mustWritePrompt(t, filepath.Join(repo, "docs", "changes", "11-运行中新需求", "brief.md"), "# 新需求\n")
+	engine := NewEngine(repo, testRegistry(fakeRunner{}))
+	if err := engine.detectManualIntervention(&state); err != nil {
+		t.Fatalf("unrelated demand should compare against baseline delta only: %v", err)
+	}
+	if !strings.Contains(state.BaselineDiff, "11-运行中新需求") {
+		t.Fatalf("baseline diff did not absorb unrelated demand:\n%s", state.BaselineDiff)
+	}
+}
+
+// TestDetectManualInterventionBlocksCurrentRunPaths verifies the narrowed guard still blocks protected writes.
+func TestDetectManualInterventionBlocksCurrentRunPaths(t *testing.T) {
+	cases := []struct {
+		name  string
+		write func(t *testing.T, repo string)
+	}{
+		{
+			name: "source",
+			write: func(t *testing.T, repo string) {
+				mustWritePrompt(t, filepath.Join(repo, "internal", "app", "rogue_write.go"), "package app\n")
+			},
+		},
+		{
+			name: "current-change",
+			write: func(t *testing.T, repo string) {
+				mustWritePrompt(t, filepath.Join(repo, "docs", "changes", "10-当前需求", "spec.md"), "# 被错误改写\n")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := gitRepo(t)
+			mustChange(t, repo, "10-当前需求")
+			runGit(t, repo, "add", ".")
+			runGit(t, repo, "commit", "-m", "current change baseline")
+			head, diff, err := gitSnapshot(repo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := State{
+				RunID:        "running-demand-guard-" + tc.name,
+				ChangeName:   "10-当前需求",
+				Sealed:       true,
+				Status:       statusRunning,
+				Stage:        "execution",
+				BaselineHead: head,
+				BaselineDiff: diff,
+				Sessions:     map[string]string{},
+				Stages:       map[string]string{},
+				Workflow:     DefaultWorkflowConfig(),
+			}
+			if err := saveState(repo, state); err != nil {
+				t.Fatal(err)
+			}
+			tc.write(t, repo)
+			engine := NewEngine(repo, testRegistry(fakeRunner{}))
+			if err := engine.detectManualIntervention(&state); err == nil {
+				t.Fatal("protected current-run path should abort")
+			}
+			final, err := loadState(repo, state.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if final.Status != statusAborted {
+				t.Fatalf("status = %q, want %q", final.Status, statusAborted)
+			}
+		})
+	}
+}
+
+// TestDetectManualInterventionBlocksCurrentChangeRename verifies rename deltas include the protected old path.
+func TestDetectManualInterventionBlocksCurrentChangeRename(t *testing.T) {
+	cases := []struct {
+		name  string
+		write func(t *testing.T, repo string)
+	}{
+		{
+			name: "staged",
+			write: func(t *testing.T, repo string) {
+				runGit(t, repo, "mv", "docs/changes/10-当前需求/spec.md", "docs/changes/11-运行中新需求/stolen.md")
+			},
+		},
+		{
+			name: "committed",
+			write: func(t *testing.T, repo string) {
+				runGit(t, repo, "mv", "docs/changes/10-当前需求/spec.md", "docs/changes/11-运行中新需求/stolen.md")
+				runGit(t, repo, "commit", "-m", "move current change into unrelated demand")
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := gitRepo(t)
+			mustChange(t, repo, "10-当前需求")
+			mustWritePrompt(t, filepath.Join(repo, "docs", "changes", "10-当前需求", "spec.md"), "# 当前规格\n")
+			mustChange(t, repo, "11-运行中新需求")
+			runGit(t, repo, "add", ".")
+			runGit(t, repo, "commit", "-m", "current change baseline")
+			head, diff, err := gitSnapshot(repo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := State{
+				RunID:        "running-demand-rename-" + tc.name,
+				ChangeName:   "10-当前需求",
+				Sealed:       true,
+				Status:       statusRunning,
+				Stage:        "execution",
+				BaselineHead: head,
+				BaselineDiff: diff,
+				Sessions:     map[string]string{},
+				Stages:       map[string]string{},
+				Workflow:     DefaultWorkflowConfig(),
+			}
+			if err := saveState(repo, state); err != nil {
+				t.Fatal(err)
+			}
+			tc.write(t, repo)
+			engine := NewEngine(repo, testRegistry(fakeRunner{}))
+			if err := engine.detectManualIntervention(&state); err == nil {
+				t.Fatal("renaming current change into unrelated change should abort")
+			}
+			final, err := loadState(repo, state.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if final.Status != statusAborted {
+				t.Fatalf("status = %q, want %q", final.Status, statusAborted)
+			}
+		})
+	}
+}
+
 // gitRepo creates a temporary repository with one initial commit.
 func gitRepo(t *testing.T) string {
 	t.Helper()

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1178,7 +1179,7 @@ func validateArchiveValidationEvidence(state State) error {
 	return nil
 }
 
-// detectManualIntervention aborts if the git worktree changes outside the recorded stage flow.
+// detectManualIntervention aborts if current-run paths change outside the recorded stage flow.
 func (e *Engine) detectManualIntervention(state *State) error {
 	head, diff, err := gitSnapshot(e.Repo)
 	if err != nil {
@@ -1187,12 +1188,16 @@ func (e *Engine) detectManualIntervention(state *State) error {
 	if head == state.BaselineHead && diff == state.BaselineDiff {
 		return nil
 	}
-	if len(state.Stages) == 0 {
+	guard, err := classifyGitSnapshotChange(e.Repo, state.ChangeName, state.BaselineHead, state.BaselineDiff, head, diff)
+	if err != nil {
+		return err
+	}
+	if guard.Blocked {
 		state.Status = statusAborted
 		if err := saveState(e.Repo, *state); err != nil {
 			return err
 		}
-		return fmt.Errorf("在 %s 阶段前检测到人工介入", state.Stage)
+		return fmt.Errorf("在 %s 阶段前检测到当前 run 相关路径或源码变化：%s", state.Stage, guard.Detail())
 	}
 	state.BaselineHead = head
 	state.BaselineDiff = diff
@@ -1879,6 +1884,170 @@ func filterRuntimeStatus(status string) string {
 		kept = append(kept, line)
 	}
 	return strings.Join(kept, "\n")
+}
+
+type gitSnapshotGuard struct {
+	Blocked bool
+	Paths   []string
+	Allowed []string
+}
+
+// Detail formats the paths that explain a git snapshot guard decision.
+func (guard gitSnapshotGuard) Detail() string {
+	if len(guard.Paths) == 0 {
+		return "HEAD 变化"
+	}
+	limit := len(guard.Paths)
+	if limit > 5 {
+		limit = 5
+	}
+	detail := strings.Join(guard.Paths[:limit], ", ")
+	if len(guard.Paths) > limit {
+		detail += fmt.Sprintf(" 等 %d 个路径", len(guard.Paths))
+	}
+	return detail
+}
+
+// classifyGitSnapshotChange separates new unrelated demand proposal edits from current-run writes.
+func classifyGitSnapshotChange(repo, changeName, beforeHead, beforeDiff, afterHead, afterDiff string) (gitSnapshotGuard, error) {
+	paths := changedStatusPaths(beforeDiff, afterDiff)
+	if beforeHead != afterHead {
+		commitPaths, err := committedPaths(repo, beforeHead, afterHead)
+		if err != nil {
+			return gitSnapshotGuard{Blocked: true}, err
+		}
+		paths = append(paths, commitPaths...)
+	}
+	var blocked []string
+	var allowed []string
+	for _, path := range uniqueSortedPaths(paths) {
+		if isUnrelatedChangePath(path, changeName) {
+			allowed = append(allowed, path)
+			continue
+		}
+		blocked = append(blocked, path)
+	}
+	return gitSnapshotGuard{Blocked: len(blocked) > 0, Paths: blocked, Allowed: allowed}, nil
+}
+
+// changedStatusPaths returns paths whose porcelain status changed since the saved baseline.
+func changedStatusPaths(before, after string) []string {
+	beforeLines := statusLineByPath(before)
+	afterLines := statusLineByPath(after)
+	seen := map[string]bool{}
+	var paths []string
+	for path, line := range afterLines {
+		if beforeLines[path] != line {
+			paths = append(paths, path)
+			seen[path] = true
+		}
+	}
+	for path, line := range beforeLines {
+		if seen[path] {
+			continue
+		}
+		if afterLines[path] != line {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+// statusLineByPath indexes every normalized git status path by its full porcelain line.
+func statusLineByPath(status string) map[string]string {
+	lines := map[string]string{}
+	for _, line := range strings.Split(status, "\n") {
+		if line == "" {
+			continue
+		}
+		for _, path := range porcelainLinePaths(line) {
+			lines[path] = line
+		}
+	}
+	return lines
+}
+
+// porcelainLinePaths extracts all business paths from one git status --porcelain line.
+func porcelainLinePaths(line string) []string {
+	if len(line) < 4 {
+		return nil
+	}
+	path := strings.TrimSpace(line[3:])
+	if renamed := strings.Split(path, " -> "); len(renamed) == 2 {
+		return statusNamePaths(strings.Join(renamed, "\n"))
+	}
+	return statusNamePaths(path)
+}
+
+// committedPaths returns every file path touched by commits between two saved HEADs.
+func committedPaths(repo, beforeHead, afterHead string) ([]string, error) {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return nil, err
+	}
+	cmd := commandContext(context.Background(), gitPath, "diff", "--name-status", "--find-renames", beforeHead, afterHead)
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(out))
+		if detail != "" {
+			return nil, fmt.Errorf("git diff --name-status 失败：%s", detail)
+		}
+		return nil, err
+	}
+	return statusNamePaths(string(out)), nil
+}
+
+// statusNamePaths normalizes paths from newline or tab separated git status output.
+func statusNamePaths(output string) []string {
+	var paths []string
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Split(strings.TrimSpace(line), "\t")
+		if len(fields) > 1 {
+			fields = fields[1:]
+		}
+		for _, field := range fields {
+			path := strings.TrimSpace(field)
+			if path != "" {
+				paths = append(paths, filepath.ToSlash(path))
+			}
+		}
+	}
+	return paths
+}
+
+// uniqueSortedPaths removes duplicate path entries for stable guard messages.
+func uniqueSortedPaths(paths []string) []string {
+	seen := map[string]bool{}
+	var unique []string
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		unique = append(unique, path)
+	}
+	sort.Strings(unique)
+	return unique
+}
+
+// isUnrelatedChangePath returns true only for docs/changes entries outside the active change.
+func isUnrelatedChangePath(path, changeName string) bool {
+	path = strings.TrimPrefix(filepath.ToSlash(path), "./")
+	const prefix = "docs/changes/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	if rest == "" || strings.HasPrefix(rest, "archive/") || strings.HasPrefix(rest, ".") {
+		return false
+	}
+	change := rest
+	if slash := strings.IndexByte(rest, '/'); slash >= 0 {
+		change = rest[:slash]
+	}
+	return change != "" && change != changeName
 }
 
 // snapshotRunAcceptance stores the sealed acceptance contract inside the run.

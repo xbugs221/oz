@@ -99,8 +99,13 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		return err
 	}
 	if beforeHead != afterHead || beforeDiff != afterDiff {
-		detail := readOnlyBoundaryDetail(beforeHead, beforeDiff, afterHead, afterDiff)
-		return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到源码或 worktree 变化（%s），artifact=%s", detail, artifactPath))
+		guard, err := classifyGitSnapshotChange(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff)
+		if err != nil {
+			return e.failNodeState(state, err)
+		}
+		if guard.Blocked {
+			return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到当前 run 相关路径或源码变化（%s），artifact=%s", guard.Detail(), artifactPath))
+		}
 	}
 	if sessionID != "" {
 		if state.Sessions == nil {
@@ -126,8 +131,14 @@ func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMembe
 	if beforeHead == afterHead && beforeDiff == afterDiff {
 		return nil
 	}
-	detail := readOnlyBoundaryDetail(beforeHead, beforeDiff, afterHead, afterDiff)
-	return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到源码或 worktree 变化（%s），artifact=%s", member.Name, attempt, detail, artifactPath))
+	guard, err := classifyGitSnapshotChange(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff)
+	if err != nil {
+		return e.failNodeState(state, err)
+	}
+	if guard.Blocked {
+		return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到当前 run 相关路径或源码变化（%s），artifact=%s", member.Name, attempt, guard.Detail(), artifactPath))
+	}
+	return nil
 }
 
 // subagentOptions resolves member-specific backend settings.
