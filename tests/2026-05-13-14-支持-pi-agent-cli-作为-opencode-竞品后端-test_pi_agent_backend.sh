@@ -143,6 +143,7 @@ make_repo "$success_repo"
 install_fake_oz "$fakebin"
 install_fake_codex "$fakebin"
 install_fake_pi "$fakebin"
+ln -sf "$fakebin/pi" "$fakebin/agy"
 cat > wo.yaml <<'YAML'
 wo:
   workflow:
@@ -183,6 +184,7 @@ make_repo "$mixed_repo"
 install_fake_oz "$mixed_fakebin"
 install_fake_codex "$mixed_fakebin"
 install_fake_pi "$mixed_fakebin"
+ln -sf "$mixed_fakebin/pi" "$mixed_fakebin/agy"
 cat > wo.yaml <<'YAML'
 wo:
   workflow:
@@ -219,6 +221,7 @@ mkdir -p "$missing_fakebin" "$missing_state" "$missing_home"
 make_repo "$missing_repo"
 install_fake_oz "$missing_fakebin"
 install_fake_codex "$missing_fakebin"
+ln -sf "$missing_fakebin/codex" "$missing_fakebin/agy"
 cat > wo.yaml <<'YAML'
 wo:
   workflow:

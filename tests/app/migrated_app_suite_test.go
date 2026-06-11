@@ -37,7 +37,7 @@ func TestMigratedAppTestsRunWithGoToolchain(t *testing.T) {
 		copyFile(t, path, target)
 	}
 
-	args := []string{"test", "./internal/app"}
+	args := []string{"test", "./internal/app", "-timeout=30s"}
 	if pattern := strings.TrimSpace(os.Getenv("OZ_MIGRATED_APP_RUN")); pattern != "" {
 		args = append(args, "-run", pattern, "-count=1")
 	}
@@ -101,6 +101,9 @@ func copyDir(t *testing.T, src, dst, suffix string) {
 			return err
 		}
 		if entry.IsDir() {
+			return nil
+		}
+		if suffix == ".go" && strings.HasSuffix(entry.Name(), "_test.go") {
 			return nil
 		}
 		if suffix != "" && !strings.HasSuffix(entry.Name(), suffix) {

@@ -1,0 +1,89 @@
+{
+  "summary": "修复 GitHub CI 在规划 prompt 合同上的 Go 测试失败，并让 README、长期规格和 GitHub Actions 门禁保持一致。",
+  "coverage": [
+    {
+      "spec": "需求：GitHub CI Go 测试恢复通过 / 场景：planning prompt 合同与长期规格一致",
+      "tests": ["github-ci-prompt-contract"],
+      "evidence": ["github-ci-prompt-log", "github-ci-run-summary"],
+      "risk": "契约测试不主动推送触发 GitHub Actions；最终 CI 成功 run 需要 QA 阶段补充 URL 或 gh JSON 摘要。"
+    },
+    {
+      "spec": "需求：仓库文档说明 CI/CD 门禁 / 场景：README 与长期规格列出真实 CI/Release 命令",
+      "tests": ["ci-documentation-contract"],
+      "evidence": ["ci-documentation-log"],
+      "risk": "测试验证文档和 workflow 中的关键命令，不评价文档表达是否足够详尽。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "github-ci-prompt-contract",
+      "source": "change_contract",
+      "path": "docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
+      "command": "bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
+      "purpose": "证明 GitHub CI 失败的 planning prompt 合同已经在本地等价 Go 测试中恢复通过。",
+      "assertions": [
+        "定向运行 app prompt 合同测试时，不再失败于缺少“讨论规划阶段”",
+        "prompts-template/wo-discuss.md 同时包含 oz-plan 和 讨论规划阶段",
+        "测试日志记录 GitHub run 27288329734 的失败 step 摘要，便于追溯真实失败来源"
+      ],
+      "expected_initial_failure": "当前 prompt 只写了调用 oz-plan 技能开始讨论规划，缺少“讨论规划阶段”，因此本测试应失败于 Go 合同或最终 prompt 文本检查。"
+    },
+    {
+      "id": "ci-documentation-contract",
+      "source": "change_contract",
+      "path": "docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh",
+      "command": "bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh",
+      "purpose": "证明 README、长期规格和 GitHub Actions workflow 都说明并执行同一套 CI/Release 测试门禁。",
+      "assertions": [
+        "README 明确提到 GitHub Actions、CI、Release、go test ./... 和 tests/*.sh",
+        "release automation 长期规格继续约束 CI/Release 使用本地 oz/wo 构建和同一套测试门禁",
+        "CI 与 Release workflow 文件都保留 go test ./... 和根目录 shell 业务测试循环"
+      ],
+      "expected_initial_failure": "当前 README 没有完整说明 GitHub Actions CI/Release 门禁和本地复现入口。"
+    },
+    {
+      "id": "root-go-test-gate",
+      "source": "root_e2e",
+      "path": "docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
+      "command": "bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh && go test ./...",
+      "purpose": "证明 GitHub CI 的 Run Go tests step 在本地等价门禁中通过。",
+      "assertions": [
+        "所有 Go package 测试通过",
+        "prompt 合同不再导致 internal/app 或迁移后的 tests/app 失败"
+      ],
+      "expected_initial_failure": "GitHub run 27288329734 已证明当前失败发生在 Run Go tests。"
+    },
+    {
+      "id": "root-shell-business-gate",
+      "source": "existing_regression",
+      "path": "tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_all_root_business_tests_pass.sh",
+      "command": "bash tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_all_root_business_tests_pass.sh",
+      "purpose": "证明 CI 和 Release 后续 shell 业务测试门禁没有因本次文档或 prompt 修复被破坏。",
+      "assertions": [
+        "根目录 shell 业务测试均返回零退出码",
+        "Release workflow 依赖的同一批 shell 业务测试仍可从仓库根目录运行"
+      ],
+      "expected_initial_failure": "最新 GitHub run 在 Go tests step 已失败并跳过 shell tests；执行阶段修复 Go tests 后仍必须确认 shell gate。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "github-ci-prompt-log",
+      "kind": "runtime_log",
+      "path": "test-results/18-github-ci-docs/github-ci-prompt-contract.log",
+      "purpose": "记录定向 app Go prompt 合同测试、prompt 文本检查和失败 run 摘要。"
+    },
+    {
+      "id": "github-ci-run-summary",
+      "kind": "state_snapshot",
+      "path": "test-results/18-github-ci-docs/github-run-27288329734.json",
+      "purpose": "保存 GitHub run 27288329734 的 run/job/step 摘要；如果执行阶段推送后触发新 CI，也记录新的成功 run URL。"
+    },
+    {
+      "id": "ci-documentation-log",
+      "kind": "runtime_log",
+      "path": "test-results/18-github-ci-docs/ci-documentation-contract.log",
+      "purpose": "记录 README、长期规格和 workflow 门禁命令的一致性检查。"
+    }
+  ]
+}

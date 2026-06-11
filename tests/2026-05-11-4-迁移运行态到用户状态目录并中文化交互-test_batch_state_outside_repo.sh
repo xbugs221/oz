@@ -62,6 +62,7 @@ printf '{"type":"thread.started","thread_id":"fake-thread"}\n'
 EOF
 chmod +x "$fakebin/codex"
 ln -sf "$fakebin/codex" "$fakebin/pi"
+ln -sf "$fakebin/codex" "$fakebin/agy"
 
 printf '2\n1-2\n' | PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" >"$tmp/wo-batch.out"
 

@@ -38,6 +38,18 @@
 - **且** 所有根目录 `tests/*.sh` 通过
 - **则** workflow 才能进入跨平台构建阶段
 
+// Sources: 18-修复GitHub-CI并更新仓库文档
+
+#### 场景：README 说明 CI/Release 门禁和本地复现入口
+- **给定** 仓库存在 `.github/workflows/ci.yml` 和 `.github/workflows/release.yml`
+- **当** 维护者阅读 README 和 release automation 规格
+- **则** README 必须说明 GitHub Actions、CI、Release、`go test ./...` 和根目录 `tests/*.sh`
+- **且** README 必须给出本地复现 GitHub CI 失败的入口
+- **且** release automation 规格必须继续说明 CI/Release 使用本地 `oz`、`wo` 和同一套测试门禁
+- **且** workflow 文件必须保留 `go test ./...` 和遍历根目录 `tests/*.sh`
+- **测试**：`tests/specs/release-automation/test_monorepo_cli_release_contract.sh`
+- **关键断言**：仓库文档、长期规格和 GitHub Actions workflow 对同一套门禁保持一致
+
 ### 需求：跨平台二进制构建
 
 系统必须为 Linux、macOS、Windows 的 x64 和 arm64 架构构建 `wo` CLI。
@@ -101,4 +113,5 @@
 - **当** 运行单仓库 CLI 发布规格测试
 - **则** workflow 中不得继续下载 `github.com/xbugs221/oz/releases/latest`
 - **且** workflow 必须包含从当前 checkout 构建 `./cmd/oz` 和 `./cmd/wo` 的步骤或命令
-- **且** workflow 必须继续运行 `go test ./...`
+- **且** CI 和 Release 使用本地 oz、wo 后必须继续运行 `go test ./...`
+- **且** CI 和 Release 必须继续遍历运行根目录 `tests/*.sh`

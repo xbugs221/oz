@@ -133,7 +133,7 @@ func testRegistry(runner AgentRunner) *AgentRegistry {
 	wrapped := subagentAwareRunner{runner: runner}
 	registry.Register(fakeTool{name: "codex", runner: wrapped})
 	registry.Register(fakeTool{name: "pi", runner: wrapped})
-	registry.Register(fakeTool{name: "pi", runner: wrapped})
+	registry.Register(fakeTool{name: "agy", runner: wrapped})
 	return registry
 }
 
@@ -546,7 +546,7 @@ func TestGoDAGRunsReadySubagentsConcurrently(t *testing.T) {
 	registry := &AgentRegistry{}
 	registry.Register(fakeTool{name: "codex", runner: runner})
 	registry.Register(fakeTool{name: "pi", runner: runner})
-	registry.Register(fakeTool{name: "pi", runner: runner})
+	registry.Register(fakeTool{name: "agy", runner: runner})
 	engine := NewEngine(repo, registry)
 	if err := engine.Start(context.Background(), "demo"); err != nil {
 		t.Fatal(err)
@@ -2582,7 +2582,7 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 	}{
 		{
 			name:       "wo-discuss",
-			mustHave:   []string{"oz-plan", "开始讨论规划"},
+			mustHave:   []string{"oz-plan", "讨论规划阶段"},
 			mustReject: []string{"change-name", "open questions"},
 		},
 		{

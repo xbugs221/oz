@@ -94,6 +94,19 @@ wo:
 
 配置按 `内置默认 -> ~/wo.yaml -> 仓库 wo.yaml -> run 快照` 合并；`validation.commands` 为空时不运行门禁，填入项目真实命令时使用 `executable` 和 `args` 描述 argv，`execution` 和 `fix` 阶段完成后会直接执行该程序，不经过 shell。
 
+## GitHub Actions 门禁
+
+仓库使用 GitHub Actions 运行 CI 和 Release 门禁。`CI` workflow 会在 push 和 pull request 时从当前 checkout 构建本地 `oz`、`wo`，然后运行：
+
+```bash
+go test ./...
+for script in tests/*.sh; do bash "$script"; done
+```
+
+`Release` workflow 在 `v*` tag 或手动触发时复用同一套测试门禁，只有 `go test ./...` 和根目录 `tests/*.sh` 业务测试全部通过后，才进入跨平台构建、校验和 GitHub Release 上传。
+
+复现 GitHub CI 失败时，先在仓库根目录运行上面的两类命令；如果失败发生在 `Run Go tests`，优先用 GitHub run 页面里的失败包和测试名缩小到定向 `go test` 命令，再对照相关 prompt、长期规格和提案测试检查合同是否一致。
+
 ## 批注
 
 > Openspec 是一个面向 AI 协作开发的 SDD（Spec-Driven Development，规格驱动开发）工具。它的核心思路是：先把“要改什么、为什么改、验收标准是什么”写成结构化文档，再让编程人员围绕这些规格推进，而不是直接根据一句临时模糊需求随意修改代码。落盘的文档和测试案例都将成为后续工作的可靠依据，也能方便协作

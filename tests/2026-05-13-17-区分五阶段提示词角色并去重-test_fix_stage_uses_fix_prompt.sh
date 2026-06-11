@@ -105,6 +105,7 @@ esac
 CODEX
 chmod +x "$fakebin/codex"
 ln -sf "$fakebin/codex" "$fakebin/pi"
+ln -sf "$fakebin/codex" "$fakebin/agy"
 
 cat > wo.yaml <<'YAML'
 wo:

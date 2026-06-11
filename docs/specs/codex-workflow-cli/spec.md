@@ -720,6 +720,18 @@
 
 系统必须从 YAML 的 `wo.prompts.planning/execution/review/qa/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `.wo/cmd` 或 `~/.wo/cmd`。未知 prompt 键必须在配置读取阶段被拒绝。
 
+// Sources: 18-修复GitHub-CI并更新仓库文档
+
+#### 场景：planning 首轮提示词保留技能入口和阶段语义
+
+- **给定** 当前阶段为 `planning`
+- **当** 系统渲染默认 planning prompt
+- **则** prompt 必须包含 `oz-plan` 技能入口
+- **且** prompt 必须包含“讨论规划阶段”这类用户可读阶段语义
+- **且** 迁移后的 app Go 合同测试必须继续覆盖 fanout artifact prompt 和 bundled skill prompt
+- **测试**：`tests/specs/codex-workflow-cli/test_stage_prompt_contract_completeness.sh`
+- **关键断言**：planning prompt 同时保留技能入口和用户阶段语义，GitHub CI 的 `go test ./...` 不会因 prompt 合同漂移失败
+
 #### 场景：review prompt 只默认暴露必要历史
 
 - **给定** 当前阶段为 `review_5`

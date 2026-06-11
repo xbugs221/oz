@@ -189,6 +189,7 @@ print(json.dumps({"type": "turn.completed"}))
 PY
 chmod +x "$FAKEBIN/codex"
 ln -sf "$FAKEBIN/codex" "$FAKEBIN/pi"
+ln -sf "$FAKEBIN/codex" "$FAKEBIN/agy"
 
 git add .
 git commit -m "init" >/dev/null

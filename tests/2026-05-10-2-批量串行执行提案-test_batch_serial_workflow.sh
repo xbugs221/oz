@@ -122,6 +122,7 @@ esac
 EOF
   chmod +x "$fakebin/codex"
   ln -sf "$fakebin/codex" "$fakebin/pi"
+ln -sf "$fakebin/codex" "$fakebin/agy"
 }
 
 fakebin="$tmp/fakebin"

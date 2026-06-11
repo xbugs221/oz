@@ -259,12 +259,13 @@ func goDAGContextState(t *testing.T, repo string, runID string) State {
 	}
 }
 
-// goDAGContextRegistry maps codex and pi to the deterministic fake runner.
+// goDAGContextRegistry maps supported agent backends to the deterministic fake runner.
 func goDAGContextRegistry(runner AgentRunner) *AgentRegistry {
 	registry := &AgentRegistry{}
 	tool := goDAGContextFakeTool{runner: runner}
 	registry.Register(tool)
 	registry.Register(goDAGContextNamedTool{name: "pi", runner: runner})
+	registry.Register(goDAGContextNamedTool{name: "agy", runner: runner})
 	return registry
 }
 

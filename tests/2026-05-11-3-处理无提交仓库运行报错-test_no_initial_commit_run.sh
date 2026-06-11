@@ -37,6 +37,7 @@ printf '{"type":"thread.started","thread_id":"fake-thread"}\n'
 EOF
 chmod +x "$fakebin/codex"
 ln -sf "$fakebin/codex" "$fakebin/pi"
+ln -sf "$fakebin/codex" "$fakebin/agy"
 
 new_repo() {
   local work="$1"

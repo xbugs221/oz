@@ -149,6 +149,7 @@ run_backend_case() {
   install_fake_oz "$fakebin"
   install_fake_agent "$fakebin" codex
   install_fake_agent "$fakebin" pi
+  ln -sf "$fakebin/pi" "$fakebin/agy"
   cat > "$work/wo.yaml" <<YAML
 wo:
   workflow:

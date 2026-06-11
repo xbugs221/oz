@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证 wo 内置阶段提示词首轮保留完整阶段合同，续轮只省略示例和方法论。
-# Sources: 6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同
+# Sources: 6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同, 18-修复GitHub-CI并更新仓库文档
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -160,3 +160,9 @@ GO
   cd "$ROOT"
   go test ./internal/app -run 'TestChangeSix.*Prompt' -count=1
 ) | tee "$RESULT_DIR/contract.log"
+
+(
+  cd "$ROOT"
+  OZ_MIGRATED_APP_RUN='TestParallelEnabledPromptsCarryFanoutArtifacts|TestBundledOzSkillPromptsDelegateToSkills' \
+    go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1
+) | tee -a "$RESULT_DIR/contract.log"

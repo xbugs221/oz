@@ -91,20 +91,26 @@ esac
 EOF
 chmod +x "$fakebin/codex"
 ln -sf "$fakebin/codex" "$fakebin/pi"
+ln -sf "$fakebin/codex" "$fakebin/agy"
+
+first_jsonl="$tmp/first.jsonl"
+first_err="$tmp/first.err"
+restart_jsonl="$tmp/restart.jsonl"
+restart_err="$tmp/restart.err"
 
 set +e
-PATH="$fakebin:/usr/bin:/bin" XDG_STATE_HOME="$state_home" "$bin" run --change 1-a --json > first.jsonl 2> first.err
+PATH="$fakebin:/usr/bin:/bin" XDG_STATE_HOME="$state_home" "$bin" run --change 1-a --json > "$first_jsonl" 2> "$first_err"
 first_code=$?
 set -e
 test "$first_code" -ne 0
-run_id="$(python3 -c 'import json; print(json.loads(open("first.jsonl").readline())["run_id"])')"
+run_id="$(FIRST_JSONL="$first_jsonl" python3 -c 'import json, os; print(json.loads(open(os.environ["FIRST_JSONL"]).readline())["run_id"])')"
 grep -q '"status": "failed"' "$(find "$state_home/wo/repos" -path "*/runs/$run_id/state.json" -print -quit)"
 
-if ! PATH="$fakebin:/usr/bin:/bin" XDG_STATE_HOME="$state_home" "$bin" restart --run-id "$run_id" --json > restart.jsonl 2> restart.err; then
-  cat restart.jsonl
-  cat restart.err >&2
+if ! PATH="$fakebin:/usr/bin:/bin" XDG_STATE_HOME="$state_home" "$bin" restart --run-id "$run_id" --json > "$restart_jsonl" 2> "$restart_err"; then
+  cat "$restart_jsonl"
+  cat "$restart_err" >&2
   exit 1
 fi
-python3 -c 'import json; assert json.loads(open("restart.jsonl").readline())["status"] == "running"'
+RESTART_JSONL="$restart_jsonl" python3 -c 'import json, os; assert json.loads(open(os.environ["RESTART_JSONL"]).readline())["status"] == "running"'
 grep -q '"status": "done"' "$(find "$state_home/wo/repos" -path "*/runs/$run_id/state.json" -print -quit)"
 test "$(find "$state_home/wo/repos" -path '*/runs/*/state.json' | wc -l)" -eq 1

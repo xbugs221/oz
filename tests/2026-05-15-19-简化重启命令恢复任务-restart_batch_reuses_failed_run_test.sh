@@ -98,6 +98,7 @@ esac
 EOF
 chmod +x "$fakebin/codex"
 ln -sf "$fakebin/codex" "$fakebin/pi"
+ln -sf "$fakebin/codex" "$fakebin/agy"
 
 repo_key="$(python3 - <<'PY'
 import hashlib, os
