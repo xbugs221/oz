@@ -710,6 +710,8 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 			"聚焦当前提案范围",
 			member.Purpose,
 			"SUBAGENT_OUTPUT=/tmp/member.json",
+			"go build -o test-results/<name>",
+			"不得留下 test-results/ 之外的构建产物",
 			"当前提案问题写 findings",
 			"历史债务或无关问题写 scope=out_of_scope_existing",
 			"status(0=ok,1=fail)",
@@ -2390,7 +2392,7 @@ func TestParallelEnabledPromptsCarryFanoutArtifacts(t *testing.T) {
 		want  []string
 	}{
 		{stage: "planning", want: []string{"讨论规划阶段", "oz-plan"}},
-			{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json"}},
+		{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json"}},
 		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "先把 gate_input 成员结论归一化"}},
 		{stage: "qa_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-qa-1.json", "acceptance_matrix"}},
 	}
@@ -2530,7 +2532,7 @@ func TestBundledReviewPromptUsesLatestHistoryOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-		for _, want := range []string{"完整变更", "docs/changes/demo", "review-5.json", "review-4.json", "fix-4-summary.md", "历史 review 数量：4", "严格 JSON", "evidence 必须可复核", "workflow_failure"} {
+	for _, want := range []string{"完整变更", "docs/changes/demo", "review-5.json", "review-4.json", "fix-4-summary.md", "历史 review 数量：4", "严格 JSON", "evidence 必须可复核", "workflow_failure"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("review prompt missing %q:\n%s", want, got)
 		}
@@ -2583,16 +2585,16 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 			mustHave:   []string{"oz-plan", "讨论规划阶段"},
 			mustReject: []string{"change-name", "open questions"},
 		},
-			{
-				name:       "wo-start",
-				mustHave:   []string{"oz-exec", "state.json.change_name", "当前 oz change", "acceptance.json", "不要超出当前提案范围"},
-				mustReject: []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"},
-			},
-			{
-				name:       "wo-done",
-				mustHave:   []string{"oz-archive", "delivery-summary.md", "最终审核"},
-				mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"},
-			},
+		{
+			name:       "wo-start",
+			mustHave:   []string{"oz-exec", "state.json.change_name", "当前 oz change", "acceptance.json", "不要超出当前提案范围"},
+			mustReject: []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"},
+		},
+		{
+			name:       "wo-done",
+			mustHave:   []string{"oz-archive", "delivery-summary.md", "最终审核"},
+			mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"},
+		},
 	} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", tc.name+".md"))
 		if err != nil {
@@ -2609,6 +2611,40 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 				t.Fatalf("%s prompt still contains %q:\n%s", tc.name, reject, body)
 			}
 		}
+	}
+}
+
+// TestGitSnapshotIgnoresTestResultsRuntimeEvidence keeps QA evidence out of read-only checks.
+func TestGitSnapshotIgnoresTestResultsRuntimeEvidence(t *testing.T) {
+	repo := gitRepo(t)
+	head, before, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidencePath := filepath.Join(repo, "test-results", "qa", "trace.log")
+	if err := os.MkdirAll(filepath.Dir(evidencePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(evidencePath, []byte("runtime evidence\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	afterHead, after, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterHead != head || after != before {
+		t.Fatalf("runtime evidence changed snapshot: head %q/%q status %q/%q", head, afterHead, before, after)
+	}
+	sourcePath := filepath.Join(repo, "unexpected.txt")
+	if err := os.WriteFile(sourcePath, []byte("source change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, dirty, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(dirty, "unexpected.txt") {
+		t.Fatalf("gitSnapshot status = %q, want unexpected source change", dirty)
 	}
 }
 

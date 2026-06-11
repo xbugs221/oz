@@ -99,7 +99,8 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		return err
 	}
 	if beforeHead != afterHead || beforeDiff != afterDiff {
-		return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到源码或 worktree 变化"))
+		detail := readOnlyBoundaryDetail(beforeHead, beforeDiff, afterHead, afterDiff)
+		return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到源码或 worktree 变化（%s），artifact=%s", detail, artifactPath))
 	}
 	if sessionID != "" {
 		if state.Sessions == nil {
@@ -125,7 +126,8 @@ func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMembe
 	if beforeHead == afterHead && beforeDiff == afterDiff {
 		return nil
 	}
-	return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到源码或 worktree 变化，artifact=%s", member.Name, attempt, artifactPath))
+	detail := readOnlyBoundaryDetail(beforeHead, beforeDiff, afterHead, afterDiff)
+	return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到源码或 worktree 变化（%s），artifact=%s", member.Name, attempt, detail, artifactPath))
 }
 
 // subagentOptions resolves member-specific backend settings.
@@ -156,6 +158,7 @@ func configuredParallelMember(workflow WorkflowConfig, groupName, memberName str
 func subagentPrompt(groupName string, member ParallelMemberConfig, output string) string {
 	return strings.Join([]string{
 		"只读，聚焦当前提案范围，" + member.Purpose,
+		subagentReadOnlyBoundaryPrompt(),
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"正向确认、已满足项或无操作项不要写入 findings；只能写入 summary/evidence。",
 		"只有违反 acceptance/spec 的可复现行为失败才能标为 blocker/major；更深覆盖建议、可维护性建议或未承诺扩展写 minor 或 out_of_scope_existing。",
@@ -317,6 +320,7 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifactPath string, schemaErr error) string {
 	return strings.Join([]string{
 		"只读，聚焦当前提案范围，" + member.Purpose,
+		subagentReadOnlyBoundaryPrompt(),
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
@@ -327,6 +331,11 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		memberArtifactSchemaPrompt(),
 		"只重写 SUBAGENT_OUTPUT。",
 	}, "\n") + "\n"
+}
+
+// subagentReadOnlyBoundaryPrompt tells helper agents where validation side effects may live.
+func subagentReadOnlyBoundaryPrompt() string {
+	return "只读边界：不要新增、修改或删除仓库文件；如需构建或运行测试，所有 -o、日志、截图、trace、coverage 等运行输出只能写入 test-results/ 或系统临时目录；例如 Go 二进制用 go build -o test-results/<name> ./cmd/<name>，结束时不得留下 test-results/ 之外的构建产物。"
 }
 
 func memberArtifactSchemaPrompt() string {
@@ -342,4 +351,90 @@ func isStringOrNumber(value interface{}) bool {
 	default:
 		return false
 	}
+}
+
+// readOnlyBoundaryDetail summarizes the git snapshot delta that violated read-only mode.
+func readOnlyBoundaryDetail(beforeHead, beforeDiff, afterHead, afterDiff string) string {
+	var parts []string
+	if beforeHead != afterHead {
+		parts = append(parts, fmt.Sprintf("HEAD %s -> %s", shortCommit(beforeHead), shortCommit(afterHead)))
+	}
+	if diff := statusDeltaSummary(beforeDiff, afterDiff); diff != "" {
+		parts = append(parts, diff)
+	}
+	if len(parts) == 0 {
+		return "worktree changed"
+	}
+	return strings.Join(parts, "；")
+}
+
+// statusDeltaSummary returns added and removed porcelain status lines.
+func statusDeltaSummary(before, after string) string {
+	added, removed := statusDelta(before, after)
+	var parts []string
+	if len(added) > 0 {
+		parts = append(parts, "新增/变更："+strings.Join(limitStatusLines(added), " | "))
+	}
+	if len(removed) > 0 {
+		parts = append(parts, "消失："+strings.Join(limitStatusLines(removed), " | "))
+	}
+	return strings.Join(parts, "；")
+}
+
+// statusDelta compares git porcelain status strings while preserving display order.
+func statusDelta(before, after string) ([]string, []string) {
+	beforeLines := statusLines(before)
+	afterLines := statusLines(after)
+	beforeSet := map[string]bool{}
+	for _, line := range beforeLines {
+		beforeSet[line] = true
+	}
+	afterSet := map[string]bool{}
+	for _, line := range afterLines {
+		afterSet[line] = true
+	}
+	var added []string
+	for _, line := range afterLines {
+		if !beforeSet[line] {
+			added = append(added, line)
+		}
+	}
+	var removed []string
+	for _, line := range beforeLines {
+		if !afterSet[line] {
+			removed = append(removed, line)
+		}
+	}
+	return added, removed
+}
+
+// statusLines splits a porcelain status snapshot into non-empty lines.
+func statusLines(status string) []string {
+	var lines []string
+	for _, line := range strings.Split(status, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// limitStatusLines caps diagnostics so workflow errors stay readable.
+func limitStatusLines(lines []string) []string {
+	const maxLines = 8
+	if len(lines) <= maxLines {
+		return lines
+	}
+	limited := append([]string{}, lines[:maxLines]...)
+	limited = append(limited, fmt.Sprintf("... 还有 %d 项", len(lines)-maxLines))
+	return limited
+}
+
+// shortCommit returns a readable prefix for full git commit ids.
+func shortCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if len(commit) <= 12 {
+		return commit
+	}
+	return commit[:12]
 }

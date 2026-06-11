@@ -1865,7 +1865,7 @@ func isUnbornBranch(repo, gitPath string) bool {
 	return verifyCmd.Run() != nil
 }
 
-// filterRuntimeStatus removes wo-owned runtime paths from git status snapshots.
+// filterRuntimeStatus removes workflow-owned runtime paths from git status snapshots.
 func filterRuntimeStatus(status string) string {
 	var kept []string
 	for _, line := range strings.Split(status, "\n") {
@@ -1873,7 +1873,7 @@ func filterRuntimeStatus(status string) string {
 			continue
 		}
 		path := strings.TrimSpace(line[3:])
-		if path == ".wo" || strings.HasPrefix(path, ".wo/") {
+		if path == ".wo" || strings.HasPrefix(path, ".wo/") || path == "test-results" || strings.HasPrefix(path, "test-results/") {
 			continue
 		}
 		kept = append(kept, line)
