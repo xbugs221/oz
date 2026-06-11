@@ -488,6 +488,49 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsTrackedTestResultsContract(t *testing.T) {
+	// TestValidateRejectsTrackedTestResultsContract keeps generated evidence out of git contracts.
+	project := newProject(t)
+	change := "2-重写-oz-go-cli"
+	writeValidChange(t, project, change)
+	contractPath := filepath.Join(project, "docs", "changes", change, "tests", "archive_test.go")
+	body := `package tests
+
+import "testing"
+
+func TestRuntimeEvidencePolicy(t *testing.T) {
+	_ = "git ls-files --error-unmatch test-results/archive.log"
+}
+`
+	if err := os.WriteFile(contractPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected validate to reject git-tracked test-results evidence")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "test-results") || !strings.Contains(result.stdout+result.stderr, "git ls-files") {
+		t.Fatalf("missing tracked test-results diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+}
+
+func TestValidateRejectsTestResultsGitignoreException(t *testing.T) {
+	// TestValidateRejectsTestResultsGitignoreException prevents workflows from unignoring runtime evidence.
+	project := newProject(t)
+	change := "2-重写-oz-go-cli"
+	writeValidChange(t, project, change)
+	if err := os.WriteFile(filepath.Join(project, ".gitignore"), []byte("test-results\n!test-results/keep.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected validate to reject test-results gitignore exception")
+	}
+	if !strings.Contains(result.stdout+result.stderr, ".gitignore") || !strings.Contains(result.stdout+result.stderr, "test-results") {
+		t.Fatalf("missing gitignore diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+}
+
 func TestValidateReportsUnreadableTestsDirectory(t *testing.T) {
 	// TestValidateReportsUnreadableTestsDirectory keeps JSON validation reliable for scripts.
 	if os.Getuid() == 0 {

@@ -576,6 +576,7 @@ func validateChange(root, change string) validationResult {
 	} else {
 		result.Errors = append(result.Errors, validateAcceptanceFiles(root, contract)...)
 	}
+	result.Errors = append(result.Errors, validateRuntimeArtifactPolicy(filepath.Dir(root), changeDir)...)
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0
 	return result
@@ -601,6 +602,38 @@ func validateAcceptanceFiles(root string, contract acceptance.Contract) []string
 	for i, evidence := range contract.RequiredEvidence {
 		if filepath.IsAbs(evidence.Path) || strings.TrimSpace(evidence.Path) == "." {
 			errs = append(errs, fmt.Sprintf("required_evidence[%d].path 必须是相对产物路径：%s", i, evidence.Path))
+		}
+	}
+	return errs
+}
+
+func validateRuntimeArtifactPolicy(projectRoot, changeDir string) []string {
+	// validateRuntimeArtifactPolicy keeps runtime output out of version-control contracts.
+	errs := []string{}
+	testsDir := filepath.Join(changeDir, "tests")
+	if entries, err := os.ReadDir(testsDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			path := filepath.Join(testsDir, entry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			text := string(data)
+			if strings.Contains(text, "test-results") && strings.Contains(text, "git ls-files") && strings.Contains(text, "--error-unmatch") {
+				rel, _ := filepath.Rel(projectRoot, path)
+				errs = append(errs, fmt.Sprintf("%s 不得要求 test-results 通过 git ls-files 被版本控制；测试结果是运行产物，只能校验存在性和内容", rel))
+			}
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(projectRoot, ".gitignore")); err == nil {
+		for lineNo, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "!test-results") || strings.HasPrefix(trimmed, "!/test-results") {
+				errs = append(errs, fmt.Sprintf(".gitignore:%d 不得为 test-results 添加跟踪例外；测试结果应保持忽略", lineNo+1))
+			}
 		}
 	}
 	return errs

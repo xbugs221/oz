@@ -19,6 +19,7 @@
 - 只验收当前提案范围，不修改源码或 `{{.AcceptancePath}}`。
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`。
 - `acceptance_matrix[].id` 必须逐字来自 `{{.AcceptancePath}}`。
+- `required_evidence` 只要求可复核，不要求进入 git。不要把 `test-results/`、截图、trace 或 runtime log 当作应提交产物；如果合同强制这些运行产物被 git 跟踪，QA 应判定合同错误。
 {{if .HasParallelQA}}
 - 读或生成 `{{.ParallelQAPath}}`；缺少 required evidence 或有 severity=1/2 finding 时，最终 `decision` 不得为 0。
 {{end}}
