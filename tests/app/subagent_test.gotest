@@ -4,6 +4,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -158,6 +159,33 @@ func TestNodeRunSubagentForcesPiSandbox(t *testing.T) {
 	path := memberArtifactPath(repo, state.RunID, "implementation_context", 0, "代码库侦察员")
 	if !fileExists(path) {
 		t.Fatalf("captured stdout artifact was not materialized at %s", path)
+	}
+}
+
+// TestExtractCapturedMemberJSONObjectSkipsNestedObjects protects Pi text capture from report JSON fragments.
+func TestExtractCapturedMemberJSONObjectSkipsNestedObjects(t *testing.T) {
+	member := ParallelMemberConfig{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式"}
+	text := strings.Join([]string{
+		"我先列出一个发现对象：",
+		`{"title":"resolveWorkbenchPath 对绝对路径不做词法检查","severity":3,"scope":1,"evidence":"局部 evidence 字符串","recommendation":"补测试"}`,
+		"最终产物如下：",
+		"```json",
+		`{"name":"代码库侦察员","change_name":"207-后端文件管理基础能力","purpose":"汇总 execution 需要读取的文件和测试模式","status":0,"summary":"已核对当前提案范围","evidence":["STATE_PATH","CHANGE_PATH"],"findings":[{"title":"受保护路径缺少回归测试","severity":3,"scope":1,"evidence":"acceptance 要求保护路径拒绝","recommendation":"补 RPC 测试"}]}`,
+		"```",
+	}, "\n")
+	data, err := extractCapturedMemberJSONObject(text, member, "207-后端文件管理基础能力")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result ParallelMemberResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Name != member.Name || result.ChangeName != "207-后端文件管理基础能力" {
+		t.Fatalf("captured artifact = %#v", result)
+	}
+	if len(result.Evidence) != 2 || len(result.Findings) != 1 {
+		t.Fatalf("captured nested fragment instead of full artifact: %#v", result)
 	}
 }
 

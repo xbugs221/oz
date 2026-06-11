@@ -120,7 +120,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if err != nil {
 			return e.failNodeState(state, err)
 		}
-		if err := materializeCapturedMemberArtifact(artifactPath, capture); err != nil {
+		if err := materializeCapturedMemberArtifact(artifactPath, capture, member, state.ChangeName); err != nil {
 			return e.failNodeState(state, err)
 		}
 		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
@@ -512,11 +512,11 @@ func memberArtifactSchemaPrompt() string {
 }
 
 // materializeCapturedMemberArtifact lets read-only backends return artifact JSON via stdout.
-func materializeCapturedMemberArtifact(path string, capture *artifactCapture) error {
+func materializeCapturedMemberArtifact(path string, capture *artifactCapture, member ParallelMemberConfig, expectedChange string) error {
 	if fileExists(path) {
 		return nil
 	}
-	data, err := extractCapturedJSONObject(capture.String())
+	data, err := extractCapturedMemberJSONObject(capture.String(), member, expectedChange)
 	if err != nil {
 		return nil
 	}
@@ -526,9 +526,11 @@ func materializeCapturedMemberArtifact(path string, capture *artifactCapture) er
 	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
-// extractCapturedJSONObject returns the first JSON object embedded in assistant text.
-func extractCapturedJSONObject(text string) ([]byte, error) {
+// extractCapturedMemberJSONObject returns the best member artifact object embedded in assistant text.
+func extractCapturedMemberJSONObject(text string, member ParallelMemberConfig, expectedChange string) ([]byte, error) {
 	text = strings.TrimSpace(text)
+	var best []byte
+	bestScore := 0
 	for index := 0; index < len(text); index++ {
 		if text[index] != '{' {
 			continue
@@ -539,11 +541,72 @@ func extractCapturedJSONObject(text string) ([]byte, error) {
 			continue
 		}
 		cleaned := bytes.TrimSpace(raw)
-		if len(cleaned) > 0 && cleaned[0] == '{' {
-			return cleaned, nil
+		if len(cleaned) == 0 || cleaned[0] != '{' {
+			continue
+		}
+		score, ok := scoreCapturedMemberJSONObject(cleaned, member, expectedChange)
+		if !ok {
+			continue
+		}
+		if score > bestScore {
+			bestScore = score
+			best = append([]byte(nil), cleaned...)
 		}
 	}
-	return nil, fmt.Errorf("captured artifact JSON object not found")
+	if len(best) > 0 {
+		return best, nil
+	}
+	return nil, fmt.Errorf("captured member artifact JSON object not found")
+}
+
+// scoreCapturedMemberJSONObject ranks complete member artifacts above nested finding JSON.
+func scoreCapturedMemberJSONObject(data []byte, member ParallelMemberConfig, expectedChange string) (int, bool) {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return 0, false
+	}
+	name, ok := capturedStringField(raw, "name")
+	if !ok {
+		return 0, false
+	}
+	changeName, ok := capturedStringField(raw, "change_name")
+	if !ok {
+		return 0, false
+	}
+	if _, ok := capturedStringField(raw, "summary"); !ok {
+		return 0, false
+	}
+	if artifactScalarText(raw["status"]) == "" {
+		return 0, false
+	}
+	score := 10
+	if name == strings.TrimSpace(member.Name) {
+		score += 50
+	}
+	expectedChange = strings.TrimSpace(expectedChange)
+	if expectedChange == "" || changeName == expectedChange {
+		score += 100
+	}
+	if _, ok := raw["evidence"]; ok {
+		score++
+	}
+	if _, ok := raw["findings"]; ok {
+		score++
+	}
+	return score, true
+}
+
+// capturedStringField reads a required top-level string from a captured JSON object.
+func capturedStringField(raw map[string]interface{}, field string) (string, bool) {
+	value, ok := raw[field].(string)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	return value, true
 }
 
 func isStringOrNumber(value interface{}) bool {
