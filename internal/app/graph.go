@@ -99,7 +99,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		beforeExecutionPrereqs = append(beforeExecutionPrereqs, WorkflowEdge{From: planning})
 	}
 	spec.addNode(WorkflowNode{ID: "execution", Name: "execution", Type: "main_stage", Stage: "execution"})
-	if before := addParallelGroup(&spec, workflow, "before_execution", "execution", 0, beforeExecutionPrereqs); before != "" {
+	if before := addParallelGroup(&spec, workflow, "implementation_context", "execution", 0, beforeExecutionPrereqs); before != "" {
 		spec.addEdge(before, "execution", "")
 	} else if len(beforeExecutionPrereqs) > 0 {
 		spec.addEdge(beforeExecutionPrereqs[0].From, "execution", "")
@@ -255,7 +255,7 @@ func configGroupName(visualGroup string) string {
 
 func graphArtifactPath(group string, iteration int) string {
 	switch group {
-	case "before_execution":
+	case "before_execution", "implementation_context":
 		return "parallel-implementation-context.json"
 	case "before_review":
 		return fmt.Sprintf("parallel-review-%d.json", iteration)

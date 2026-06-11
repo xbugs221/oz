@@ -417,7 +417,10 @@ func statusSubagentNode(state State, groupName, parentStage string, iteration, i
 	case "planning_context":
 		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
 	case "implementation_context":
-		candidates = append(candidates, fmt.Sprintf("before_execution_%d", index+1))
+		candidates = append(candidates,
+			fmt.Sprintf("implementation_context_%d", index+1),
+			fmt.Sprintf("before_execution_%d", index+1),
+		)
 	case "review", "qa":
 		if iteration > 0 {
 			candidates = append(candidates, fmt.Sprintf("%s_%d_%d", statusVisualGroupName(groupName), iteration, index+1))

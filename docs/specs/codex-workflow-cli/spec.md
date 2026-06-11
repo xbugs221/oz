@@ -400,6 +400,34 @@
 - **且** advisory 成员失败时必须记录失败摘要并继续主阶段
 - **且** required 成员失败时必须阻断阶段完成或推进
 
+// Sources: 17-已完成执行跳过上下文subagents
+
+#### 场景：task 全部完成时不启动 execution 前上下文 subagents
+
+- **给定** active change 的 `task.md` 已全部勾选
+- **且** `wo.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
+- **当** 用户运行 `wo run --change <change> --json`
+- **则** workflow 不得调用这些 execution 前 subagents
+- **且** 不得生成 execution context member artifact 或 subagent session
+- **且** workflow 仍可继续进入 archive 并完成
+- **测试**：`tests/specs/codex-workflow-cli/test_skip_execution_context_when_tasks_done.sh`
+- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `wo.yaml` 并运行当前仓库构建出的 `wo` 和 `oz`
+- **关键断言**：fake subagent 一旦收到 `SUBAGENT_OUTPUT` 就让测试失败；最终 state 必须为 `done` 且无 subagent session/artifact
+- **剩余风险**：该测试只覆盖 execution 前 advisory groups，不覆盖 review/QA gate input subagents
+
+#### 场景：task 未完成时仍启动 execution 前上下文 subagents
+
+- **给定** active change 的 `task.md` 尚未勾选
+- **且** `wo.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
+- **当** 用户运行 `wo run --change <change> --json`
+- **则** workflow 必须先调用这些 execution 前 subagents 并生成 fan-in artifact
+- **且** execution 主 agent 可以继续勾选 task
+- **且** workflow 可进入 archive 并完成
+- **测试**：`tests/specs/codex-workflow-cli/test_run_execution_context_when_tasks_pending.sh`
+- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `wo.yaml`，fake subagents 写入真实 member artifact
+- **关键断言**：两个 configured subagents 都被调用；`parallel-implementation-context.json` 包含两个成员；最终 state 为 `done`
+- **剩余风险**：fake execution 只勾选 task，不代表真实 agent 修改业务代码；真实修改质量仍由具体提案测试和 QA 负责
+
 #### 场景：并行成员 tool 不作为主阶段 CLI 参数
 
 - **给定** 所有主阶段使用默认 `codex`

@@ -148,6 +148,35 @@ func ValidateParallelContextGate(runPath string, workflow WorkflowConfig) error 
 	return nil
 }
 
+// validateExecutionParallelContextGate preserves required helper gates unless completed tasks skipped execution helpers.
+func (e *Engine) validateExecutionParallelContextGate(state State) error {
+	workflow := state.Workflow
+	if e.executionImplementationContextWasSkipped(state) {
+		groups := map[string]ParallelGroupConfig{}
+		for name, group := range workflow.Parallel.Groups {
+			groups[name] = group
+		}
+		workflow.Parallel.Groups = groups
+		delete(workflow.Parallel.Groups, "implementation_context")
+	}
+	return ValidateParallelContextGate(runDir(e.Repo, state.RunID), workflow)
+}
+
+// executionImplementationContextWasSkipped reports the go-dag path where already-done tasks skipped advisory helpers.
+func (e *Engine) executionImplementationContextWasSkipped(state State) bool {
+	if state.Stage != "execution" || !state.Workflow.Parallel.Enabled {
+		return false
+	}
+	if _, ok := state.Workflow.Parallel.Groups["implementation_context"]; !ok {
+		return false
+	}
+	if fileExists(parallelArtifactPath(runDir(e.Repo, state.RunID), "implementation_context", 0)) {
+		return false
+	}
+	done, err := ChangeTasksDone(e.Repo, state.ChangeName)
+	return err == nil && done
+}
+
 func readEnabledParallelArtifact(runPath string, workflow WorkflowConfig, group string, iteration int) (ParallelArtifact, bool, error) {
 	if !workflow.Parallel.Enabled {
 		return ParallelArtifact{}, false, nil

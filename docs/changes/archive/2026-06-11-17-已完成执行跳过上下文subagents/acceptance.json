@@ -1,0 +1,72 @@
+{
+  "summary": "验证 wo 在 oz task 已全部完成时跳过 execution 前上下文 subagents，同时保留 task 未完成时的正常 subagent 路径。",
+  "coverage": [
+    {
+      "spec": "需求：已完成执行跳过上下文 subagents / 场景：task 全部完成时不启动执行前 subagents",
+      "tests": ["skip-execution-context-when-tasks-done"],
+      "evidence": ["skip-execution-context-log", "skip-execution-context-state"],
+      "risk": "只验证 execution 前 advisory subagents，不放宽 review/QA gate input。"
+    },
+    {
+      "spec": "需求：未完成执行保留上下文 subagents / 场景：task 未完成时仍启动执行前 subagents",
+      "tests": ["run-execution-context-when-tasks-pending"],
+      "evidence": ["pending-execution-context-log", "pending-execution-context-state"],
+      "risk": "fake execution 只模拟勾选 task 的最小副作用，真实实现质量仍由具体业务提案测试覆盖。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "skip-execution-context-when-tasks-done",
+      "source": "change_contract",
+      "path": "docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh",
+      "command": "bash docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh",
+      "purpose": "证明 task 已全部完成时 wo 不再启动 execution 前代码侦察和外部资料 subagents。",
+      "assertions": [
+        "当 active change 的 task 已全部勾选时，fake subagent 一旦收到 SUBAGENT_OUTPUT 就让 workflow 失败",
+        "成功路径中 state.json 不包含 execution context subagent session，也没有 parallel member artifact",
+        "workflow 仍能进入 archive 并以 done 状态结束"
+      ],
+      "expected_initial_failure": "当前实现会先调度 implementation_context subagents，再判断 execution task 已完成，因此 fake subagent 会被调用并导致测试失败。"
+    },
+    {
+      "id": "run-execution-context-when-tasks-pending",
+      "source": "change_contract",
+      "path": "docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh",
+      "command": "bash docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh",
+      "purpose": "证明 task 未完成时 execution 前代码侦察和外部资料 subagents 仍按既有路径运行。",
+      "assertions": [
+        "当 active change 的 task 尚未勾选时，代码侦察和外部资料两个 subagents 都必须被调用",
+        "fan-in artifact 必须包含两个成功 member 结果",
+        "execution 主 agent 勾选 task 后 workflow 可以继续归档并以 done 状态结束"
+      ],
+      "expected_initial_failure": "如果实现为了跳过已完成路径而错误关闭 implementation_context，本测试会发现未完成 task 时 subagents 没有运行。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "skip-execution-context-log",
+      "kind": "runtime_log",
+      "path": "test-results/17-skip-execution-context/skip-when-done.log",
+      "purpose": "记录 task 已完成场景的 wo run 输出、状态检查和未调用 subagent 的断言过程。"
+    },
+    {
+      "id": "skip-execution-context-state",
+      "kind": "state_snapshot",
+      "path": "test-results/17-skip-execution-context/skip-when-done-state.json",
+      "purpose": "保留 task 已完成场景最终 state.json，便于复核 status、stage 和 sessions。"
+    },
+    {
+      "id": "pending-execution-context-log",
+      "kind": "runtime_log",
+      "path": "test-results/17-skip-execution-context/pending-runs-context.log",
+      "purpose": "记录 task 未完成场景中 subagents、execution 和 archive 的真实调度过程。"
+    },
+    {
+      "id": "pending-execution-context-state",
+      "kind": "state_snapshot",
+      "path": "test-results/17-skip-execution-context/pending-runs-context-state.json",
+      "purpose": "保留 task 未完成场景最终 state.json，便于复核 subagent sessions 和 workflow done 状态。"
+    }
+  ]
+}
+

@@ -528,6 +528,12 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 	timing = state.StageTimings[state.Stage]
 	timing.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	state.StageTimings[state.Stage] = timing
+	head, diff, snapshotErr := gitSnapshot(e.Repo)
+	if snapshotErr != nil {
+		return snapshotErr
+	}
+	state.BaselineHead = head
+	state.BaselineDiff = diff
 	e.printProgress(*state, "completed")
 	return saveState(e.Repo, *state)
 }
@@ -1033,7 +1039,7 @@ func (e *Engine) advance(state *State) error {
 	ensureWorkflowConfig(state)
 	switch {
 	case state.Stage == "execution":
-		if err := ValidateParallelContextGate(runDir(e.Repo, state.RunID), state.Workflow); err != nil {
+		if err := e.validateExecutionParallelContextGate(*state); err != nil {
 			return newStageArtifactGateError(err)
 		}
 		if state.Workflow.MaxReviewIterations == 0 {

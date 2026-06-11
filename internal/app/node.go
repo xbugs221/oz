@@ -41,6 +41,11 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 		if err := e.runStage(ctx, &state); err != nil {
 			return e.failNodeState(state, err)
 		}
+	} else {
+		if state.Stages == nil {
+			state.Stages = map[string]string{}
+		}
+		state.Stages[state.Stage] = "completed"
 	}
 	done, err = e.nodeStageDone(state)
 	if err != nil {
