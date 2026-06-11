@@ -21,7 +21,7 @@ make_repo() {
 - [ ] implement demo
 TASK
   cat > docs/changes/demo/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
   git add .
   git commit -m init >/dev/null
@@ -91,7 +91,7 @@ printf '{"type":"session","id":"%s"}\n' "$session"
 if grep -q '^acceptance ' <<<"$prompt"; then
   path="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
   mkdir -p "$(dirname "$path")"
-  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
+  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
 elif grep -q '^execution$' <<<"$prompt"; then
   printf -- '- [x] implement demo\n' > docs/changes/demo/task.md
 elif grep -q '^archive ' <<<"$prompt"; then
@@ -121,7 +121,7 @@ printf '{"type":"thread.started","thread_id":"codex-session"}\n'
 if grep -q '^acceptance ' <<<"$prompt"; then
   path="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
   mkdir -p "$(dirname "$path")"
-  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
+  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
 elif grep -q '^execution$' <<<"$prompt"; then
   printf -- '- [x] implement demo\n' > "$repo/docs/changes/demo/task.md"
 elif grep -q '^archive ' <<<"$prompt"; then
@@ -141,27 +141,25 @@ success_home="$tmp/home-success"
 mkdir -p "$fakebin" "$state_home" "$success_home"
 make_repo "$success_repo"
 install_fake_oz "$fakebin"
+install_fake_codex "$fakebin"
 install_fake_pi "$fakebin"
 cat > wo.yaml <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
+    parallel:
+      enabled: false
     stages:
-      writing:
+      execution:
         cli: pi
         model: anthropic/claude-sonnet
         reasoning: high
         fast: true
-      acceptance:
-        cli: pi
-        reasoning: high
       archive:
         cli: pi
         reasoning: low
   prompts:
-    acceptance: |
-      {{.Stage}} {{.AcceptancePath}}
-    writing: |
+    execution: |
       {{.Stage}}
     archive: |
       {{.Stage}} {{.DeliverySummaryPath}}
@@ -184,23 +182,22 @@ mkdir -p "$mixed_fakebin" "$mixed_state" "$mixed_home"
 make_repo "$mixed_repo"
 install_fake_oz "$mixed_fakebin"
 install_fake_codex "$mixed_fakebin"
+install_fake_pi "$mixed_fakebin"
 cat > wo.yaml <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
+    parallel:
+      enabled: false
     stages:
       planning:
         cli: pi
-      acceptance:
-        cli: codex
-      writing:
+      execution:
         cli: codex
       archive:
         cli: codex
   prompts:
-    acceptance: |
-      {{.Stage}} {{.AcceptancePath}}
-    writing: |
+    execution: |
       {{.Stage}}
     archive: |
       {{.Stage}} {{.DeliverySummaryPath}}
@@ -221,14 +218,15 @@ missing_home="$tmp/home-missing"
 mkdir -p "$missing_fakebin" "$missing_state" "$missing_home"
 make_repo "$missing_repo"
 install_fake_oz "$missing_fakebin"
+install_fake_codex "$missing_fakebin"
 cat > wo.yaml <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
+    parallel:
+      enabled: false
     stages:
-      writing:
-        cli: pi
-      acceptance:
+      execution:
         cli: pi
       archive:
         cli: pi

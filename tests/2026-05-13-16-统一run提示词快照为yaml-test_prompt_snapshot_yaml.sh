@@ -24,7 +24,7 @@ cat > docs/changes/demo/task.md <<'EOF'
 - [ ] task
 EOF
 cat > docs/changes/demo/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 git add .
 git commit -m init >/dev/null
@@ -74,9 +74,10 @@ case "$prompt" in
 wo:
   workflow:
     max_review_iterations: 1
+    parallel:
+      enabled: false
   prompts:
     planning: changed planning
-    acceptance: "changed acceptance {{.Stage}}\n"
     execution: "changed execution {{.Stage}}\n"
     fix: "changed fix {{.Stage}}\n"
     review: "changed review {{.Stage}}\n"
@@ -121,14 +122,16 @@ YAML
 esac
 EOF
 chmod +x "$fakebin/codex"
+ln -sf "$fakebin/codex" "$fakebin/pi"
 
 cat > wo.yaml <<'EOF'
 wo:
   workflow:
     max_review_iterations: 1
+    parallel:
+      enabled: false
   prompts:
     planning: planning
-    acceptance: "acceptance {{.Stage}} {{.AcceptancePath}}\n"
     execution: "snapshot execution {{.Stage}}\n"
     fix: "snapshot fix {{.Stage}} {{.FixSummaryPath}}\n"
     review: "review {{.Stage}} {{.ReviewPath}}\n"
@@ -150,12 +153,15 @@ grep -q 'snapshot fix fix_1' prompt-3.txt
 
 legacy_run="legacy-run"
 legacy_dir="$(dirname "$run_dir")/$legacy_run"
-mkdir -p "$legacy_dir/prompts"
-cat > "$legacy_dir/prompts/wo-start.md" <<'EOF'
-legacy {{.Stage}}
-EOF
-cat > "$legacy_dir/prompts/wo-done.md" <<'EOF'
-legacy {{.Stage}} {{.DeliverySummaryPath}}
+mkdir -p "$legacy_dir"
+cat > "$legacy_dir/prompt-snapshot.yaml" <<'EOF'
+prompts:
+  planning: "legacy {{.Stage}}\n"
+  execution: "legacy {{.Stage}}\n"
+  review: "legacy {{.Stage}} {{.ReviewPath}}\n"
+  qa: "legacy {{.Stage}} {{.QAPath}}\n"
+  fix: "legacy {{.Stage}} {{.FixSummaryPath}}\n"
+  archive: "legacy {{.Stage}} {{.DeliverySummaryPath}}\n"
 EOF
 printf -- '- [ ] task\n' > docs/changes/demo/task.md
 rm -f prompt-*.txt .fake-codex-count run.json

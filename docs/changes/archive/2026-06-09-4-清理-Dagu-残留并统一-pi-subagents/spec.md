@@ -41,7 +41,7 @@
 
 ### 需求：默认 parallel subagent tool 使用 pi
 
-系统必须让新项目通过 `wo config` 生成的默认 parallel planning/implementation subagent 成员使用 `tool: pi`，避免继续传播过时的 `opencode` 默认值。
+系统必须让新项目通过 `wo config` 生成的默认 parallel planning/implementation subagent 成员使用 `tool: pi`，避免继续传播过时的 `legacy-agent` 默认值。
 
 #### 场景：默认 subagent tool 为 pi
 
@@ -51,7 +51,7 @@
 - **关键断言**：
   - 生成的 `wo.yaml` 包含 `engine: go-dag`
   - planning/implementation parallel subagent 成员至少生成 5 个 `tool: pi`
-  - 生成的 `wo.yaml` 不包含 `tool: opencode`
+  - 生成的 `wo.yaml` 不包含 `tool: legacy-agent`
   - 默认 graph 仍包含 planning/implementation subagent 节点
 - **剩余风险**：该测试不要求 review/QA gate_input 成员写入 tool，因为它们当前没有单独 backend 线索。
 

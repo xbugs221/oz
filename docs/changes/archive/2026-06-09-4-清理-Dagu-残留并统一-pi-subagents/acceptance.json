@@ -86,10 +86,10 @@
       "assertions": [
         "wo config 生成的 wo.yaml 包含 engine: go-dag",
         "wo config 生成的 planning/implementation subagent 成员至少有 5 个 tool: pi",
-        "wo config 生成的 wo.yaml 不包含 tool: opencode",
+        "wo config 生成的 wo.yaml 不包含 tool: legacy-agent",
         "默认 graph JSON 仍包含 planning_context 和 implementation_context subagent 节点"
       ],
-      "expected_initial_failure": "当前内置默认配置仍把 planning/implementation subagent tool 写成 opencode。"
+      "expected_initial_failure": "当前内置默认配置仍把 planning/implementation subagent tool 写成 legacy-agent。"
     },
     {
       "id": "contract-compact-chinese-graph-iteration-limit",

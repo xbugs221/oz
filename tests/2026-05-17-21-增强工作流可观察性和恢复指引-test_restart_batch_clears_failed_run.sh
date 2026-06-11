@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+trap 'chmod -R u+w "$TMPDIR" 2>/dev/null || true; rm -rf "$TMPDIR" 2>/dev/null || true' EXIT
 
 export XDG_STATE_HOME="$TMPDIR/state"
 REPO="$TMPDIR/repo"
@@ -20,6 +20,9 @@ git config user.name Test
 
 # Create actual change directory so batch worker can create runs.
 mkdir -p docs/changes/1-重启变更
+cat > docs/changes/1-重启变更/brief.md <<'EOF'
+# 重启变更
+EOF
 cat > docs/changes/1-重启变更/proposal.md <<'EOF'
 # 重启变更
 EOF
@@ -46,7 +49,7 @@ cat > docs/changes/1-重启变更/task.md <<'EOF'
 - [ ] task
 EOF
 cat > docs/changes/1-重启变更/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","command":"bash docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","purpose":"cover restart contract"}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/restart.log","purpose":"prove restart runtime path"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","command":"bash docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","purpose":"cover restart contract","assertions":["restart clears failed batch run association and creates a new run"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/restart.log","purpose":"prove restart runtime path"}]}
 JSON
 mkdir -p docs/changes/1-重启变更/tests
 cat > docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh <<'EOF'
@@ -117,6 +120,7 @@ printf '{"type":"thread.started","thread_id":"fake-thread"}\n'
 exit 7
 EOF
 chmod +x "$FAKEBIN/codex"
+ln -sf "$FAKEBIN/codex" "$FAKEBIN/pi"
 
 # Restart the batch — the detached worker will eventually fail in the fake agent,
 # but createRun() runs before agent invocation and must produce a new run.

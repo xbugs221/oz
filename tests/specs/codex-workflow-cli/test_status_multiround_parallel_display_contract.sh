@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 RESULT_DIR="$ROOT/test-results/status-multiround-parallel-display"
-TEST_FILE="$ROOT/internal/app/status_multiround_parallel_display_contract_test.go"
+TEST_FILE="$ROOT/tests/app/status_multiround_parallel_display_contract_test.gotest"
 LOG="$RESULT_DIR/status-multiround-parallel-display.log"
 
 mkdir -p "$RESULT_DIR"
@@ -239,7 +239,9 @@ func saveMultiroundStatusResult(t *testing.T, text string) {
 GO
 
 note "运行 go test，期望执行前失败于 status 多轮并行展示合同"
-if WO_STATUS_MULTIRUN_RESULT_DIR="$RESULT_DIR" go test ./internal/app -run TestHumanStatusMultiRoundParallelDisplayContract -count=1 -v 2>&1 | tee -a "$LOG"; then
+if WO_STATUS_MULTIRUN_RESULT_DIR="$RESULT_DIR" \
+  OZ_MIGRATED_APP_RUN=TestHumanStatusMultiRoundParallelDisplayContract \
+  go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1 -v 2>&1 | tee -a "$LOG"; then
   note "合同测试已通过"
 else
   note "合同测试失败；若失败点是目标展示行为缺失，则符合创建阶段预期"

@@ -22,6 +22,18 @@ fail() {
   exit 1
 }
 
+# assert_no_run_state verifies preflight failed before wo created real run state.
+assert_no_run_state() {
+  local state_root="$1"
+  local output_file="$2"
+  if [[ -d "$state_root/wo/repos" ]]; then
+    find "$state_root/wo/repos" -path '*/runs/*/state.json' -type f | sort >"$output_file"
+    [[ ! -s "$output_file" ]] || fail "启动前检查失败后不应创建 run state"
+  else
+    : >"$output_file"
+  fi
+}
+
 # write_demo_change 创建一个最小真实 oz change，供真实 CLI 启动 sealed run。
 write_demo_change() {
   local repo="$1"
@@ -115,11 +127,41 @@ cat "$TMP/missing-pi.out" "$TMP/missing-pi.err" | tee -a "$LOG"
 [[ "$code" -ne 0 ]] || fail "缺少 pi 时 run 不应成功"
 grep -Eiq 'pi' "$TMP/missing-pi.out" "$TMP/missing-pi.err" || fail "错误输出必须指出缺少 pi"
 grep -Eiq '安装|install' "$TMP/missing-pi.out" "$TMP/missing-pi.err" || fail "错误输出必须提示用户先安装 CLI"
-if [[ -d "$RUN_STATE/oz/runs" ]]; then
-  find "$RUN_STATE/oz/runs" -maxdepth 2 -type f | sort >"$STATE_SNAPSHOT"
-  [[ ! -s "$STATE_SNAPSHOT" ]] || fail "启动前检查失败后不应创建 run state"
-fi
-printf 'no run state created\n' >"$STATE_SNAPSHOT"
+assert_no_run_state "$RUN_STATE" "$STATE_SNAPSHOT"
+! grep -q '"run_id"' "$TMP/missing-pi.out" "$TMP/missing-pi.err" || fail "启动前检查失败不应输出 run_id"
+printf 'missing pi: no run state created\n' >"$STATE_SNAPSHOT"
+
+note "创建只有 fake pi、没有 codex 的 PATH"
+FAKEBIN_NO_CODEX="$TMP/bin-no-codex"
+mkdir -p "$FAKEBIN_NO_CODEX"
+cat >"$FAKEBIN_NO_CODEX/pi" <<'SH'
+#!/usr/bin/env bash
+printf '{"status":"ok"}\n'
+exit 0
+SH
+chmod +x "$FAKEBIN_NO_CODEX/pi"
+ln -s "$(command -v git)" "$FAKEBIN_NO_CODEX/git"
+ln -s "$OZ" "$FAKEBIN_NO_CODEX/oz"
+
+note "缺少 codex 时必须在创建运行态前失败，并提示安装"
+RUN_HOME="$TMP/home-missing-codex"
+RUN_STATE="$TMP/state-missing-codex"
+mkdir -p "$RUN_HOME" "$RUN_STATE"
+set +e
+(
+  cd "$PROJECT"
+  HOME="$RUN_HOME" XDG_STATE_HOME="$RUN_STATE" PATH="$FAKEBIN_NO_CODEX" "$WO" run --change "$CHANGE" --json
+) >"$TMP/missing-codex.out" 2>"$TMP/missing-codex.err"
+code=$?
+set -e
+cat "$TMP/missing-codex.out" "$TMP/missing-codex.err" | tee -a "$LOG"
+[[ "$code" -ne 0 ]] || fail "缺少 codex 时 run 不应成功"
+grep -Eiq 'codex' "$TMP/missing-codex.out" "$TMP/missing-codex.err" || fail "错误输出必须指出缺少 codex"
+grep -Eiq '安装|install' "$TMP/missing-codex.out" "$TMP/missing-codex.err" || fail "错误输出必须提示用户先安装 CLI"
+snapshot_tmp="$TMP/missing-codex-state.txt"
+assert_no_run_state "$RUN_STATE" "$snapshot_tmp"
+! grep -q '"run_id"' "$TMP/missing-codex.out" "$TMP/missing-codex.err" || fail "启动前检查失败不应输出 run_id"
+printf 'missing codex: no run state created\n' >>"$STATE_SNAPSHOT"
 
 note "第三后端配置必须按未知工具失败"
 legacy_tool="open""code"

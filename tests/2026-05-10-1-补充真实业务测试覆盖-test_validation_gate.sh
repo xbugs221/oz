@@ -95,6 +95,7 @@ case "$prompt" in
 esac
 EOF
 chmod +x "$fakebin/codex"
+ln -sf "$fakebin/codex" "$fakebin/pi"
 
 cat > wo.yaml <<'EOF'
 wo:

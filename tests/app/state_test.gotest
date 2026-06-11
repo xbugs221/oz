@@ -132,7 +132,7 @@ func testRegistry(runner AgentRunner) *AgentRegistry {
 	registry := &AgentRegistry{}
 	wrapped := subagentAwareRunner{runner: runner}
 	registry.Register(fakeTool{name: "codex", runner: wrapped})
-	registry.Register(fakeTool{name: "opencode", runner: wrapped})
+	registry.Register(fakeTool{name: "pi", runner: wrapped})
 	registry.Register(fakeTool{name: "pi", runner: wrapped})
 	return registry
 }
@@ -545,7 +545,7 @@ func TestGoDAGRunsReadySubagentsConcurrently(t *testing.T) {
 	runner := &slowSubagentRunner{}
 	registry := &AgentRegistry{}
 	registry.Register(fakeTool{name: "codex", runner: runner})
-	registry.Register(fakeTool{name: "opencode", runner: runner})
+	registry.Register(fakeTool{name: "pi", runner: runner})
 	registry.Register(fakeTool{name: "pi", runner: runner})
 	engine := NewEngine(repo, registry)
 	if err := engine.Start(context.Background(), "demo"); err != nil {
@@ -1119,8 +1119,8 @@ func TestAcceptanceCodexDefaultPath(t *testing.T) {
 	}
 }
 
-// TestAcceptanceOpenCodeMinimalSealedRun verifies OpenCode can own a minimal sealed workflow.
-func TestAcceptanceOpenCodeMinimalSealedRun(t *testing.T) {
+// TestAcceptancePiMinimalSealedRun verifies Pi can own a minimal sealed workflow.
+func TestAcceptancePiMinimalSealedRun(t *testing.T) {
 	repo := gitRepo(t)
 	mustChange(t, repo, "demo")
 	mustPrompts(t, repo)
@@ -1129,7 +1129,7 @@ wo:
   workflow:
     max_review_iterations: 0
     defaults:
-      tool: opencode
+      tool: pi
 `)
 	runner := &scenarioRunner{}
 	engine := NewEngine(repo, testRegistry(runner))
@@ -1139,8 +1139,8 @@ wo:
 	if got := strings.Join(runner.stages, ","); got != "execution,archive" {
 		t.Fatalf("stages = %s, want minimal execution/archive", got)
 	}
-	if got := strings.Join(runner.tools, ","); got != "opencode,opencode" {
-		t.Fatalf("tools = %s, want opencode minimal sealed run", got)
+	if got := strings.Join(runner.tools, ","); got != "pi,pi" {
+		t.Fatalf("tools = %s, want pi minimal sealed run", got)
 	}
 }
 
@@ -1155,13 +1155,13 @@ wo:
     max_review_iterations: 1
     stages:
       execution:
-        tool: opencode
+        tool: pi
       review:
         tool: codex
       fix:
-        tool: opencode
+        tool: pi
       archive:
-        tool: opencode
+        tool: pi
 `)
 	runner := &scenarioRunner{decisions: []string{"needs_fix"}}
 	engine := NewEngine(repo, testRegistry(runner))
@@ -1171,8 +1171,8 @@ wo:
 	if got := strings.Join(runner.stages, ","); got != "execution,review_1,fix_1" {
 		t.Fatalf("stages = %s, want execution/review/fix before review limit", got)
 	}
-	if got := strings.Join(runner.tools, ","); got != "opencode,codex,opencode" {
-		t.Fatalf("tools = %s, want mixed opencode/codex/opencode path", got)
+	if got := strings.Join(runner.tools, ","); got != "pi,codex,pi" {
+		t.Fatalf("tools = %s, want mixed pi/codex/pi path", got)
 	}
 	state, err := loadState(repo, currentRunID(repo))
 	if err != nil {
@@ -1279,7 +1279,7 @@ func TestSessionKeysAreIsolatedByToolAndRole(t *testing.T) {
 		BaselineHead: head,
 		BaselineDiff: diff,
 		Sessions: map[string]string{
-			"opencode:executor": "opencode-session",
+			"pi:executor": "pi-session",
 		},
 		Stages:   map[string]string{},
 		Workflow: workflow,
@@ -1293,13 +1293,13 @@ func TestSessionKeysAreIsolatedByToolAndRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := strings.Join(runner.seen, ","); got != "codex:fix_1:" {
-		t.Fatalf("seen sessions = %q, want codex fix without opencode session", got)
+		t.Fatalf("seen sessions = %q, want codex fix without pi session", got)
 	}
 	final, err := loadState(repo, runID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if final.Sessions["codex:fixer"] == "" || final.Sessions["codex:executor"] != "" || final.Sessions["opencode:executor"] != "opencode-session" {
+	if final.Sessions["codex:fixer"] == "" || final.Sessions["codex:executor"] != "" || final.Sessions["pi:executor"] != "pi-session" {
 		t.Fatalf("sessions = %#v, want isolated fixer session", final.Sessions)
 	}
 }
@@ -2391,7 +2391,7 @@ func TestParallelEnabledPromptsCarryFanoutArtifacts(t *testing.T) {
 		stage string
 		want  []string
 	}{
-		{stage: "planning", want: []string{"讨论规划阶段", "oz-plan"}},
+		{stage: "planning", want: []string{"开始讨论规划", "oz-plan"}},
 		{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json"}},
 		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "先把 gate_input 成员结论归一化"}},
 		{stage: "qa_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-qa-1.json", "acceptance_matrix"}},
@@ -2416,15 +2416,15 @@ func TestParallelEnabledPromptsCarryFanoutArtifacts(t *testing.T) {
 func TestPromptContextExposesRoleSessionTurnState(t *testing.T) {
 	repo := t.TempDir()
 	workflow := DefaultWorkflowConfig()
-	workflow.Stages["review_2"] = StageOptions{Tool: "opencode"}
+	workflow.Stages["review_2"] = StageOptions{Tool: "pi"}
 	state := State{
 		RunID:      "run",
 		ChangeName: "demo",
 		Stage:      "review_2",
 		Workflow:   workflow,
 		Sessions: map[string]string{
-			"codex:reviewer":    "wrong-tool-session",
-			"opencode:reviewer": "review-session",
+			"codex:reviewer": "wrong-tool-session",
+			"pi:reviewer":    "review-session",
 		},
 	}
 
@@ -2432,8 +2432,8 @@ func TestPromptContextExposesRoleSessionTurnState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if context.RoleSessionKey != "opencode:reviewer" || context.RoleSessionID != "review-session" {
-		t.Fatalf("role session = %q/%q, want opencode reviewer session", context.RoleSessionKey, context.RoleSessionID)
+	if context.RoleSessionKey != "pi:reviewer" || context.RoleSessionID != "review-session" {
+		t.Fatalf("role session = %q/%q, want pi reviewer session", context.RoleSessionKey, context.RoleSessionID)
 	}
 	if !context.HasRoleSession || context.IsFirstRoleTurn {
 		t.Fatalf("turn flags = has:%t first:%t, want resumed role turn", context.HasRoleSession, context.IsFirstRoleTurn)
@@ -2582,7 +2582,7 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 	}{
 		{
 			name:       "wo-discuss",
-			mustHave:   []string{"oz-plan", "讨论规划阶段"},
+			mustHave:   []string{"oz-plan", "开始讨论规划"},
 			mustReject: []string{"change-name", "open questions"},
 		},
 		{

@@ -196,7 +196,6 @@ func statusRoleSessionID(state State, role string) string {
 	}
 	for _, key := range []string{
 		sessionStateKey("codex", role),
-		sessionStateKey("opencode", role),
 		sessionStateKey("pi", role),
 		role,
 	} {
@@ -452,7 +451,6 @@ func statusSubagentSessionID(state State, groupName string, member ParallelMembe
 		sessionStateKey(tool, "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
 		sessionStateKey("pi", "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
 		sessionStateKey("codex", "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
-		sessionStateKey("opencode", "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
 	}
 	for _, key := range keys {
 		if id := state.Sessions[key]; id != "" {

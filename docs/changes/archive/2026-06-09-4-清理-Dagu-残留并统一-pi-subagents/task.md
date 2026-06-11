@@ -5,7 +5,7 @@
 实现阶段观察：四个创建阶段契约测试在本轮执行时均已通过，说明目标行为已有前置实现；本轮继续整理源码边界、长期规格测试和任务状态。
 
 - [x] 1.1 运行 `bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`，确认当前实现因 Dagu/legacy 公开合同残留而失败
-- [x] 1.2 运行 `bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh`，确认当前实现因默认 subagent tool 仍为 `opencode` 而失败
+- [x] 1.2 运行 `bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh`，确认当前实现因默认 subagent tool 仍为 `legacy-agent` 而失败
 - [x] 1.3 运行 `bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`，确认当前实现因默认迭代数为 30、Mermaid graph 逐轮展开且 subagent 标签中英混杂而失败
 - [x] 1.4 运行 `bash docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh`，确认当前实现会在 subagent 写出对象型 `evidence` 后直接失败，而不是 resume 原会话修正 artifact
 
@@ -19,8 +19,8 @@
 
 ## 3. 统一默认 subagent tool
 
-- [x] 3.1 将 `defaultParallelConfig()` 中 planning/implementation 成员的 `Tool` 从 `opencode` 改为 `pi`
-- [x] 3.2 将默认 `wo.yaml` 模板中的 planning/implementation 成员 `tool` 从 `opencode` 改为 `pi`
+- [x] 3.1 将 `defaultParallelConfig()` 中 planning/implementation 成员的 `Tool` 从 `legacy-agent` 改为 `pi`
+- [x] 3.2 将默认 `wo.yaml` 模板中的 planning/implementation 成员 `tool` 从 `legacy-agent` 改为 `pi`
 - [x] 3.3 更新现有默认配置、graph/status 相关规格测试中的期望
 
 ## 4. 收紧迭代预算和 graph 展示

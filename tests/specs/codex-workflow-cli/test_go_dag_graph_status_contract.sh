@@ -74,8 +74,8 @@ do
     fail "Mermaid graph 不应暴露旧内部标签 $forbidden"
   fi
 done
-note "用 run-local state 验证 status 能展示 engine 和并行成员明细"
-test_file="$repo_root/internal/app/go_dag_status_contract_test.go"
+note "用 run-local state 验证 status 使用当前紧凑阶段视图"
+test_file="$repo_root/tests/app/go_dag_status_contract_test.gotest"
 trap 'rm -rf "$tmp"; rm -f "$test_file"' EXIT
 cat >"$test_file" <<'GO'
 package app
@@ -116,21 +116,28 @@ func TestGoDAGHumanStatusContract(t *testing.T) {
 	}
 	text := stdout.String()
 	for _, want := range []string{
-		"引擎 go-dag",
-		"并行 planning_context 3/3 success",
-		"需求分析员 success",
-		"并行 implementation_context 2/2 success",
-		"并行 review 5/5 success",
-		"目标核对审核员 success",
+		"- demo",
+		"  规划阶段 - ✓ -",
+		"  执行阶段 exec-session ✓ -",
+		"  审核阶段 - → -",
+		"  修正阶段 - - -",
+		"  测试阶段 - - -",
+		"  归档阶段 - - -",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("status output missing %q:\n%s", want, text)
+		}
+	}
+	for _, forbidden := range []string{"引擎 go-dag", "- 并行", "planning_context", "implementation_context", "parallel-review"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("status output leaked internal status text %q:\n%s", forbidden, text)
 		}
 	}
 	_ = os.RemoveAll(repo)
 }
 GO
 
-go test ./internal/app -run TestGoDAGHumanStatusContract -count=1 2>&1 | tee -a "$log"
+OZ_MIGRATED_APP_RUN=TestGoDAGHumanStatusContract \
+  go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1 2>&1 | tee -a "$log"
 
 note "PASS"

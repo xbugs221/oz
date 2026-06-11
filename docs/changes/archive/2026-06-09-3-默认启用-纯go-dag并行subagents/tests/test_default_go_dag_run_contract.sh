@@ -103,7 +103,7 @@ PY
 SH
 chmod +x "$fakebin/codex"
 
-cp "$fakebin/codex" "$fakebin/opencode"
+cp "$fakebin/codex" "$fakebin/legacy-agent"
 cp "$fakebin/codex" "$fakebin/pi"
 
 project="$tmp/project"

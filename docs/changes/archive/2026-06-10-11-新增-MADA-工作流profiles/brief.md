@@ -20,7 +20,7 @@
 - 不把 MADA 沙盒、Docker/E2B 或原位多人 Markdown 编辑纳入第一版。
 - 不改变默认 `wo config` 的行为和默认 profile 内容。
 - 不实现运行时从任意外部路径动态加载 profile；第一版只要求像 `prompts-template/*.md` 一样把内置模板从 Go 源码中剥离。
-- 不改变 `codex`、`opencode`、`pi` 三类 agent backend 的注册方式。
+- 不改变 `codex`、`legacy-agent`、`pi` 三类 agent backend 的注册方式。
 
 验收入口：
 

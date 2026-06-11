@@ -80,7 +80,7 @@ assert_profile_config() {
   pi_tool_count="$(grep -c '^              tool: pi$' "$yaml" || true)"
   [[ "$member_count" -gt 0 ]] || fail "$profile wo.yaml 缺少 subagent members"
   [[ "$pi_tool_count" -eq "$member_count" ]] || fail "$profile wo.yaml 必须为每个 subagent member 显式写 tool: pi，当前 $pi_tool_count/$member_count"
-  if grep -Eq '^[[:space:]]+tool: (codex|opencode)$' "$yaml"; then
+  if grep -Eq '^[[:space:]]+tool: (codex|legacy-agent)$' "$yaml"; then
     fail "$profile wo.yaml 不应包含非 pi subagent tool"
   fi
 

@@ -24,15 +24,16 @@ printf -- '- [ ] task\n' > docs/changes/1-a/task.md
 printf -- '- [ ] task\n' > docs/changes/2-b/task.md
 for change in 1-a 2-b; do
   cat > "docs/changes/$change/acceptance.json" <<JSON
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$change/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$change/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 done
 cat > wo.yaml <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
+    parallel:
+      enabled: false
   prompts:
-    acceptance: "{{.Stage}} {{.AcceptancePath}}\n"
     execution: "{{.Stage}}\n"
     archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
 YAML
@@ -85,7 +86,7 @@ fi
 case "$prompt" in
   acceptance*)
     acceptance="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
-    printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance"
+    printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance"
     ;;
   execution*) printf -- '- [x] task\n' > "$repo/docs/changes/$change/task.md" ;;
   archive*)
@@ -96,6 +97,7 @@ case "$prompt" in
 esac
 EOF
 chmod +x "$fakebin/codex"
+ln -sf "$fakebin/codex" "$fakebin/pi"
 
 repo_key="$(python3 - <<'PY'
 import hashlib, os

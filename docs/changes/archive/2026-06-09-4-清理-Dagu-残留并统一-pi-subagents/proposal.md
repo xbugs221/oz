@@ -4,7 +4,7 @@
 
 默认执行路径已经是内嵌 `go-dag`，但用户仍能在 `wo graph`、`wo run --engine dagu` 和 `workflow.engine` 配置中看到或触发 Dagu/legacy 相关路径。这会让用户误以为当前工作流还有多个同级 engine，需要理解 Dagu 安装、Dagu YAML 和旧串行 engine 的差异。
 
-同时，默认生成的 parallel subagent 配置仍写入 `tool: opencode`，而当前仓库实际配置和用户预期已经切到 `pi`。新项目运行 `wo config` 后会得到过时默认值，导致规划、执行上下文与实际默认工具不一致。
+同时，默认生成的 parallel subagent 配置仍写入 `tool: legacy-agent`，而当前仓库实际配置和用户预期已经切到 `pi`。新项目运行 `wo config` 后会得到过时默认值，导致规划、执行上下文与实际默认工具不一致。
 
 当前 go-dag subagent 产物还缺少“正常退出后的即时格式校验和修正”边界。真实运行中 subagent 已经成功退出并写出 `SUBAGENT_OUTPUT`，但把 `evidence` 写成对象数组，读取端按 `[]string` 解码时才失败，导致整个 run 直接进入 failed。这个失败应被识别为单个 subagent artifact contract 失败，并 resume 同一 subagent 会话要求重写产物，而不是等到 fan-in 或主 workflow 阶段才暴露为底层 JSON 解析错误。
 

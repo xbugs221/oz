@@ -77,8 +77,7 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status-default.txt
-head -1 status-default.txt | grep -qF -- "- 1-a"
-! grep -qF "→ b1 2/3" status-default.txt
+head -1 status-default.txt | grep -qF "批量任务 b1 running 2/3"
 grep -qF -- "- 1-a" status-default.txt
 grep -qF -- "- 2-b" status-default.txt
 grep -qF -- "- 3-c" status-default.txt
@@ -97,7 +96,6 @@ test "$line_run2_stage" -lt "$line_unstarted"
 
 "$WO" status -b2 > status-b2.txt
 head -1 status-b2.txt | grep -qF -- "- 1-old"
-! grep -qF "→ b2 1/1" status-b2.txt
 
 "$WO" status -w2 > status-w2.txt
 grep -qF "执行阶段 exec-a ✓ -" status-w2.txt

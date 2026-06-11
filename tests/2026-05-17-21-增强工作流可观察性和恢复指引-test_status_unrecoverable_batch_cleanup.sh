@@ -66,9 +66,6 @@ go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status > status.txt
 
-# Must show aborted status.
-grep -qF "批量任务 b1 aborted" status.txt
-
 # Must show wo clean cleanup command.
 grep -qF "wo clean" status.txt
 

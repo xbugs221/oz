@@ -36,6 +36,7 @@ printf 'agent started\n' > "$repo/agent-started"
 printf '{"type":"thread.started","thread_id":"fake-thread"}\n'
 EOF
 chmod +x "$fakebin/codex"
+ln -sf "$fakebin/codex" "$fakebin/pi"
 
 new_repo() {
   local work="$1"

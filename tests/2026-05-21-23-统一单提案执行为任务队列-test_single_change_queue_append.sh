@@ -46,6 +46,8 @@ cat > wo.yaml <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
+    parallel:
+      enabled: false
     stages:
       planning:
         cli: codex
@@ -67,7 +69,6 @@ wo:
       commands: []
   prompts:
     planning: "planning"
-    acceptance: "{{.Stage}} {{.ChangeName}} {{.StatePath}} {{.AcceptancePath}}"
     execution: "{{.Stage}} {{.ChangeName}} {{.StatePath}} {{.DeliverySummaryPath}}"
     review: "{{.Stage}} {{.ChangeName}} {{.StatePath}}"
     fix: "{{.Stage}} {{.ChangeName}} {{.StatePath}}"
@@ -82,7 +83,7 @@ for change in 1-a 2-b; do
   printf -- '- [ ] implement %s\n' "$change" > "docs/changes/$change/task.md"
   printf '#!/usr/bin/env bash\nexit 0\n' > "docs/changes/$change/tests/smoke.sh"
   cat > "docs/changes/$change/acceptance.json" <<JSON
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$change/tests/smoke.sh","command":"bash docs/changes/$change/tests/smoke.sh","purpose":"cover selected change contract"}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove queue runtime path"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$change/tests/smoke.sh","command":"bash docs/changes/$change/tests/smoke.sh","purpose":"cover selected change contract","assertions":["single change execution is represented by a one-item batch queue"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove queue runtime path"}]}
 JSON
 done
 
@@ -97,7 +98,12 @@ case "${1:-}" in
     printf '{"valid":true,"errors":[]}\n'
     ;;
   status)
-    printf '{"tasks":{"total":1,"done":0}}\n'
+    change="${2:-}"
+    if grep -q '\[x\]' "docs/changes/$change/task.md"; then
+      printf '{"tasks":{"total":1,"done":1}}\n'
+    else
+      printf '{"tasks":{"total":1,"done":0}}\n'
+    fi
     ;;
   *)
     printf 'unexpected oz command\n' >&2
@@ -139,6 +145,7 @@ if stage == "acceptance":
                 "path": f"docs/changes/{change}/tests/demo.acceptance.test.ts",
                 "command": "true",
                 "purpose": "cover the selected change contract",
+                "assertions": ["single change execution is represented by a one-item batch queue"],
             }],
             "required_evidence": [{
                 "id": "screenshot-demo",
@@ -181,6 +188,7 @@ print(json.dumps({"type": "thread.started", "thread_id": session}))
 print(json.dumps({"type": "turn.completed"}))
 PY
 chmod +x "$FAKEBIN/codex"
+ln -sf "$FAKEBIN/codex" "$FAKEBIN/pi"
 
 git add .
 git commit -m "init" >/dev/null

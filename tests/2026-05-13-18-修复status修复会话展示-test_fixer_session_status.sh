@@ -20,7 +20,7 @@ make_repo() {
 - [ ] implement demo
 TASK
   cat > "$work/docs/changes/demo/acceptance.json" <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["fixer sessions are saved per backend and shown in status"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
   git -C "$work" add .
   git -C "$work" commit -m init >/dev/null
@@ -103,13 +103,12 @@ fi
 
 case "$tool" in
   codex) printf '{"type":"thread.started","thread_id":"%s"}\n' "$session" ;;
-  opencode) printf '{"type":"session.updated","sessionID":"%s"}\n' "$session" ;;
   pi) printf '{"type":"session","id":"%s"}\n' "$session" ;;
 esac
 
 if grep -q '^acceptance$' <<<"$prompt"; then
   path="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
-  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
+  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["fixer sessions are saved per backend and shown in status"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
 elif grep -q '^execution$' <<<"$prompt"; then
   printf -- '- [x] implement demo\n' > "$repo/docs/changes/demo/task.md"
 elif grep -q '^review_1$' <<<"$prompt"; then
@@ -148,7 +147,8 @@ run_backend_case() {
   mkdir -p "$work" "$state_home" "$home" "$fakebin"
   make_repo "$work"
   install_fake_oz "$fakebin"
-  install_fake_agent "$fakebin" "$tool"
+  install_fake_agent "$fakebin" codex
+  install_fake_agent "$fakebin" pi
   cat > "$work/wo.yaml" <<YAML
 wo:
   workflow:
@@ -252,6 +252,5 @@ JSON
 }
 
 run_backend_case codex
-run_backend_case opencode
 run_backend_case pi
 run_legacy_case

@@ -469,7 +469,7 @@ func parallelGroupConfigFromInput(input parallelGroupConfigInput) (ParallelGroup
 			return ParallelGroupConfig{}, fmt.Errorf("members[%d].purpose 不能为空", i)
 		}
 		if tool != "" && !validAgentTool(tool) {
-			return ParallelGroupConfig{}, fmt.Errorf("members[%d].tool 无效：%q", i, tool)
+			return ParallelGroupConfig{}, fmt.Errorf("members[%d].tool 未知 agent tool %q", i, tool)
 		}
 		group.Members = append(group.Members, ParallelMemberConfig{
 			Name:     member.Name,
@@ -566,7 +566,7 @@ func mergeStageOptions(base *StageOptions, override stageOptionsInput) error {
 	}
 	if override.Tool != nil {
 		if !validAgentTool(*override.Tool) {
-			return fmt.Errorf("无效 tool %q", *override.Tool)
+			return fmt.Errorf("未知 agent tool %q", *override.Tool)
 		}
 		base.Tool = *override.Tool
 	}

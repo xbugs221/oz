@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证新项目默认 wo.yaml 中 parallel subagent tool 使用 pi 而不是 opencode。
+# 文件功能目的：验证新项目默认 wo.yaml 中 parallel subagent tool 使用 pi 而不是 legacy-agent。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -52,8 +52,8 @@ grep -q 'implementation_context:' "$PROJECT/wo.yaml" || fail "default wo.yaml sh
 
 pi_tool_count="$(grep -c 'tool: pi' "$PROJECT/wo.yaml" || true)"
 [[ "$pi_tool_count" -ge 5 ]] || fail "expected at least 5 default subagent tool: pi entries, got $pi_tool_count"
-if grep -q 'tool: opencode' "$PROJECT/wo.yaml"; then
-  fail "default wo.yaml should not contain tool: opencode"
+if grep -q 'tool: legacy-agent' "$PROJECT/wo.yaml"; then
+  fail "default wo.yaml should not contain tool: legacy-agent"
 fi
 
 note "default graph still contains planning and implementation subagent nodes"

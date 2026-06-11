@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"sort"
 	"strings"
 )
 
@@ -31,9 +30,12 @@ type AgentRegistry struct {
 // NewAgentRegistry returns the built-in agent tool registry.
 func NewAgentRegistry() *AgentRegistry {
 	registry := &AgentRegistry{tools: map[string]AgentTool{}}
-	registry.Register(CodexTool{})
-	registry.Register(OpenCodeTool{})
-	registry.Register(PiTool{})
+	for _, tool := range []AgentTool{
+		CodexTool{},
+		PiTool{},
+	} {
+		registry.Register(tool)
+	}
 	return registry
 }
 
@@ -57,16 +59,16 @@ func (r *AgentRegistry) Tool(name string) (AgentTool, error) {
 	return tool, nil
 }
 
-// ResolveForWorkflow checks only tools used by sealed-run stages.
+// ResolveForWorkflow checks every supported sealed-run CLI before state exists.
 func (r *AgentRegistry) ResolveForWorkflow(config WorkflowConfig) error {
 	normalizeWorkflowConfig(&config)
-	for _, name := range requiredAgentTools(config) {
+	for _, name := range requiredAgentTools() {
 		tool, err := r.Tool(name)
 		if err != nil {
 			return err
 		}
 		if err := tool.Resolve(); err != nil {
-			return err
+			return fmt.Errorf("%w；请先安装 %s CLI 后重试", err, name)
 		}
 	}
 	return nil
@@ -74,25 +76,12 @@ func (r *AgentRegistry) ResolveForWorkflow(config WorkflowConfig) error {
 
 // validAgentTool reports whether a config value names a supported backend.
 func validAgentTool(name string) bool {
-	return name == "codex" || name == "opencode" || name == "pi"
+	return name == "codex" || name == "pi"
 }
 
-// requiredAgentTools returns sorted unique backend names used by sealed-run stages.
-func requiredAgentTools(config WorkflowConfig) []string {
-	seen := map[string]bool{}
-	for _, stage := range workflowStagesForConfig(config) {
-		options, ok := config.Stages[stage]
-		if !ok {
-			continue
-		}
-		seen[options.Tool] = true
-	}
-	var names []string
-	for name := range seen {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+// requiredAgentTools returns every mandatory backend checked before sealed runs.
+func requiredAgentTools() []string {
+	return []string{"codex", "pi"}
 }
 
 // limitAgentDiagnostics keeps process error messages useful without recreating log files.

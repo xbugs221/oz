@@ -8,7 +8,7 @@ wo CLI
   +-- config.go
   |     +-- workflow.engine: go-dag / legacy / dagu
   |     +-- max_review_iterations: 30
-  |     +-- defaultParallelConfig(): opencode subagent tool
+  |     +-- defaultParallelConfig(): legacy-agent subagent tool
   |
   +-- graph.go
   |     +-- --format json
@@ -137,4 +137,4 @@ parallel subagent 在图中使用中文可见标签：
 - `go-dag` 仍复用现有 workflow node helper 时，代码中可能保留 `node` 概念；验收关注用户可见 Dagu contract 是否清掉，不要求一次性重命名所有内部 helper。
 - Mermaid 图改为紧凑视图后，不再逐个展示每轮节点；需要通过文案或 label 表达“最多 5 轮”这个业务约束，避免用户误解为只有 1 轮。
 - subagent artifact retry 可能让单个成员多跑两次；实现必须限制为最多 3 次，且每次后仍执行只读边界检查，避免“修格式”时修改源码或提案文档。
-- 如果 agent CLI 正常退出但没有返回 session id，仍可重试格式修正，但错误和状态必须说明无法 resume 原会话；默认路径应优先覆盖 pi/codex/opencode 的已有 session id 提取能力。
+- 如果 agent CLI 正常退出但没有返回 session id，仍可重试格式修正，但错误和状态必须说明无法 resume 原会话；默认路径应优先覆盖 pi/codex/legacy-agent 的已有 session id 提取能力。

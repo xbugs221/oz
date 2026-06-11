@@ -70,7 +70,7 @@ print(json.dumps({"type": "thread.started", "thread_id": "codex-" + stage}))
 PY
 SH
 chmod +x "$FAKEBIN/codex"
-cp "$FAKEBIN/codex" "$FAKEBIN/opencode"
+cp "$FAKEBIN/codex" "$FAKEBIN/legacy-agent"
 
 cat >"$FAKEBIN/pi" <<'SH'
 #!/usr/bin/env bash

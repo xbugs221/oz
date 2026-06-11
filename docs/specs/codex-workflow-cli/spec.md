@@ -187,7 +187,7 @@
 #### 场景：fixer session 按 backend 保存
 
 - **当** 系统执行任意 `fix_N` 阶段
-- **且** 当前阶段 effective tool 为 `codex`、`opencode` 或 `pi`
+- **且** 当前阶段 effective tool 为 `codex` 或 `pi`
 - **则** 系统必须把 stdout JSONL 中抽取的可恢复 session id 保存到 `<tool>:fixer`
 - **且** 不得保存为 `<tool>:executor`
 - **且** runner 返回 session id 后必须再次兜底更新同一个 `<tool>:fixer` key
@@ -331,7 +331,7 @@
 - **则** 输出必须显示 fan-out/fan-in、review clean/needs_fix、QA clean/needs_fix 和 archive gate
 - **且** 可选 graph format 只有 `json` 和 `mermaid`
 - **且** 图只描述 workflow spec，不暴露内部调度命令
-- **且** 不得直接拼接 `codex exec`、`pi --mode json` 或 `opencode run`
+- **且** 不得直接拼接 `codex exec` 或 `pi --mode json`
 - **且** 导出图时不得创建 run、batch 或 agent session
 
 #### 场景：workflow engine 只支持 go-dag
@@ -383,21 +383,22 @@
 - **且** advisory 成员失败时必须记录失败摘要并继续主阶段
 - **且** required 成员失败时必须阻断阶段完成或推进
 
-#### 场景：并行成员 tool 不参与 sealed run 工具发现
+#### 场景：并行成员 tool 不作为主阶段 CLI 参数
 
 - **给定** 所有主阶段使用默认 `codex`
 - **且** `workflow.parallel.enabled: true`
 - **且** 并行成员配置 `tool: pi` 和 `subagent: explore`
-- **当** sealed run 做工具发现
-- **则** 系统只要求主阶段需要的 `codex`
-- **且** 不得因为 prompt-only 并行成员要求本机存在 `pi`
+- **当** sealed run 构造主阶段 prompt 和 CLI 参数
+- **则** `tool/subagent` 只作为并行成员角色 metadata 和提示词线索
+- **且** 主阶段 CLI 参数不得包含 `--subagent`、`--agent` 或并行成员 `subagent` 名称
+- **且** sealed run 启动前工具发现仍按 Codex/Pi 后端集合固定要求本机同时存在 `codex` 和 `pi`
 
 #### 场景：Pi 参数不携带并行 subagent metadata
 
 - **给定** 主阶段使用 `cli: pi`
 - **且** 并行成员包含 `subagent: explore`
 - **当** 系统构造 Pi sealed run 参数
-- **则** 参数不得包含 `--subagent`、`--agent`、`explore` 或 OpenCode 专属 agent 参数
+- **则** 参数不得包含 `--subagent`、`--agent`、`explore` 或 Pi 专属 agent 参数
 
 // Sources: 12-收窄验收gate到提案范围
 
@@ -549,13 +550,13 @@
 
 ### 需求：阶段级 agent tool 和模型
 
-系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 agent CLI 和模型，且未配置时默认使用 Codex。未知阶段键必须在配置读取阶段被拒绝。内置 agent tool 包含 `codex`、`opencode` 和 `pi`，不支持把 `pi-ai` 作为 `pi` 的别名。
+系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 agent CLI 和模型，且未配置时默认使用 Codex。未知阶段键必须在配置读取阶段被拒绝。内置 agent tool 只支持 `codex` 和 `pi`，不支持第三后端，也不支持把 `pi-ai` 作为 `pi` 的别名。
 
-#### 场景：配置工具和模型
+#### 场景：配置 Codex 工具和模型
 
-- **当** 当前阶段的 effective tool 为 `opencode`
+- **当** 当前阶段的 effective tool 为 `codex`
 - **且** effective model 非空
-- **则** 系统调用 OpenCode 并传递 `-m <model>`
+- **则** 系统调用 Codex 并传递 `-m <model>`
 
 #### 场景：配置 Pi 工具和模型
 
@@ -570,6 +571,8 @@
 - **当** 任一 effective stage 的 `cli` 没有后端适配
 - **则** 系统在创建 sealed run 前报错
 - **且** 不创建 `用户状态目录 runs/` 运行态文件
+- **测试**：`tests/specs/codex-workflow-cli/test_agent_backend_allowlist_contract.sh`, `tests/specs/codex-workflow-cli/test_agent_cli_preflight_contract.sh`
+- **关键断言**：后端白名单只包含 `codex` 和 `pi`，第三后端配置按未知工具失败
 
 #### 场景：Pi 别名不兼容
 
@@ -579,15 +582,10 @@
 
 #### 场景：跨工具 session 隔离
 
-- **当** execution 使用 `opencode` 保存了 executor session
+- **当** execution 使用 `pi` 保存了 executor session
 - **且** fix 使用 `codex`
-- **则** fix 不得复用 OpenCode executor session
+- **则** fix 不得复用 Pi executor session
 - **且** fix 必须开启并保存 Codex fixer session
-
-#### 场景：OpenCode 忽略 fast
-
-- **当** 当前阶段的 effective tool 为 `opencode`
-- **则** 系统不得向 OpenCode 传递 Codex fast mode 参数
 
 #### 场景：Pi 忽略 fast
 
@@ -596,22 +594,26 @@
 
 ### 需求：Pi 工具发现和失败边界
 
-系统必须只检查当前路径实际需要的 Pi 可执行文件，并在缺失时避免创建不完整运行态。
+// Sources: 14-精简后端为-codex-pi-并迁移测试
 
-#### 场景：sealed run 只要求实际自动阶段工具
+系统必须在 sealed run 启动前同时检查 Codex 和 Pi 可执行文件，并在缺失时避免创建不完整运行态。
 
-- **给定** planning 配置 `cli: pi`
-- **且** execution、review、archive 均未配置 Pi
+#### 场景：sealed run 启动前检查 Codex/Pi
+
+- **给定** 任意 active change
 - **当** 用户启动 sealed run
-- **则** sealed run 工具发现不得要求 `pi` 存在
+- **则** 系统必须同时要求本机存在 `codex` 和 `pi`
+- **测试**：`tests/specs/codex-workflow-cli/test_agent_cli_preflight_contract.sh`
+- **关键断言**：缺失 `codex` 或 `pi` 时命令失败、提示安装、且不创建 run state
 
-#### 场景：Pi 缺失时不创建 sealed run
+#### 场景：Codex 或 Pi 缺失时不创建 sealed run
 
-- **给定** sealed run 自动阶段配置 `cli: pi`
-- **且** PATH 中不存在 `pi`
+- **给定** PATH 中不存在 `codex` 或 `pi`
 - **当** 用户启动 sealed run
-- **则** 系统返回找不到 `pi` 可执行文件的错误
+- **则** 系统返回找不到对应可执行文件的错误
 - **且** 不创建用户状态目录中的 `runs/` 运行态文件
+- **测试**：`tests/specs/codex-workflow-cli/test_agent_cli_preflight_contract.sh`
+- **关键断言**：启动前检查失败发生在 sealed run 状态落盘之前
 
 #### 场景：Pi 进程失败包含诊断
 
@@ -2079,7 +2081,7 @@
 
 - **当** 用户运行 `wo --help` 或 `wo --version`
 - **则** 命令必须成功返回
-- **且** 不得要求本机存在 `oz`、`codex` 或 `opencode`
+- **且** 不得要求本机存在 `oz`、`codex` 或 `pi`
 - **且** 测试必须断言 stdout 中的关键用户可见内容
 
 #### 场景：配置命令写入预期文件
@@ -2135,7 +2137,7 @@
 - **当** `oz list --json` 返回一个 active change
 - **且** 用户选择该 change
 - **则** 系统必须提交该 change 的 sealed run
-- **且** 测试必须使用 fake agent runner，不能启动真实 Codex 或 OpenCode
+- **且** 测试必须使用 fake agent runner，不能启动真实 Codex 或 Pi
 
 ### 需求：validation gate 失败与重试
 
@@ -2165,7 +2167,26 @@
 
 ### 需求：业务回归测试约束
 
+// Sources: 14-精简后端为-codex-pi-并迁移测试
+
 系统新增测试必须围绕 workflow 使用场景，而不是只为了覆盖私有函数。
+
+#### 场景：生产源码和长期测试分离
+
+- **当** 扫描 `internal/` 目录
+- **则** 不存在长期 `*_test.go`
+- **且** 根目录 `tests/` 下存在可运行的业务测试入口
+- **且** 迁移后的 `tests/app` Go 测试可通过 `go test ./tests/app/...` 执行
+- **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
+- **关键断言**：生产源码目录无长期 Go 测试，根目录测试入口可执行
+
+#### 场景：主规格和发布门禁使用根目录测试
+
+- **当** 检查主规格和发布门禁测试
+- **则** 主规格只承诺 Codex/Pi 后端和启动前 CLI 检查
+- **且** 发布门禁不得依赖 `go test ./internal`
+- **测试**：`tests/specs/codex-workflow-cli/test_docs_release_gate_root_tests_contract.sh`
+- **关键断言**：文档、发布门禁和根目录测试布局一致
 
 #### 场景：归档后的 shell 测试可独立运行
 

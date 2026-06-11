@@ -56,7 +56,7 @@ EOF
 chmod +x "$TMPDIR/bin/oz"
 
 # 4. Create fake agent inline
-cat > "$TMPDIR/bin/opencode" <<'PYEOF'
+cat > "$TMPDIR/bin/legacy-agent" <<'PYEOF'
 #!/usr/bin/env python3
 import json, os, re, sys, time
 
@@ -141,8 +141,9 @@ if stage == "archive" and change_name:
 print(json.dumps({"type": "thread.started", "thread_id": "fake-thread"}))
 print(json.dumps({"type": "turn.completed"}))
 PYEOF
-chmod +x "$TMPDIR/bin/opencode"
-ln -sf "$TMPDIR/bin/opencode" "$TMPDIR/bin/codex"
+chmod +x "$TMPDIR/bin/legacy-agent"
+ln -sf "$TMPDIR/bin/legacy-agent" "$TMPDIR/bin/codex"
+ln -sf "$TMPDIR/bin/legacy-agent" "$TMPDIR/bin/pi"
 
 # 5. Create active changes
 for name in 1-a 2-b 3-c; do

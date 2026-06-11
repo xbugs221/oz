@@ -95,7 +95,7 @@ PY
 SH
 chmod +x "$fakebin/codex"
 
-cp "$fakebin/codex" "$fakebin/opencode"
+cp "$fakebin/codex" "$fakebin/legacy-agent"
 cp "$fakebin/codex" "$fakebin/pi"
 
 project="$tmp/project"
@@ -110,6 +110,12 @@ cat >"$project/docs/changes/1-默认go-dag/proposal.md" <<'MD'
 ## 背景
 
 这个临时 change 用来验证 wo 默认运行路径。
+MD
+
+cat >"$project/docs/changes/1-默认go-dag/brief.md" <<'MD'
+# 默认 go-dag
+
+验证默认 wo run 使用 go-dag 推进真实 change，并保留状态观测合同。
 MD
 
 cat >"$project/docs/changes/1-默认go-dag/design.md" <<'MD'
@@ -154,7 +160,8 @@ cat >"$project/docs/changes/1-默认go-dag/acceptance.json" <<'JSON'
       "source": "change_contract",
       "path": "docs/changes/1-默认go-dag/tests/test_contract.sh",
       "command": "bash docs/changes/1-默认go-dag/tests/test_contract.sh",
-      "purpose": "证明临时 change 包含真实测试入口"
+      "purpose": "证明临时 change 包含真实测试入口",
+      "assertions": ["默认 wo run 使用 go-dag 推进 execution 并完成 archive"]
     }
   ],
   "required_evidence": [
@@ -210,16 +217,17 @@ print(json.load(open(sys.argv[1], encoding="utf-8"))["run_id"])
 PY
 )"
 
-note "检查人类 status 输出包含 go-dag 和并行摘要"
+note "检查人类 status 输出包含并行成员阶段树"
 WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
   bash -c 'cd "$1" && "$2" status -w1' _ "$project" "$wo" >"$tmp/status.txt"
 cat "$tmp/status.txt" >>"$log"
-grep -qF "引擎 go-dag" "$tmp/status.txt" || fail "wo status 必须显示引擎 go-dag"
-grep -qF "并行 planning_context" "$tmp/status.txt" || fail "wo status 必须显示 planning_context 并行摘要"
-grep -qF "并行 implementation_context" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行摘要"
+grep -qF "规划阶段" "$tmp/status.txt" || fail "wo status 必须显示 planning 阶段"
+grep -qF "执行阶段 fake-main-session-execution" "$tmp/status.txt" || fail "wo status 必须显示 execution 主阶段 session"
+grep -qF "代码侦察" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
+grep -qF "外部资料" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
 
 note "检查 JSON status 兼容旧 runner contract"
 WO_TEST_REPO="$project" \

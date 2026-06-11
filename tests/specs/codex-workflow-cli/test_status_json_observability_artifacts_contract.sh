@@ -4,7 +4,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 result_dir="$repo_root/test-results/7-status-watch-compact-output"
-test_file="$repo_root/internal/app/status_json_observability_artifacts_contract_test.go"
+test_file="$repo_root/tests/app/status_json_observability_artifacts_contract_test.gotest"
 
 mkdir -p "$result_dir"
 log="$result_dir/status-json-observability-artifacts.log"
@@ -272,4 +272,5 @@ func saveJSONResult(t *testing.T, name, body string) {
 GO
 
 note "运行 JSON observability 契约测试"
-go test ./internal/app -run TestStatusJSONObservabilityArtifactsContract -count=1 2>&1 | tee -a "$log"
+OZ_MIGRATED_APP_RUN=TestStatusJSONObservabilityArtifactsContract \
+  go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1 2>&1 | tee -a "$log"

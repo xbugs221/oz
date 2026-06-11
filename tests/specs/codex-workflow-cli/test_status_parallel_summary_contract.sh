@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 RESULT_DIR="$ROOT/test-results/32-status-parallel/summary"
-TEST_FILE="$ROOT/internal/app/status_parallel_summary_contract_test.go"
+TEST_FILE="$ROOT/tests/app/status_parallel_summary_contract_test.gotest"
 
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
@@ -275,4 +275,6 @@ func statusSaveResult(t *testing.T, name string, text string) {
 }
 GO
 
-WO_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR" go test ./internal/app -run 'TestHumanStatusHidesParallelFanInSummary|TestParallelReviewGateRejectsMissingOrInvalidArtifact|TestParallelReviewGateRejectsUnconfiguredParallelMembers|TestBatchHumanStatusHidesParallelSummaryUnderChange' -count=1 -v | tee "$RESULT_DIR/contract.log"
+WO_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR" \
+  OZ_MIGRATED_APP_RUN='TestHumanStatusHidesParallelFanInSummary|TestParallelReviewGateRejectsMissingOrInvalidArtifact|TestParallelReviewGateRejectsUnconfiguredParallelMembers|TestBatchHumanStatusHidesParallelSummaryUnderChange' \
+  go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1 -v | tee "$RESULT_DIR/contract.log"

@@ -47,11 +47,15 @@
 - **当** 用户运行 `wo run --change demo --json`
 - **则** 命令在 agent 执行前失败
 - **且** 输出明确提到缺失的 `pi` 和安装指引
+- **给定** 临时 PATH 中只有 fake `pi`，没有 `codex`
+- **当** 用户运行 `wo run --change demo --json`
+- **则** 命令在 agent 执行前失败
+- **且** 输出明确提到缺失的 `codex` 和安装指引
 - **且** 用户状态目录下不出现 `runs/` 运行态
 - **对应测试**：`docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh`
 - **真实数据来源**：临时真实 git 仓库、真实编译后的 `wo` CLI、受控 PATH
 - **入口路径**：`wo run --change demo --json`
-- **关键断言**：缺失 `pi` 时失败、包含安装提示、不创建状态
+- **关键断言**：缺失 `pi` 或 `codex` 时失败、包含安装提示、不创建状态
 - **剩余风险**：安装指引不校验具体 URL，只要求人能理解下一步
 
 ### 需求：源码和测试分离

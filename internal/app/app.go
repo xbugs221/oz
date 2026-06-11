@@ -907,7 +907,7 @@ func projectName(repo string) string {
 
 // printHelp writes supported command-line options.
 func printHelp(stdout io.Writer) {
-	fmt.Fprintln(stdout, "wo 通过封闭的 Codex/OpenCode/Pi 工作流执行 oz 变更。")
+	fmt.Fprintln(stdout, "wo 通过封闭的 Codex/Pi 工作流执行 oz 变更。")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "用法：")
 	fmt.Fprintln(stdout, "  wo")

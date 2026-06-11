@@ -228,8 +228,7 @@ grep -qF -- "修正阶段 fixer-thread ✓✓ 8.00" status-w3.txt
 ! grep -qF -- "fix_2" status-w3.txt
 
 "$WO" status > status-batch.txt
-head -1 status-batch.txt | grep -qF -- "- 1-演示统计"
-! grep -qF "→ b1 1/2" status-batch.txt
+head -1 status-batch.txt | grep -qF "批量任务 b1 running 1/2"
 grep -qF -- "- 1-演示统计" status-batch.txt
 grep -qF -- "  执行阶段 executor-thread ✓ 100.00" status-batch.txt
 grep -qF -- "  审核阶段 reviewer-thread ✓ 120.00" status-batch.txt

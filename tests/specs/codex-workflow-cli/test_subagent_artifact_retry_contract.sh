@@ -24,11 +24,14 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
+OZ_BIN="$TMP/oz"
 note "build real wo binary"
 (cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/test.log" 2>&1
+(cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
+ln -s "$OZ_BIN" "$FAKEBIN/oz"
 
 cat >"$FAKEBIN/codex" <<'SH'
 #!/usr/bin/env bash
@@ -62,7 +65,7 @@ print(json.dumps({"type": "thread.started", "thread_id": "codex-" + stage}))
 PY
 SH
 chmod +x "$FAKEBIN/codex"
-cp "$FAKEBIN/codex" "$FAKEBIN/opencode"
+cp "$FAKEBIN/codex" "$FAKEBIN/legacy-agent"
 
 cat >"$FAKEBIN/pi" <<'SH'
 #!/usr/bin/env bash
@@ -138,7 +141,7 @@ SH
 chmod +x "$FAKEBIN/pi"
 
 PROJECT="$TMP/project"
-mkdir -p "$PROJECT/docs/changes/1-subagent-artifact-retry/tests"
+mkdir -p "$PROJECT/docs/changes/1-子代理artifact重试/tests"
 (
   cd "$PROJECT"
   git init -q
@@ -146,7 +149,7 @@ mkdir -p "$PROJECT/docs/changes/1-subagent-artifact-retry/tests"
   git config user.name "Test User"
 )
 
-cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/proposal.md" <<'MD'
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/proposal.md" <<'MD'
 # subagent artifact retry
 
 ## 问题
@@ -154,43 +157,56 @@ cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/proposal.md" <<'MD'
 验证 go-dag subagent artifact schema retry。
 MD
 
-cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/design.md" <<'MD'
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/brief.md" <<'MD'
+# subagent artifact retry
+
+验证 go-dag 对 subagent artifact schema 错误执行同会话重试，并在只读边界被破坏时停止。
+MD
+
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/design.md" <<'MD'
 # 设计
 
 使用 fake pi 产生一次格式错误，再由 wo resume 原会话修正。
 MD
 
-cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/spec.md" <<'MD'
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/spec.md" <<'MD'
 # 规格
 
 ### 需求：subagent artifact retry
 
 系统必须修正 subagent artifact schema 错误。
+
+#### 场景：同会话修复 artifact
+
+- **当** subagent 首次写出 schema 错误 artifact
+- **则** go-dag 必须复用原 subagent session 重试
+- **且** 修复后的 fan-in artifact 必须继续推进
 MD
 
-cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/task.md" <<'MD'
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/task.md" <<'MD'
 # 任务
 
 - [ ] 1.1 完成 subagent artifact retry 验证
 MD
 
-cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/tests/smoke.sh" <<'SH'
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/tests/test_smoke.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-test -f docs/changes/1-subagent-artifact-retry/acceptance.json
+test -f docs/changes/1-子代理artifact重试/acceptance.json
 SH
-chmod +x "$PROJECT/docs/changes/1-subagent-artifact-retry/tests/smoke.sh"
+chmod +x "$PROJECT/docs/changes/1-子代理artifact重试/tests/test_smoke.sh"
 
-cat >"$PROJECT/docs/changes/1-subagent-artifact-retry/acceptance.json" <<'JSON'
+cat >"$PROJECT/docs/changes/1-子代理artifact重试/acceptance.json" <<'JSON'
 {
   "summary": "subagent artifact retry acceptance",
   "required_tests": [
     {
       "id": "smoke",
       "source": "change_contract",
-      "path": "docs/changes/1-subagent-artifact-retry/tests/smoke.sh",
-      "command": "bash docs/changes/1-subagent-artifact-retry/tests/smoke.sh",
-      "purpose": "prove change test entry exists"
+      "path": "docs/changes/1-子代理artifact重试/tests/test_smoke.sh",
+      "command": "bash docs/changes/1-子代理artifact重试/tests/test_smoke.sh",
+      "purpose": "prove change test entry exists",
+      "assertions": ["subagent artifact schema retry resumes the same session and repairs evidence"]
     }
   ],
   "required_evidence": [
@@ -237,7 +253,7 @@ WO_TEST_REPO="$PROJECT" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-subagent-artifact-retry" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
+  bash -c 'cd "$1" && "$2" run --change "1-子代理artifact重试" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
 run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/test.log"
@@ -278,7 +294,7 @@ WO_TEST_REPO="$PROJECT_READONLY" \
 XDG_STATE_HOME="$TMP/state-readonly" \
 HOME="$TMP/home-readonly" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-subagent-artifact-retry" --json' _ "$PROJECT_READONLY" "$WO_BIN" >"$RESULT_DIR/readonly-run.jsonl" 2>"$RESULT_DIR/readonly-run.err"
+  bash -c 'cd "$1" && "$2" run --change "1-子代理artifact重试" --json' _ "$PROJECT_READONLY" "$WO_BIN" >"$RESULT_DIR/readonly-run.jsonl" 2>"$RESULT_DIR/readonly-run.err"
 readonly_code=$?
 set -e
 cat "$RESULT_DIR/readonly-run.jsonl" >>"$RESULT_DIR/test.log"

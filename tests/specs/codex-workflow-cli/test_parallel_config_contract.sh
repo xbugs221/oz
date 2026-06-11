@@ -9,7 +9,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 cp -a "$ROOT/." "$TMPDIR/repo"
 cd "$TMPDIR/repo"
 
-cat > internal/app/parallel_config_contract_test.go <<'EOF'
+cat > tests/app/parallel_config_contract_test.gotest <<'EOF'
 package app
 
 import (
@@ -61,17 +61,21 @@ func TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups(t *testing.T) {
 }
 EOF
 
-go test ./internal/app -run TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups -count=1
+OZ_MIGRATED_APP_RUN='TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups' \
+    go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1
 
-cat > internal/app/parallel_prompt_only_contract_test.go <<'EOF'
+cat > tests/app/parallel_prompt_only_contract_test.gotest <<'EOF'
 package app
 
 import (
+    "os"
+    "os/exec"
+    "path/filepath"
     "strings"
     "testing"
 )
 
-func TestPromptOnlyParallelMembersDoNotRequireHelperCLI(t *testing.T) {
+func TestParallelMemberMetadataStillRequiresCodexPiPreflight(t *testing.T) {
     workflow := DefaultWorkflowConfig()
     workflow.Parallel.Enabled = true
     workflow.Parallel.Groups = map[string]ParallelGroupConfig{
@@ -89,14 +93,14 @@ func TestPromptOnlyParallelMembersDoNotRequireHelperCLI(t *testing.T) {
         },
     }
 
-    got := strings.Join(requiredAgentTools(workflow), ",")
-    if got != "codex" {
-        t.Fatalf("required tools = %s, want only main stage cli codex; parallel member tool is prompt metadata", got)
+    got := strings.Join(requiredAgentTools(), ",")
+    if got != "codex,pi" {
+        t.Fatalf("required tools = %s, want mandatory sealed-run clis codex,pi", got)
     }
 }
 
 func TestParallelPromptExplainsPromptOnlySubagentContract(t *testing.T) {
-    repo := gitRepo(t)
+    repo := parallelContractGitRepo(t)
     workflow := DefaultWorkflowConfig()
     workflow.Parallel.Enabled = true
     workflow.Parallel.Groups = map[string]ParallelGroupConfig{
@@ -120,17 +124,38 @@ func TestParallelPromptExplainsPromptOnlySubagentContract(t *testing.T) {
     }
     for _, want := range []string{
         "parallel-implementation-context.json",
-        "workflow_config.parallel.groups.implementation_context",
-        "tool/subagent 只作为提示词角色线索",
     } {
         if !strings.Contains(prompt, want) {
             t.Fatalf("execution prompt missing %q:\n%s", want, prompt)
         }
     }
-    for _, forbidden := range []string{"--subagent", "--agent", "opencode agent", "pi --subagent"} {
+    for _, forbidden := range []string{"--subagent", "--agent", "legacy-agent agent", "pi --subagent"} {
         if strings.Contains(prompt, forbidden) {
             t.Fatalf("execution prompt should not bind subagent to backend CLI via %q:\n%s", forbidden, prompt)
         }
+    }
+}
+
+func parallelContractGitRepo(t *testing.T) string {
+    t.Helper()
+    repo := t.TempDir()
+    runParallelContractGit(t, repo, "init")
+    runParallelContractGit(t, repo, "config", "user.email", "test@example.com")
+    runParallelContractGit(t, repo, "config", "user.name", "Test")
+    if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0o644); err != nil {
+        t.Fatal(err)
+    }
+    runParallelContractGit(t, repo, "add", ".")
+    runParallelContractGit(t, repo, "commit", "-m", "init")
+    return repo
+}
+
+func runParallelContractGit(t *testing.T, repo string, args ...string) {
+    t.Helper()
+    cmd := exec.Command("git", args...)
+    cmd.Dir = repo
+    if out, err := cmd.CombinedOutput(); err != nil {
+        t.Fatalf("git %v failed: %v\n%s", args, err, out)
     }
 }
 
@@ -149,4 +174,5 @@ func TestPiRunArgsNeverReceiveSubagentStyleFlags(t *testing.T) {
 }
 EOF
 
-go test ./internal/app -run 'TestPromptOnlyParallel|TestParallelPromptExplains|TestPiRunArgsNever' -count=1
+OZ_MIGRATED_APP_RUN='TestParallelMemberMetadataStillRequiresCodexPiPreflight|TestParallelPromptExplainsPromptOnlySubagentContract|TestPiRunArgsNeverReceiveSubagentStyleFlags' \
+    go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1

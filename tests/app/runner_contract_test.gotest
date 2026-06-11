@@ -616,14 +616,14 @@ wo:
     max_review_iterations: 0
     stages:
       execution:
-        tool: opencode
+        tool: pi
 `)
 	registry := &AgentRegistry{}
 	registry.Register(fakeTool{name: "codex", runner: fakeRunner{}})
 	engine := NewEngine(repo, registry)
 	err := engine.Start(context.Background(), "demo")
-	if err == nil || !strings.Contains(err.Error(), `未知 agent tool "opencode"`) {
-		t.Fatalf("Start error = %v, want missing opencode tool", err)
+	if err == nil || !strings.Contains(err.Error(), `未知 agent tool "pi"`) {
+		t.Fatalf("Start error = %v, want missing pi tool", err)
 	}
 	if fileExists(filepath.Join(repo, ".wo", "runs")) {
 		t.Fatal("missing tool should fail before creating sealed run state")

@@ -24,7 +24,7 @@ cat > docs/changes/demo/task.md <<'TASKS'
 - [ ] task
 TASKS
 cat > docs/changes/demo/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 git add .
 git commit -m init >/dev/null
@@ -81,6 +81,10 @@ case "$prompt" in
     qa_path="$(grep -o '/tmp/[^`[:space:]]*qa-2\.json' <<<"$prompt" | tail -n 1)"
     printf '{"summary":"qa ok","decision":"clean","evidence":["Playwright test passed with screenshot artifact test-results/demo.png"],"findings":[],"acceptance_matrix":[{"id":"contract-demo","status":"passed","artifact":"docs/changes/demo/tests/demo.acceptance.test.ts","evidence":"contract test passed"},{"id":"screenshot-demo","status":"passed","artifact":"test-results/demo.png","evidence":"screenshot artifact shows demo runtime"}]}\n' > "$qa_path"
     ;;
+  *"fix-1-summary.md"*)
+    fix_path="$(grep -o '/tmp/[^`[:space:]]*fix-1-summary\.md' <<<"$prompt" | tail -n 1)"
+    printf 'fixed\n' > "$fix_path"
+    ;;
   *"review-2.json"*)
     review_path="$(grep -o '/tmp/[^`[:space:]]*review-2\.json' <<<"$prompt" | tail -n 1)"
     printf '{"summary":"ok","decision":"clean","checks":{"oz_aligned":true,"tasks_verified":true,"tests_meaningful":true,"implementation_scoped":true,"runtime_behavior_verified":true,"previous_findings_resolved":true},"evidence":["validation artifact passed: validation-execution-1.json","runtime evidence: Playwright screenshot test-results/demo.png"],"findings":[]}\n' > "$review_path"
@@ -89,13 +93,9 @@ case "$prompt" in
     review_path="$(grep -o '/tmp/[^`[:space:]]*review-1\.json' <<<"$prompt" | tail -n 1)"
     printf '{"summary":"fix","decision":"needs_fix","checks":{"oz_aligned":false,"tasks_verified":false,"tests_meaningful":false,"implementation_scoped":true,"runtime_behavior_verified":false,"previous_findings_resolved":false},"evidence":[],"findings":[{"title":"bug","severity":"major","evidence":"failed","recommendation":"fix"}]}\n' > "$review_path"
     ;;
-  *"fix-1-summary.md"*)
-    fix_path="$(grep -o '/tmp/[^`[:space:]]*fix-1-summary\.md' <<<"$prompt" | tail -n 1)"
-    printf 'fixed\n' > "$fix_path"
-    ;;
   *"acceptance.json"*)
     acceptance_path="$(grep -o '/tmp/[^`[:space:]]*acceptance\.json' <<<"$prompt" | tail -n 1)"
-    printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract"}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance_path"
+    printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance_path"
     ;;
   *)
     printf 'unexpected prompt: %s\n' "$prompt" >&2
@@ -104,6 +104,14 @@ case "$prompt" in
 esac
 CODEX
 chmod +x "$fakebin/codex"
+ln -sf "$fakebin/codex" "$fakebin/pi"
+
+cat > wo.yaml <<'YAML'
+wo:
+  workflow:
+    parallel:
+      enabled: false
+YAML
 
 PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" run --change demo --json > run.json
 run_id="$(grep -o '"run_id":"[^"]*"' run.json | head -n 1 | cut -d '"' -f 4)"

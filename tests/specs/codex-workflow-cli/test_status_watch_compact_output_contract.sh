@@ -4,7 +4,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 result_dir="$repo_root/test-results/7-status-watch-compact-output"
-test_file="$repo_root/internal/app/status_watch_compact_output_contract_test.go"
+test_file="$repo_root/tests/app/status_watch_compact_output_contract_test.gotest"
 tmpdir=""
 
 mkdir -p "$result_dir"
@@ -240,7 +240,8 @@ func saveCompactResult(t *testing.T, name, body string) {
 GO
 
 note "运行 compact human 输出契约测试"
-go test ./internal/app -run TestStatusWatchCompactOutputContract -count=1 2>&1 | tee -a "$log"
+OZ_MIGRATED_APP_RUN=TestStatusWatchCompactOutputContract \
+  go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1 2>&1 | tee -a "$log"
 
 if ! command -v script >/dev/null 2>&1; then
   echo "缺少 script 命令，无法运行伪 TTY watch 合同测试" | tee -a "$log" >&2

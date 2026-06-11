@@ -115,7 +115,6 @@ func TestAgentRunnersReturnResolveErrors(t *testing.T) {
 		runner AgentRunner
 	}{
 		{name: "codex", runner: NewCodexCLI()},
-		{name: "opencode", runner: OpenCodeTool{}.NewRunner()},
 		{name: "pi", runner: PiTool{}.NewRunner()},
 	}
 	for _, tc := range cases {
@@ -194,31 +193,31 @@ func TestDefaultWorkflowConfigSetsStageOptions(t *testing.T) {
 // TestRequiredAgentToolsUsesOnlySealedStages verifies command discovery can skip unused tools.
 func TestRequiredAgentToolsUsesOnlySealedStages(t *testing.T) {
 	config := DefaultWorkflowConfig()
-	if got := strings.Join(requiredAgentTools(config), ","); got != "codex" {
-		t.Fatalf("tools = %s, want codex", got)
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
+		t.Fatalf("tools = %s, want mandatory codex/pi preflight", got)
 	}
-	config.Stages["planning"] = StageOptions{Tool: "opencode"}
-	if got := strings.Join(requiredAgentTools(config), ","); got != "codex" {
-		t.Fatalf("tools = %s, sealed run should not require planning-only tool", got)
+	config.Stages["planning"] = StageOptions{Tool: "pi"}
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
+		t.Fatalf("tools = %s, want mandatory codex/pi preflight", got)
 	}
-	config.Stages["execution"] = StageOptions{Tool: "opencode"}
-	if got := strings.Join(requiredAgentTools(config), ","); got != "codex,opencode" {
+	config.Stages["execution"] = StageOptions{Tool: "pi"}
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
 		t.Fatalf("tools = %s, want mixed tools", got)
 	}
 	config.Stages["planning"] = StageOptions{Tool: "pi"}
-	if got := strings.Join(requiredAgentTools(config), ","); got != "codex,opencode" {
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
 		t.Fatalf("tools = %s, planning-only pi should not be required", got)
 	}
 	config.Stages["archive"] = StageOptions{Tool: "pi"}
-	if got := strings.Join(requiredAgentTools(config), ","); got != "codex,opencode,pi" {
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
 		t.Fatalf("tools = %s, want pi when used by sealed stage", got)
 	}
 	for stage, options := range config.Stages {
-		options.Tool = "opencode"
+		options.Tool = "pi"
 		config.Stages[stage] = options
 	}
-	if got := strings.Join(requiredAgentTools(config), ","); got != "opencode" {
-		t.Fatalf("tools = %s, want opencode only", got)
+	if got := strings.Join(requiredAgentTools(), ","); got != "codex,pi" {
+		t.Fatalf("tools = %s, want mandatory codex/pi preflight", got)
 	}
 }
 

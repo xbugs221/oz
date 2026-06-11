@@ -107,7 +107,7 @@ paths_json.write_text(json.dumps({
 }, indent=2) + "\n", encoding="utf-8")
 PY
 
-OUTPUT=$("$WO" clean 2>&1)
+OUTPUT=$("$WO" clean --agent-sessions 2>&1)
 printf '%s\n' "$OUTPUT"
 
 export CLEAN_OUTPUT="$OUTPUT"

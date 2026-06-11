@@ -195,7 +195,7 @@ wo:
       fast: false
     stages:
       review:
-        cli: opencode
+        cli: pi
         model: review-model
         reasoning: high
         fast: false
@@ -224,8 +224,8 @@ wo:
 		t.Fatalf("max iterations = %d, want 4", config.MaxReviewIterations)
 	}
 	review, _ := config.StageOption("review_4")
-	if review.Tool != "opencode" || review.Model != "review-four-model" || review.Reasoning != "xhigh" || review.Fast {
-		t.Fatalf("review_4 = %#v, want opencode/review-four-model/xhigh/false", review)
+	if review.Tool != "pi" || review.Model != "review-four-model" || review.Reasoning != "xhigh" || review.Fast {
+		t.Fatalf("review_4 = %#v, want pi/review-four-model/xhigh/false", review)
 	}
 	fix, _ := config.StageOption("fix_2")
 	if fix.Tool != "codex" || fix.Model != "base-model" || fix.Reasoning != "medium" || !fix.Fast {
@@ -328,15 +328,15 @@ func TestParallelArtifactPathUsesStableRunLocalNames(t *testing.T) {
 // TestRequiredAgentToolsIgnoresPromptOnlyParallelMembers verifies helper metadata does not require a CLI.
 func TestRequiredAgentToolsIgnoresPromptOnlyParallelMembers(t *testing.T) {
 	config := DefaultWorkflowConfig()
-	disabled := requiredAgentTools(config)
-	if strings.Contains(strings.Join(disabled, ","), "opencode") {
-		t.Fatalf("disabled parallel tools = %v, want sealed stage tools only", disabled)
+	disabled := requiredAgentTools()
+	if strings.Join(disabled, ",") != "codex,pi" {
+		t.Fatalf("disabled parallel tools = %v, want mandatory codex/pi preflight", disabled)
 	}
 
 	config.Parallel.Enabled = true
-	enabled := requiredAgentTools(config)
-	if strings.Contains(strings.Join(enabled, ","), "opencode") {
-		t.Fatalf("enabled parallel tools = %v, want sealed stage tools only", enabled)
+	enabled := requiredAgentTools()
+	if strings.Join(enabled, ",") != "codex,pi" {
+		t.Fatalf("enabled parallel tools = %v, want mandatory codex/pi preflight", enabled)
 	}
 }
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证生产源码目录不再保存长期测试，测试入口集中在根目录 tests。
+# 文件功能目的：验证长期业务测试位于根目录 tests，生产源码 internal 不再保存长期 Go 测试。
+# Sources: 14-精简后端为-codex-pi-并迁移测试
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-LOG="$ROOT/test-results/14-root-test-layout.log"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+LOG="$ROOT/test-results/spec-root-test-layout.log"
 mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
 
@@ -26,8 +27,13 @@ fi
 
 note "检查根目录 tests 存在业务测试入口"
 [[ -d "$ROOT/tests" ]] || fail "缺少根目录 tests 目录"
-root_test_count="$(cd "$ROOT" && find tests -type f \( -name '*_test.go' -o -name '*.sh' \) | wc -l | tr -d ' ')"
+root_test_count="$(cd "$ROOT" && find tests -type f \( -name '*_test.go' -o -name '*.gotest' -o -name '*.sh' \) | wc -l | tr -d ' ')"
 [[ "$root_test_count" -gt 0 ]] || fail "根目录 tests 下没有可运行测试入口"
+
+note "检查迁移后的 app Go 测试可由 go test 执行"
+if find "$ROOT/tests/app" -type f -name '*.gotest' -print -quit | grep -q .; then
+  (cd "$ROOT" && go test ./tests/app/...) 2>&1 | tee -a "$LOG" || fail "tests/app 迁移测试不能由 go test 执行"
+fi
 
 note "检查 tests/app 或 tests/specs 至少存在一个分组"
 if [[ ! -d "$ROOT/tests/app" && ! -d "$ROOT/tests/specs" ]]; then
