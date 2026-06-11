@@ -57,10 +57,12 @@ output = re.search(r"SUBAGENT_OUTPUT=(.+)", prompt)
 if output:
     name = re.search(r"SUBAGENT_NAME=(.+)", prompt)
     purpose = re.search(r"SUBAGENT_PURPOSE=(.+)", prompt)
+    change_name = re.search(r"CURRENT_CHANGE=(.+)", prompt)
     path = pathlib.Path(output.group(1).strip())
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
         "name": name.group(1).strip() if name else "并行成员",
+        "change_name": change_name.group(1).strip() if change_name else "demo",
         "purpose": purpose.group(1).strip() if purpose else "执行并行成员职责",
         "status": "success",
         "summary": "fake agent completed the configured read-only subagent task",

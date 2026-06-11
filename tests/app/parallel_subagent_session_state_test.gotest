@@ -436,16 +436,18 @@ func cloneSessionState(state State) State {
 func writeSessionStateMemberArtifact(prompt string) (string, error) {
 	output := sessionStatePromptValue(prompt, "SUBAGENT_OUTPUT")
 	name := sessionStatePromptValue(prompt, "SUBAGENT_NAME")
+	changeName := sessionStatePromptValue(prompt, "CURRENT_CHANGE")
 	purpose := sessionStatePromptValue(prompt, "SUBAGENT_PURPOSE")
 	if output == "" || name == "" {
 		return "", fmt.Errorf("missing subagent prompt fields: output=%q name=%q", output, name)
 	}
 	result := ParallelMemberResult{
-		Name:     name,
-		Purpose:  purpose,
-		Status:   "success",
-		Summary:  "合同测试写入真实 member artifact",
-		Evidence: []string{"state merge contract"},
+		Name:       name,
+		ChangeName: changeName,
+		Purpose:    purpose,
+		Status:     "success",
+		Summary:    "合同测试写入真实 member artifact",
+		Evidence:   []string{"state merge contract"},
 	}
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {

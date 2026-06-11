@@ -37,7 +37,8 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 	if output := goDAGContextPromptValue(prompt, "SUBAGENT_OUTPUT"); output != "" {
 		name := goDAGContextPromptValue(prompt, "SUBAGENT_NAME")
 		purpose := goDAGContextPromptValue(prompt, "SUBAGENT_PURPOSE")
-		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"context ready","evidence":["unit-test"]}` + "\n"
+		changeName := goDAGContextPromptValue(prompt, "CURRENT_CHANGE")
+		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"context ready","evidence":["unit-test"]}` + "\n"
 		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 			return "", err
 		}

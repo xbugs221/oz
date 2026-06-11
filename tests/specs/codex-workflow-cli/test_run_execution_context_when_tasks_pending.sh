@@ -56,11 +56,13 @@ output = re.search(r"SUBAGENT_OUTPUT=(.+)", prompt)
 if output:
     name = re.search(r"SUBAGENT_NAME=(.+)", prompt)
     purpose = re.search(r"SUBAGENT_PURPOSE=(.+)", prompt)
+    change_name = re.search(r"CURRENT_CHANGE=(.+)", prompt)
     member_name = name.group(1).strip() if name else "并行成员"
     artifact = pathlib.Path(output.group(1).strip())
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_text(json.dumps({
         "name": member_name,
+        "change_name": change_name.group(1).strip() if change_name else "17-pending",
         "purpose": purpose.group(1).strip() if purpose else "执行前上下文",
         "status": "success",
         "summary": member_name + " 已提供 execution 前上下文",

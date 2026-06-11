@@ -55,7 +55,11 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	if err != nil {
 		return e.failNodeState(state, err)
 	}
-	prompt := subagentPrompt(groupName, member, artifactPath)
+	promptContext, err := subagentPromptContext(e.Repo, state)
+	if err != nil {
+		return e.failNodeState(state, err)
+	}
+	prompt := subagentPrompt(groupName, member, artifactPath, promptContext)
 	sessionKey := sessionStateKey(options.Tool, "subagent:"+configName+":"+member.Name+":"+strconv.Itoa(iteration))
 
 	var sessionID string
@@ -71,7 +75,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 			runner.SetProgress(&subagentProgressWriter{engine: e, state: &state, sessionKey: sessionKey})
 		}
 		if attempt > 1 {
-			retryPrompt := artifactRetryPrompt(groupName, member, artifactPath, schemaErr)
+			retryPrompt := artifactRetryPrompt(groupName, member, artifactPath, schemaErr, promptContext)
 			sessionID, err = runner.Run(ctx, e.Repo, retryPrompt, sessionID, options)
 		} else {
 			sessionID, err = runner.Run(ctx, e.Repo, prompt, "", options)
@@ -82,7 +86,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if err != nil {
 			return e.failNodeState(state, err)
 		}
-		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member)
+		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
 		if schemaErr == nil {
 			break
 		}
@@ -150,6 +154,9 @@ func (e *Engine) subagentOptions(state State, stage string, member ParallelMembe
 	if member.Tool != "" {
 		options.Tool = member.Tool
 	}
+	if options.Tool == "pi" {
+		options.Permissions = "sandbox"
+	}
 	return options, nil
 }
 
@@ -166,13 +173,45 @@ func configuredParallelMember(workflow WorkflowConfig, groupName, memberName str
 	return ParallelGroupConfig{}, ParallelMemberConfig{}, fmt.Errorf("parallel group %q 缺少成员 %q", groupName, memberName)
 }
 
-func subagentPrompt(groupName string, member ParallelMemberConfig, output string) string {
+type subagentContext struct {
+	ChangeName     string
+	StatePath      string
+	ChangePath     string
+	AcceptancePath string
+	BaselineHead   string
+}
+
+// subagentPromptContext builds the sealed-run identity block shared by helper prompts.
+func subagentPromptContext(repo string, state State) (subagentContext, error) {
+	if state.ChangeName == "" {
+		return subagentContext{}, fmt.Errorf("subagent prompt 缺少当前 change_name")
+	}
+	if err := validateChangeNameForPath(state.ChangeName); err != nil {
+		return subagentContext{}, err
+	}
+	return subagentContext{
+		ChangeName:     state.ChangeName,
+		StatePath:      filepath.Join(runDir(repo, state.RunID), "state.json"),
+		ChangePath:     filepath.Join("docs", "changes", state.ChangeName),
+		AcceptancePath: acceptancePath(repo, state.ChangeName),
+		BaselineHead:   state.BaselineHead,
+	}, nil
+}
+
+func subagentPrompt(groupName string, member ParallelMemberConfig, output string, context subagentContext) string {
 	return strings.Join([]string{
 		"只读，聚焦当前提案范围，" + member.Purpose,
 		subagentReadOnlyBoundaryPrompt(),
+		"当前 sealed run 只处理 CURRENT_CHANGE；必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH，再给出结论。",
+		"如果看到其它 docs/changes/*，只能作为背景证据；不得把其它提案的任务、测试或缺口写成当前提案 blocker/major finding。",
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"正向确认、已满足项或无操作项不要写入 findings；只能写入 summary/evidence。",
 		"只有违反 acceptance/spec 的可复现行为失败才能标为 blocker/major；更深覆盖建议、可维护性建议或未承诺扩展写 minor 或 out_of_scope_existing。",
+		"CURRENT_CHANGE=" + context.ChangeName,
+		"STATE_PATH=" + context.StatePath,
+		"CHANGE_PATH=" + context.ChangePath,
+		"ACCEPTANCE_PATH=" + context.AcceptancePath,
+		"BASELINE_HEAD=" + context.BaselineHead,
 		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
@@ -228,10 +267,13 @@ func validateMemberResult(result ParallelMemberResult) error {
 }
 
 // readNormalizeValidateMemberArtifact enforces the member artifact contract at the subagent boundary.
-func readNormalizeValidateMemberArtifact(path string, group string, member ParallelMemberConfig) (ParallelMemberResult, error) {
+func readNormalizeValidateMemberArtifact(path string, group string, member ParallelMemberConfig, expectedChange string) (ParallelMemberResult, error) {
 	result, err := readAndValidateMemberArtifact(path)
 	if err != nil {
 		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
+	}
+	if err := validateSubagentArtifactChange(path, group, member, result.ChangeName, expectedChange); err != nil {
+		return ParallelMemberResult{}, err
 	}
 	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
 	result.Status = normalizeMemberStatus(result.Status)
@@ -253,11 +295,79 @@ func readNormalizeValidateMemberArtifact(path string, group string, member Paral
 			return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=findings[%d].scope value=%q artifact=%s: scope 无法归一化", group, member.Name, i, result.Findings[i].Scope, path)
 		}
 		result.Findings[i].Scope = scope
+		if subagentFindingBlocksOtherChange(result.Findings[i], expectedChange) {
+			return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=findings[%d] artifact=%s: 当前提案 blocker/major 不得指向其它 docs/changes 提案", group, member.Name, i, path)
+		}
 	}
 	if err := validateMemberResult(result); err != nil {
 		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s artifact=%s: %w", group, member.Name, path, err)
 	}
 	return result, nil
+}
+
+// subagentFindingBlocksOtherChange detects cross-proposal blockers before fan-in.
+func subagentFindingBlocksOtherChange(finding Finding, expectedChange string) bool {
+	if strings.TrimSpace(expectedChange) == "" || !isCurrentChangeFindingHardBlocking(finding) {
+		return false
+	}
+	text := strings.Join([]string{finding.Title, finding.Evidence, finding.Recommendation}, "\n")
+	for _, changeName := range referencedDocsChangeNames(text) {
+		if changeName != "" && changeName != expectedChange {
+			return true
+		}
+	}
+	return false
+}
+
+// referencedDocsChangeNames extracts docs/changes/<change-name> mentions from finding text.
+func referencedDocsChangeNames(text string) []string {
+	const prefix = "docs/changes/"
+	var names []string
+	remaining := text
+	for {
+		index := strings.Index(remaining, prefix)
+		if index < 0 {
+			return names
+		}
+		rest := remaining[index+len(prefix):]
+		name := docsChangeNamePrefix(rest)
+		if name != "" {
+			names = append(names, name)
+		}
+		remaining = rest
+	}
+}
+
+// docsChangeNamePrefix returns the first path segment after docs/changes/.
+func docsChangeNamePrefix(text string) string {
+	text = strings.TrimLeft(text, "`\"'([<")
+	if text == "" || strings.HasPrefix(text, "archive/") || strings.HasPrefix(text, ".") {
+		return ""
+	}
+	end := len(text)
+	for i, r := range text {
+		if r == '/' || r == '\\' || r == '`' || r == '"' || r == '\'' || r == ')' || r == ']' || r == '>' || r == '，' || r == '。' || r == ',' || r == ';' || r == ':' || r == '\n' || r == '\t' || r == ' ' {
+			end = i
+			break
+		}
+	}
+	return strings.TrimSpace(text[:end])
+}
+
+// validateSubagentArtifactChange proves helper output belongs to the sealed current change.
+func validateSubagentArtifactChange(path string, group string, member ParallelMemberConfig, got, expected string) error {
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		return nil
+	}
+	got = strings.TrimSpace(got)
+	if got == "" {
+		return fmt.Errorf("group=%s member=%s field=change_name artifact=%s: change_name 必须等于当前提案 %q", group, member.Name, path, expected)
+	}
+	if got != expected {
+		return fmt.Errorf("group=%s member=%s field=change_name artifact=%s: change_name %q 不匹配当前提案 %q", group, member.Name, path, got, expected)
+	}
+	return nil
 }
 
 func writeMemberArtifact(path string, result ParallelMemberResult) error {
@@ -328,11 +438,18 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 }
 
 // artifactRetryPrompt builds a prompt that resumes the same subagent session to rewrite only SUBAGENT_OUTPUT.
-func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifactPath string, schemaErr error) string {
+func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifactPath string, schemaErr error, context subagentContext) string {
 	return strings.Join([]string{
 		"只读，聚焦当前提案范围，" + member.Purpose,
 		subagentReadOnlyBoundaryPrompt(),
+		"当前 sealed run 只处理 CURRENT_CHANGE；必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH，再重写 artifact。",
+		"如果看到其它 docs/changes/*，只能作为背景证据；不得把其它提案写成当前提案 blocker/major finding。",
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
+		"CURRENT_CHANGE=" + context.ChangeName,
+		"STATE_PATH=" + context.StatePath,
+		"CHANGE_PATH=" + context.ChangePath,
+		"ACCEPTANCE_PATH=" + context.AcceptancePath,
+		"BASELINE_HEAD=" + context.BaselineHead,
 		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
@@ -351,7 +468,7 @@ func subagentReadOnlyBoundaryPrompt() string {
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		"name, purpose, status(0=ok,1=fail), summary, evidence[], findings[{title,severity(1/2/3),scope(1=当前,2=回归,0=无关),evidence,recommendation}]",
+		"name, change_name(必须等于 CURRENT_CHANGE), purpose, status(0=ok,1=fail), summary, evidence[], findings[{title,severity(1/2/3),scope(1=当前,2=回归,0=无关),evidence,recommendation}]",
 	}, "\n")
 }
 

@@ -107,6 +107,7 @@ if not output_match:
 output = pathlib.Path(output_match.group(1).strip())
 name = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M).group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
+change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
 count_path = pathlib.Path(os.environ["PI_ATTEMPT_FILE"])
 attempt = int(count_path.read_text(encoding="utf-8")) + 1 if count_path.exists() else 1
 count_path.write_text(str(attempt), encoding="utf-8")
@@ -118,6 +119,7 @@ if attempt == 1:
         pathlib.Path(mutate_first).write_text("unexpected subagent source change\n", encoding="utf-8")
     body = {
         "name": name,
+        "change_name": change_name,
         "purpose": purpose,
         "status": "success",
         "summary": "first artifact has malformed evidence",
@@ -126,6 +128,7 @@ if attempt == 1:
 elif session == "pi-subagent-session" and ("evidence" in prompt and ("string" in prompt.lower() or "字符串数组" in prompt)):
     body = {
         "name": name,
+        "change_name": change_name,
         "purpose": purpose,
         "status": "success",
         "summary": "artifact repaired in the same session",

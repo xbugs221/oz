@@ -367,11 +367,14 @@
 - **且** 修正 prompt 必须包含字段名、期望类型和 artifact 路径
 - **且** 最多重试 3 次，仍失败才将 run 标记为 `failed`
 - **且** 修正通过后 fan-in 才能继续读取该成员产物
-- **则** `wo` 必须渲染只读 subagent prompt，包含 `SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE` 和 `SUBAGENT_OUTPUT`
+- **则** `wo` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE` 和 `SUBAGENT_OUTPUT`
+- **且** prompt 必须要求 subagent 先读取当前 run 的 `state.json`、当前 `docs/changes/<change>` 和当前 `acceptance.json`，不得自行把其它活动提案作为当前目标
 - **且** subagent 必须写出单成员 JSON artifact，不能修改源码或 worktree
-- **且** 单成员 JSON 顶层只允许 `name`、`purpose`、`status`、`summary`、`evidence`、`findings`
+- **且** 单成员 JSON 顶层只允许 `name`、`change_name`、`purpose`、`status`、`summary`、`evidence`、`findings`、`required`
+- **且** `change_name` 必须等于当前 run 的 `state.change_name`，否则必须按 artifact 格式错误重试或失败
 - **且** `evidence` 必须是字符串数组
-- **且** `findings[]` 每项只允许 `title`、`severity`、`evidence`、`recommendation` 四个字符串字段
+- **且** `findings[]` 每项只允许 `title`、`severity`、`scope`、`evidence`、`recommendation` 字段
+- **且** blocker/major 且 scope 为当前提案或回归的 finding 不得指向其它 `docs/changes/<change>`，其它提案只能作为非阻断背景或无关问题
 - **且** prompt 必须明确禁止 `category`、`description`、`detail`、`location`、`level`、`type` 等额外字段
 - **且** `findings[].severity` 最终只允许 `blocker`、`major`、`minor`
 - **且** `critical/blocker` 归一为 `blocker`，`high/medium/major` 归一为 `major`，`low/nit/minor/info/informational/note/warning` 归一为 `minor`
@@ -444,6 +447,8 @@
 - **且** 并行成员包含 `subagent: explore`
 - **当** 系统构造 Pi sealed run 参数
 - **则** 参数不得包含 `--subagent`、`--agent`、`explore` 或 Pi 专属 agent 参数
+- **且** 当该 Pi 调用来自并行 subagent 节点时，参数必须包含只读工具白名单 `--tools read,grep,find,ls`
+- **且** 主 Pi 阶段不得因为并行成员 metadata 被自动降级为只读工具白名单
 
 // Sources: 12-收窄验收gate到提案范围
 

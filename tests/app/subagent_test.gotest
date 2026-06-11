@@ -6,6 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -66,6 +70,80 @@ func TestNodeRunSubagentReturnsMergeStateError(t *testing.T) {
 	key := sessionStateKey(tool, "subagent:implementation_context:"+member.Name+":0")
 	if latest.Sessions[key] != "" {
 		t.Fatalf("session %s persisted despite merge failure: %q", key, latest.Sessions[key])
+	}
+}
+
+type subagentOptionsCaptureRunner struct {
+	options StageOptions
+}
+
+// Run records the options supplied to a subagent and writes a valid member artifact.
+func (r *subagentOptionsCaptureRunner) Run(_ context.Context, _ string, prompt, _ string, options StageOptions) (string, error) {
+	r.options = options
+	output := promptValue(prompt, "SUBAGENT_OUTPUT")
+	name := promptValue(prompt, "SUBAGENT_NAME")
+	purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
+	changeName := promptValue(prompt, "CURRENT_CHANGE")
+	body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"captured","evidence":["unit-test"]}` + "\n"
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		return "", err
+	}
+	return "capture-session", os.WriteFile(output, []byte(body), 0o644)
+}
+
+type subagentOptionsCaptureTool struct {
+	runner AgentRunner
+}
+
+// Name returns the pi backend name so nodeRunSubagent applies read-only options.
+func (t subagentOptionsCaptureTool) Name() string { return "pi" }
+
+// Resolve keeps this unit test independent from a real pi binary.
+func (t subagentOptionsCaptureTool) Resolve() error { return nil }
+
+// PlanningCommand is unused by the sealed subagent node test.
+func (t subagentOptionsCaptureTool) PlanningCommand(context.Context, string, string, io.Reader, StageOptions) (*exec.Cmd, error) {
+	return nil, os.ErrInvalid
+}
+
+// NewRunner returns the capturing test runner.
+func (t subagentOptionsCaptureTool) NewRunner() AgentRunner { return t.runner }
+
+// TestNodeRunSubagentForcesPiSandbox verifies parallel pi helpers cannot inherit write permissions.
+func TestNodeRunSubagentForcesPiSandbox(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "demo")
+	workflow := DefaultWorkflowConfig()
+	workflow.Stages["execution"] = StageOptions{Tool: "codex", Permissions: "danger-full-access"}
+	workflow.Parallel.Enabled = true
+	workflow.Parallel.Groups = map[string]ParallelGroupConfig{
+		"implementation_context": {
+			Mode:    "advisory",
+			Members: []ParallelMemberConfig{{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式", Stage: "before_execution", Tool: "pi"}},
+		},
+	}
+	state := State{
+		RunID:      "run-subagent-sandbox",
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Workflow:   workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &subagentOptionsCaptureRunner{}
+	registry := &AgentRegistry{}
+	registry.Register(subagentOptionsCaptureTool{runner: runner})
+	engine := Engine{Repo: repo, Registry: registry}
+	var stdout bytes.Buffer
+	err := engine.nodeRunSubagent(context.Background(), state, []string{"--group", "implementation_context", "--member", "代码库侦察员", "--stage", "execution"}, &stdout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runner.options.Permissions != "sandbox" {
+		t.Fatalf("subagent permissions = %q, want sandbox", runner.options.Permissions)
 	}
 }
 

@@ -159,6 +159,7 @@ if not output_match:
 output = pathlib.Path(output_match.group(1).strip())
 name = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M).group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
+change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
 attempt = int(attempt_file.read_text(encoding="utf-8")) + 1 if attempt_file.exists() else 1
 attempt_file.write_text(str(attempt), encoding="utf-8")
 
@@ -179,6 +180,7 @@ if attempt > 1:
 
 body = {
     "name": name,
+    "change_name": change_name,
     "purpose": purpose,
     "status": "success",
     "summary": "checked planning context and reported one informational finding",

@@ -115,6 +115,9 @@ func piCommonArgs(options StageOptions) []string {
 	if options.Reasoning != "" {
 		args = append(args, "--thinking", options.Reasoning)
 	}
+	if options.Permissions == "sandbox" {
+		args = append(args, "--tools", "read,grep,find,ls")
+	}
 	return args
 }
 

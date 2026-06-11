@@ -158,7 +158,7 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 	artifact := ParallelArtifact{Group: configName, Mode: group.Mode, Summary: configName + " fanin completed"}
 	for _, member := range group.Members {
 		path := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
-		result, err := readNormalizeValidateMemberArtifact(path, configName, member)
+		result, err := readNormalizeValidateMemberArtifact(path, configName, member, state.ChangeName)
 		if err != nil {
 			return e.failNodeState(state, err)
 		}

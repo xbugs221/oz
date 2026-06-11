@@ -40,6 +40,19 @@ func TestPiRunArgsSupportJSONModeAndResumeSessions(t *testing.T) {
 	}
 }
 
+// TestPiSandboxPermissionAllowsOnlyReadTools verifies helper runs can be made read-only.
+func TestPiSandboxPermissionAllowsOnlyReadTools(t *testing.T) {
+	args := piRunArgs("prompt", "", StageOptions{Permissions: "sandbox"})
+	if !containsArgPair(args, "--tools", "read,grep,find,ls") {
+		t.Fatalf("args = %v, want read-only pi tools", args)
+	}
+	for _, forbidden := range []string{"edit", "write", "bash"} {
+		if containsArg(args, forbidden) {
+			t.Fatalf("args = %v, contains write-capable tool %q", args, forbidden)
+		}
+	}
+}
+
 // TestDrainPiJSONLExtractsSessionID verifies Pi session headers expose a resumable id.
 func TestDrainPiJSONLExtractsSessionID(t *testing.T) {
 	input := strings.Join([]string{

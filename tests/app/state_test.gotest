@@ -23,7 +23,8 @@ func (fakeRunner) Run(_ context.Context, repo, prompt, threadID string, options 
 	if output := subagentOutputFromPrompt(prompt); output != "" {
 		name := promptValue(prompt, "SUBAGENT_NAME")
 		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
-		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
+		changeName := promptValue(prompt, "CURRENT_CHANGE")
+		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
 		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 			return "", err
 		}
@@ -104,7 +105,8 @@ func (r subagentAwareRunner) Run(ctx context.Context, repo, prompt, threadID str
 	if output := subagentOutputFromPrompt(prompt); output != "" {
 		name := promptValue(prompt, "SUBAGENT_NAME")
 		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
-		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
+		changeName := promptValue(prompt, "CURRENT_CHANGE")
+		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
 		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 			return "", err
 		}
@@ -374,9 +376,10 @@ func (r *slowSubagentRunner) Run(_ context.Context, repo, prompt, threadID strin
 	if output := subagentOutputFromPrompt(prompt); output != "" {
 		name := promptValue(prompt, "SUBAGENT_NAME")
 		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
+		changeName := promptValue(prompt, "CURRENT_CHANGE")
 		start := time.Now()
 		time.Sleep(120 * time.Millisecond)
-		body := `{"name":"` + name + `","purpose":"` + purpose + `","status":"success","summary":"slow fake subagent completed","evidence":["fake-runner"]}` + "\n"
+		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"slow fake subagent completed","evidence":["fake-runner"]}` + "\n"
 		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 			return "", err
 		}
@@ -702,18 +705,33 @@ func TestQAArtifactGateRerunsQAInsteadOfFailing(t *testing.T) {
 // TestSubagentPromptsSpellStrictFindingSchema keeps real pi outputs inside the member artifact contract.
 func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 	member := ParallelMemberConfig{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏"}
-	initial := subagentPrompt("planning_context", member, "/tmp/member.json")
-	retry := artifactRetryPrompt("planning_context", member, "/tmp/member.json", fmt.Errorf(`json: unknown field "category"`))
+	context := subagentContext{
+		ChangeName:     "10-当前提案",
+		StatePath:      "/state/run/state.json",
+		ChangePath:     "docs/changes/10-当前提案",
+		AcceptancePath: "/repo/docs/changes/10-当前提案/acceptance.json",
+		BaselineHead:   "abc123",
+	}
+	initial := subagentPrompt("planning_context", member, "/tmp/member.json", context)
+	retry := artifactRetryPrompt("planning_context", member, "/tmp/member.json", fmt.Errorf(`json: unknown field "category"`), context)
 	for label, prompt := range map[string]string{"initial": initial, "retry": retry} {
 		for _, want := range []string{
 			"只读",
 			"聚焦当前提案范围",
+			"CURRENT_CHANGE=10-当前提案",
+			"STATE_PATH=/state/run/state.json",
+			"CHANGE_PATH=docs/changes/10-当前提案",
+			"ACCEPTANCE_PATH=/repo/docs/changes/10-当前提案/acceptance.json",
+			"BASELINE_HEAD=abc123",
 			member.Purpose,
 			"SUBAGENT_OUTPUT=/tmp/member.json",
 			"go build -o test-results/<name>",
 			"不得留下 test-results/ 之外的构建产物",
+			"必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH",
+			"不得把其它提案",
 			"当前提案问题写 findings",
 			"历史债务或无关问题写 scope=out_of_scope_existing",
+			"change_name(必须等于 CURRENT_CHANGE)",
 			"status(0=ok,1=fail)",
 			"severity(1/2/3)",
 			"scope(1=当前,2=回归,0=无关)",
@@ -749,7 +767,7 @@ func TestSubagentMemberArtifactAcceptsFindingScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "目标核对审核员", Purpose: "核对 proposal/spec/task 是否满足"})
+	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "目标核对审核员", Purpose: "核对 proposal/spec/task 是否满足"}, "")
 	if err != nil {
 		t.Fatalf("member artifact with scope should pass strict schema: %v", err)
 	}
@@ -779,7 +797,7 @@ func TestSubagentMemberArtifactNormalizesNaturalScopeAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"})
+	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"}, "")
 	if err != nil {
 		t.Fatalf("member artifact with in_scope alias should pass strict schema: %v", err)
 	}
@@ -809,12 +827,59 @@ func TestSubagentMemberArtifactAcceptsKISSNumericCodes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"})
+	result, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"}, "")
 	if err != nil {
 		t.Fatalf("member artifact with numeric codes should pass strict schema: %v", err)
 	}
 	if result.Status != "success" || result.Findings[0].Severity != "major" || result.Findings[0].Scope != findingScopeCurrentChange {
 		t.Fatalf("normalized result = %#v", result)
+	}
+}
+
+// TestSubagentMemberArtifactRequiresCurrentChange verifies helper output cannot drift to another proposal.
+func TestSubagentMemberArtifactRequiresCurrentChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	body := `{
+		"name": "代码质量审核员",
+		"change_name": "208-后续提案",
+		"purpose": "检查类型、边界和可维护性",
+		"status": "success",
+		"summary": "wrong change reported"
+	}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "代码质量审核员", Purpose: "检查类型、边界和可维护性"}, "207-当前提案")
+	if err == nil || !strings.Contains(err.Error(), "不匹配当前提案") {
+		t.Fatalf("artifact mismatch error = %v, want current change rejection", err)
+	}
+}
+
+// TestSubagentMemberArtifactRejectsOtherChangeBlocker verifies fan-in cannot receive cross-proposal blockers.
+func TestSubagentMemberArtifactRejectsOtherChangeBlocker(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	body := `{
+		"name": "测试有效性审核员",
+		"change_name": "207-当前提案",
+		"purpose": "判断测试是否真实覆盖场景",
+		"status": "success",
+		"summary": "wrong proposal finding",
+		"findings": [
+			{
+				"title": "后续提案测试缺口",
+				"severity": "major",
+				"scope": "current_change",
+				"evidence": "docs/changes/209-后端工作流包保护框架/tests/workflow-package-backend.acceptance.test.ts 缺少覆盖",
+				"recommendation": "修复 209 提案测试"
+			}
+		]
+	}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readNormalizeValidateMemberArtifact(path, "review", ParallelMemberConfig{Name: "测试有效性审核员", Purpose: "判断测试是否真实覆盖场景"}, "207-当前提案")
+	if err == nil || !strings.Contains(err.Error(), "不得指向其它 docs/changes 提案") {
+		t.Fatalf("cross-change blocker error = %v, want rejection", err)
 	}
 }
 

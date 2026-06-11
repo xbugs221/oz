@@ -23,30 +23,33 @@ type ParallelArtifact struct {
 
 // ParallelMemberResult stores one helper member's summary and evidence.
 type ParallelMemberResult struct {
-	Name     string    `json:"name"`
-	Purpose  string    `json:"purpose"`
-	Status   string    `json:"status"`
-	Summary  string    `json:"summary"`
-	Evidence []string  `json:"evidence,omitempty"`
-	Findings []Finding `json:"findings,omitempty"`
-	Required bool      `json:"required,omitempty"`
+	Name       string    `json:"name"`
+	ChangeName string    `json:"change_name,omitempty"`
+	Purpose    string    `json:"purpose"`
+	Status     string    `json:"status"`
+	Summary    string    `json:"summary"`
+	Evidence   []string  `json:"evidence,omitempty"`
+	Findings   []Finding `json:"findings,omitempty"`
+	Required   bool      `json:"required,omitempty"`
 }
 
 // UnmarshalJSON accepts KISS numeric status codes while storing canonical words.
 func (m *ParallelMemberResult) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Name     string      `json:"name"`
-		Purpose  string      `json:"purpose"`
-		Status   interface{} `json:"status"`
-		Summary  string      `json:"summary"`
-		Evidence []string    `json:"evidence,omitempty"`
-		Findings []Finding   `json:"findings,omitempty"`
-		Required bool        `json:"required,omitempty"`
+		Name       string      `json:"name"`
+		ChangeName string      `json:"change_name,omitempty"`
+		Purpose    string      `json:"purpose"`
+		Status     interface{} `json:"status"`
+		Summary    string      `json:"summary"`
+		Evidence   []string    `json:"evidence,omitempty"`
+		Findings   []Finding   `json:"findings,omitempty"`
+		Required   bool        `json:"required,omitempty"`
 	}
 	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
 		return err
 	}
 	m.Name = raw.Name
+	m.ChangeName = raw.ChangeName
 	m.Purpose = raw.Purpose
 	m.Status = normalizeMemberStatus(artifactScalarText(raw.Status))
 	m.Summary = raw.Summary
