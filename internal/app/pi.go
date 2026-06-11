@@ -46,11 +46,17 @@ type PiCLI struct {
 	Path       string
 	ResolveErr error
 	Progress   io.Writer
+	Artifact   *artifactCapture
 }
 
 // SetProgress redirects concise process progress for callers that own the UI.
 func (p *PiCLI) SetProgress(progress io.Writer) {
 	p.Progress = progress
+}
+
+// SetArtifactCapture records assistant text for read-only subagent artifact materialization.
+func (p *PiCLI) SetArtifactCapture(capture *artifactCapture) {
+	p.Artifact = capture
 }
 
 // Run executes pi in JSON mode, extracts session metadata, and waits for process exit.
@@ -74,7 +80,7 @@ func (p PiCLI) Run(ctx context.Context, repo, prompt, sessionID string, options 
 		return "", err
 	}
 	printAgentProcessStarted(p.Progress, "pi", cmd.Process.Pid)
-	observed, drainErr := drainPiJSONL(stdout, p.Progress)
+	observed, drainErr := drainPiJSONLWithCapture(stdout, p.Progress, p.Artifact)
 	waitErr := cmd.Wait()
 	printAgentProcessExited(p.Progress, "pi", cmd.Process.Pid, cmd.ProcessState.ExitCode())
 	if drainErr != nil {
@@ -129,6 +135,11 @@ type piSessionEvent struct {
 
 // drainPiJSONL reads stdout while best-effort extracting Pi session metadata.
 func drainPiJSONL(stdout io.Reader, progress io.Writer) (sessionID string, err error) {
+	return drainPiJSONLWithCapture(stdout, progress, nil)
+}
+
+// drainPiJSONLWithCapture reads stdout while best-effort extracting Pi session metadata and final text.
+func drainPiJSONLWithCapture(stdout io.Reader, progress io.Writer, capture *artifactCapture) (sessionID string, err error) {
 	reader := bufio.NewReaderSize(stdout, 64*1024)
 	for {
 		line, readErr := reader.ReadBytes('\n')
@@ -136,6 +147,7 @@ func drainPiJSONL(stdout io.Reader, progress io.Writer) (sessionID string, err e
 			if id := piSessionIDFromLine(line, progress); id != "" {
 				sessionID = id
 			}
+			capturePiText(line, capture)
 		}
 		if readErr == nil {
 			continue
@@ -144,6 +156,35 @@ func drainPiJSONL(stdout io.Reader, progress io.Writer) (sessionID string, err e
 			err = readErr
 		}
 		return sessionID, err
+	}
+}
+
+// capturePiText stores common JSONL assistant text fields without depending on one schema version.
+func capturePiText(line []byte, capture *artifactCapture) {
+	if capture == nil {
+		return
+	}
+	var event map[string]interface{}
+	if err := json.Unmarshal(line, &event); err != nil {
+		return
+	}
+	for _, field := range []string{"content", "text", "delta", "message"} {
+		appendPiTextValue(capture, event[field])
+	}
+}
+
+func appendPiTextValue(capture *artifactCapture, value interface{}) {
+	switch v := value.(type) {
+	case string:
+		capture.Append(v)
+	case []interface{}:
+		for _, item := range v {
+			appendPiTextValue(capture, item)
+		}
+	case map[string]interface{}:
+		for _, field := range []string{"text", "content", "delta"} {
+			appendPiTextValue(capture, v[field])
+		}
 	}
 }
 

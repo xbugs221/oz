@@ -66,6 +66,7 @@ PY
 SH
 chmod +x "$FAKEBIN/codex"
 cp "$FAKEBIN/codex" "$FAKEBIN/legacy-agent"
+cp "$FAKEBIN/codex" "$FAKEBIN/agy"
 
 cat >"$FAKEBIN/pi" <<'SH'
 #!/usr/bin/env bash

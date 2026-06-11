@@ -12,9 +12,39 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var mergeSubagentSessionState = mergeState
+
+type artifactCaptureSetter interface {
+	SetArtifactCapture(*artifactCapture)
+}
+
+type artifactCapture struct {
+	mu      sync.Mutex
+	builder strings.Builder
+}
+
+// Append records text emitted by a read-only subagent backend.
+func (c *artifactCapture) Append(text string) {
+	if c == nil || text == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.builder.WriteString(text)
+}
+
+// String returns captured text in emission order.
+func (c *artifactCapture) String() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.builder.String()
+}
 
 // nodeRunSubagent executes one configured read-only helper member with artifact schema retry.
 func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string, stdout io.Writer) error {
@@ -74,6 +104,10 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if runner, ok := runner.(progressSetter); ok {
 			runner.SetProgress(&subagentProgressWriter{engine: e, state: &state, sessionKey: sessionKey})
 		}
+		capture := &artifactCapture{}
+		if runner, ok := runner.(artifactCaptureSetter); ok {
+			runner.SetArtifactCapture(capture)
+		}
 		if attempt > 1 {
 			retryPrompt := artifactRetryPrompt(groupName, member, artifactPath, schemaErr, promptContext)
 			sessionID, err = runner.Run(ctx, e.Repo, retryPrompt, sessionID, options)
@@ -84,6 +118,9 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 			return boundaryErr
 		}
 		if err != nil {
+			return e.failNodeState(state, err)
+		}
+		if err := materializeCapturedMemberArtifact(artifactPath, capture); err != nil {
 			return e.failNodeState(state, err)
 		}
 		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
@@ -203,6 +240,7 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 		"只读，聚焦当前提案范围，" + member.Purpose,
 		subagentReadOnlyBoundaryPrompt(),
 		"当前 sealed run 只处理 CURRENT_CHANGE；必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH，再给出结论。",
+		"不要用工具写 SUBAGENT_OUTPUT；最终回复只输出一个 JSON object，wo 会把它保存到 SUBAGENT_OUTPUT。",
 		"如果看到其它 docs/changes/*，只能作为背景证据；不得把其它提案的任务、测试或缺口写成当前提案 blocker/major finding。",
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"正向确认、已满足项或无操作项不要写入 findings；只能写入 summary/evidence。",
@@ -443,6 +481,7 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"只读，聚焦当前提案范围，" + member.Purpose,
 		subagentReadOnlyBoundaryPrompt(),
 		"当前 sealed run 只处理 CURRENT_CHANGE；必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH，再重写 artifact。",
+		"不要用工具写 SUBAGENT_OUTPUT；最终回复只输出一个 JSON object，wo 会把它保存到 SUBAGENT_OUTPUT。",
 		"如果看到其它 docs/changes/*，只能作为背景证据；不得把其它提案写成当前提案 blocker/major finding。",
 		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
 		"CURRENT_CHANGE=" + context.ChangeName,
@@ -470,6 +509,41 @@ func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
 		"name, change_name(必须等于 CURRENT_CHANGE), purpose, status(0=ok,1=fail), summary, evidence[], findings[{title,severity(1/2/3),scope(1=当前,2=回归,0=无关),evidence,recommendation}]",
 	}, "\n")
+}
+
+// materializeCapturedMemberArtifact lets read-only backends return artifact JSON via stdout.
+func materializeCapturedMemberArtifact(path string, capture *artifactCapture) error {
+	if fileExists(path) {
+		return nil
+	}
+	data, err := extractCapturedJSONObject(capture.String())
+	if err != nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// extractCapturedJSONObject returns the first JSON object embedded in assistant text.
+func extractCapturedJSONObject(text string) ([]byte, error) {
+	text = strings.TrimSpace(text)
+	for index := 0; index < len(text); index++ {
+		if text[index] != '{' {
+			continue
+		}
+		var raw json.RawMessage
+		dec := json.NewDecoder(strings.NewReader(text[index:]))
+		if err := dec.Decode(&raw); err != nil {
+			continue
+		}
+		cleaned := bytes.TrimSpace(raw)
+		if len(cleaned) > 0 && cleaned[0] == '{' {
+			return cleaned, nil
+		}
+	}
+	return nil, fmt.Errorf("captured artifact JSON object not found")
 }
 
 func isStringOrNumber(value interface{}) bool {

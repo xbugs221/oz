@@ -75,6 +75,12 @@ func TestNodeRunSubagentReturnsMergeStateError(t *testing.T) {
 
 type subagentOptionsCaptureRunner struct {
 	options StageOptions
+	capture *artifactCapture
+}
+
+// SetArtifactCapture records where Run should emit final JSON instead of writing the artifact.
+func (r *subagentOptionsCaptureRunner) SetArtifactCapture(capture *artifactCapture) {
+	r.capture = capture
 }
 
 // Run records the options supplied to a subagent and writes a valid member artifact.
@@ -85,6 +91,10 @@ func (r *subagentOptionsCaptureRunner) Run(_ context.Context, _ string, prompt, 
 	purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
 	changeName := promptValue(prompt, "CURRENT_CHANGE")
 	body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"captured","evidence":["unit-test"]}` + "\n"
+	if r.capture != nil {
+		r.capture.Append(body)
+		return "capture-session", nil
+	}
 	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 		return "", err
 	}
@@ -144,6 +154,10 @@ func TestNodeRunSubagentForcesPiSandbox(t *testing.T) {
 	}
 	if runner.options.Permissions != "sandbox" {
 		t.Fatalf("subagent permissions = %q, want sandbox", runner.options.Permissions)
+	}
+	path := memberArtifactPath(repo, state.RunID, "implementation_context", 0, "代码库侦察员")
+	if !fileExists(path) {
+		t.Fatalf("captured stdout artifact was not materialized at %s", path)
 	}
 }
 

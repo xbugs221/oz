@@ -94,8 +94,8 @@ func TestParallelMemberMetadataStillRequiresCodexPiPreflight(t *testing.T) {
     }
 
     got := strings.Join(requiredAgentTools(), ",")
-    if got != "codex,pi" {
-        t.Fatalf("required tools = %s, want mandatory sealed-run clis codex,pi", got)
+    if got != "codex,pi,agy" {
+        t.Fatalf("required tools = %s, want mandatory sealed-run clis codex,pi,agy", got)
     }
 }
 

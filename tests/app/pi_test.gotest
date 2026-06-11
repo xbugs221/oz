@@ -72,6 +72,25 @@ func TestDrainPiJSONLExtractsSessionID(t *testing.T) {
 	}
 }
 
+// TestDrainPiJSONLCapturesAssistantText verifies read-only subagents can return artifact JSON via text.
+func TestDrainPiJSONLCapturesAssistantText(t *testing.T) {
+	input := strings.Join([]string{
+		`{"type":"session","id":"pi-session-1"}`,
+		`{"type":"message","content":"{\"name\":\"代码库侦察员\",\"change_name\":\"demo\"}"}`,
+	}, "\n")
+	capture := &artifactCapture{}
+	sessionID, err := drainPiJSONLWithCapture(strings.NewReader(input), nil, capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessionID != "pi-session-1" {
+		t.Fatalf("session id = %q, want pi-session-1", sessionID)
+	}
+	if !strings.Contains(capture.String(), `"change_name":"demo"`) {
+		t.Fatalf("captured text = %q", capture.String())
+	}
+}
+
 // TestPiCLICapturesStderr verifies Pi diagnostics are captured separately.
 func TestPiCLICapturesStderr(t *testing.T) {
 	if runtime.GOOS == "windows" {
