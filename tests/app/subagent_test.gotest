@@ -120,6 +120,43 @@ func (t subagentOptionsCaptureTool) PlanningCommand(context.Context, string, str
 // NewRunner returns the capturing test runner.
 func (t subagentOptionsCaptureTool) NewRunner() AgentRunner { return t.runner }
 
+type subagentRetryCaptureRunner struct {
+	attempts  int
+	capture   *artifactCapture
+	threadIDs []string
+}
+
+// SetArtifactCapture records the attempt-local capture sink for retry materialization.
+func (r *subagentRetryCaptureRunner) SetArtifactCapture(capture *artifactCapture) {
+	r.capture = capture
+}
+
+// Run emits a malformed captured artifact first, then repairs it in the resumed session.
+func (r *subagentRetryCaptureRunner) Run(_ context.Context, _ string, prompt, threadID string, _ StageOptions) (string, error) {
+	r.attempts++
+	r.threadIDs = append(r.threadIDs, threadID)
+	if r.capture == nil {
+		return "", errors.New("missing artifact capture")
+	}
+	if r.attempts > 1 {
+		if threadID != "capture-retry-session" {
+			return "", fmt.Errorf("retry thread id = %q, want capture-retry-session", threadID)
+		}
+		if !strings.Contains(prompt, "evidence") || !strings.Contains(prompt, "必须是字符串") {
+			return "", fmt.Errorf("retry prompt missing schema guidance:\n%s", prompt)
+		}
+	}
+	name := promptValue(prompt, "SUBAGENT_NAME")
+	purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
+	changeName := promptValue(prompt, "CURRENT_CHANGE")
+	body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"first malformed capture","evidence":[{"source":"go.mod"}]}`
+	if r.attempts > 1 {
+		body = `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"captured retry repaired artifact","evidence":["go.mod: module github.com/xbugs221/oz"]}`
+	}
+	r.capture.Append(body + "\n")
+	return "capture-retry-session", nil
+}
+
 // TestNodeRunSubagentForcesPiSandbox verifies parallel pi helpers cannot inherit write permissions.
 func TestNodeRunSubagentForcesPiSandbox(t *testing.T) {
 	repo := gitRepo(t)
@@ -159,6 +196,58 @@ func TestNodeRunSubagentForcesPiSandbox(t *testing.T) {
 	path := memberArtifactPath(repo, state.RunID, "implementation_context", 0, "代码库侦察员")
 	if !fileExists(path) {
 		t.Fatalf("captured stdout artifact was not materialized at %s", path)
+	}
+}
+
+// TestNodeRunSubagentReplacesCapturedInvalidArtifactOnRetry proves stdout artifacts are not pinned to the first bad capture.
+func TestNodeRunSubagentReplacesCapturedInvalidArtifactOnRetry(t *testing.T) {
+	repo := gitRepo(t)
+	mustChange(t, repo, "demo")
+	workflow := DefaultWorkflowConfig()
+	workflow.Stages["execution"] = StageOptions{Tool: "codex"}
+	workflow.Parallel.Enabled = true
+	workflow.Parallel.Groups = map[string]ParallelGroupConfig{
+		"implementation_context": {
+			Mode:    "advisory",
+			Members: []ParallelMemberConfig{{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式", Stage: "before_execution", Tool: "pi"}},
+		},
+	}
+	state := State{
+		RunID:      "run-subagent-capture-retry",
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Sessions:   map[string]string{},
+		Workflow:   workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &subagentRetryCaptureRunner{}
+	registry := &AgentRegistry{}
+	registry.Register(subagentOptionsCaptureTool{runner: runner})
+	engine := Engine{Repo: repo, Registry: registry}
+	var stdout bytes.Buffer
+	err := engine.nodeRunSubagent(context.Background(), state, []string{"--group", "implementation_context", "--member", "代码库侦察员", "--stage", "execution"}, &stdout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runner.attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", runner.attempts)
+	}
+	if len(runner.threadIDs) != 2 || runner.threadIDs[1] != "capture-retry-session" {
+		t.Fatalf("thread ids = %#v, want retry to resume first session", runner.threadIDs)
+	}
+	path := memberArtifactPath(repo, state.RunID, "implementation_context", 0, "代码库侦察员")
+	result, err := readMemberArtifact(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Summary != "captured retry repaired artifact" {
+		t.Fatalf("artifact summary = %q, want repaired retry output", result.Summary)
+	}
+	if len(result.Evidence) != 1 || result.Evidence[0] != "go.mod: module github.com/xbugs221/oz" {
+		t.Fatalf("artifact evidence = %#v, want repaired string evidence", result.Evidence)
 	}
 }
 

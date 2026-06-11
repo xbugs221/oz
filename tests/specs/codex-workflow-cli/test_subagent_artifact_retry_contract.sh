@@ -105,14 +105,12 @@ if not output_match:
     print(json.dumps({"type": "session", "id": "pi-main-session"}))
     raise SystemExit(0)
 
-output = pathlib.Path(output_match.group(1).strip())
 name = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M).group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
 change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
 count_path = pathlib.Path(os.environ["PI_ATTEMPT_FILE"])
 attempt = int(count_path.read_text(encoding="utf-8")) + 1 if count_path.exists() else 1
 count_path.write_text(str(attempt), encoding="utf-8")
-output.parent.mkdir(parents=True, exist_ok=True)
 
 if attempt == 1:
     mutate_first = os.environ.get("PI_MUTATE_FIRST_FILE")
@@ -138,8 +136,14 @@ elif session == "pi-subagent-session" and ("evidence" in prompt and ("string" in
 else:
     raise SystemExit("retry did not resume the original session with schema guidance")
 
-output.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
 print(json.dumps({"type": "session", "id": "pi-subagent-session"}))
+print(json.dumps({
+    "type": "message",
+    "message": {
+        "role": "assistant",
+        "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}],
+    },
+}, ensure_ascii=False))
 PY
 SH
 chmod +x "$FAKEBIN/pi"

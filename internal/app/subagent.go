@@ -96,6 +96,11 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	var result ParallelMemberResult
 	var schemaErr error
 	for attempt := 1; attempt <= 3; attempt++ {
+		if attempt > 1 {
+			if err := removeStaleMemberArtifact(artifactPath); err != nil {
+				return e.failNodeState(state, err)
+			}
+		}
 		attemptHead, attemptDiff, err := gitSnapshot(e.Repo)
 		if err != nil {
 			return err
@@ -524,6 +529,14 @@ func materializeCapturedMemberArtifact(path string, capture *artifactCapture, me
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// removeStaleMemberArtifact clears the previous invalid artifact before schema retry.
+func removeStaleMemberArtifact(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale subagent artifact %s: %w", path, err)
+	}
+	return nil
 }
 
 // extractCapturedMemberJSONObject returns the best member artifact object embedded in assistant text.
