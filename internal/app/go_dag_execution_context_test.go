@@ -192,6 +192,37 @@ func TestWorkflowSpecOrdersImplementationContextBeforeExecution(t *testing.T) {
 	}
 }
 
+// TestWorkflowSpecSeparatesSubagentDisplayAndRunStages keeps graph ownership distinct from scheduling.
+func TestWorkflowSpecSeparatesSubagentDisplayAndRunStages(t *testing.T) {
+	workflow := DefaultWorkflowConfig()
+	workflow.Parallel.Groups["planning_context"] = ParallelGroupConfig{
+		Mode: "advisory",
+		Members: []ParallelMemberConfig{
+			{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏", Stage: "planning", Tool: "pi"},
+		},
+	}
+	spec := BuildWorkflowSpec("demo", workflow)
+
+	planning := goDAGContextNodeByID(t, spec, "planning_context_1")
+	if planning.Stage != "planning" || planning.RunStage != "execution" {
+		t.Fatalf("planning node stage/run_stage = %q/%q, want planning/execution", planning.Stage, planning.RunStage)
+	}
+	implementation := goDAGContextNodeByID(t, spec, "implementation_context_1")
+	if implementation.Stage != "execution" || implementation.RunStage != "execution" {
+		t.Fatalf("implementation node stage/run_stage = %q/%q, want execution/execution", implementation.Stage, implementation.RunStage)
+	}
+}
+
+// TestDefaultWorkflowSpecOmitsPlanningContext keeps sealed runs from repeating planning helpers by default.
+func TestDefaultWorkflowSpecOmitsPlanningContext(t *testing.T) {
+	spec := BuildWorkflowSpec("demo", DefaultWorkflowConfig())
+	for _, node := range spec.Nodes {
+		if node.Group == "planning_context" || node.ID == "planning_context_1" {
+			t.Fatalf("default workflow must not schedule planning_context node: %#v", node)
+		}
+	}
+}
+
 // TestGoDAGRunsExecutionContextWhenTasksPending verifies pending changes still run execution helpers.
 func TestGoDAGRunsExecutionContextWhenTasksPending(t *testing.T) {
 	repo := goDAGContextRepo(t)
@@ -245,6 +276,18 @@ func goDAGContextHasEdge(spec WorkflowSpec, from string, to string) bool {
 		}
 	}
 	return false
+}
+
+// goDAGContextNodeByID returns a graph node by stable ID for graph-shape tests.
+func goDAGContextNodeByID(t *testing.T, spec WorkflowSpec, id string) WorkflowNode {
+	t.Helper()
+	for _, node := range spec.Nodes {
+		if node.ID == id {
+			return node
+		}
+	}
+	t.Fatalf("node %q not found in %#v", id, spec.Nodes)
+	return WorkflowNode{}
 }
 
 // goDAGContextState builds a running execution state with implementation context enabled.

@@ -66,7 +66,6 @@ if grep -Eq 'subagent:|fan-in|planning_context|implementation_context|before_rev
   fail "mermaid visible labels should not mix internal English subagent/group names"
 fi
 
-grep -q '需求分析员' "$RESULT_DIR/graph.mmd" || fail "graph should keep the Chinese requirement-analysis subagent label"
 grep -q '代码库侦察员' "$RESULT_DIR/graph.mmd" || fail "graph should keep the Chinese code-exploration subagent label"
 grep -q '外部资料研究员' "$RESULT_DIR/graph.mmd" || fail "graph should keep the Chinese external-research subagent label"
 grep -Eq '5|五' "$RESULT_DIR/graph.mmd" || fail "graph should communicate the 5-iteration review budget"

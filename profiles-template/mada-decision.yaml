@@ -30,24 +30,6 @@ wo:
     parallel:
       enabled: true
       groups:
-        planning_context:
-          mode: advisory
-          members:
-            - name: 需求澄清员
-              purpose: 澄清目标、受众、成功标准和不可接受结果
-              stage: planning
-              tool: pi
-              subagent: metis
-            - name: 约束建模员
-              purpose: 梳理预算、时间、技术栈、维护和组织约束
-              stage: planning
-              tool: pi
-              subagent: explore
-            - name: 候选方案研究员
-              purpose: 收集可选方案、先例、成本和关键差异
-              stage: planning
-              tool: pi
-              subagent: librarian
         implementation_context:
           mode: advisory
           members:

@@ -75,7 +75,7 @@ for template in "$default_template" "$code_template" "$decision_template" "$rese
 done
 
 note "校验 default.yaml 保存默认 subagent 和 prompt 配置语义"
-for text in "wo:" "parallel:" "prompts:" "planning_context:" "implementation_context:" "review:" "qa:" "需求分析员" "代码库侦察员" "外部资料研究员"; do
+for text in "wo:" "parallel:" "prompts:" "implementation_context:" "review:" "qa:" "代码库侦察员" "外部资料研究员"; do
   assert_contains "$default_template" "$text"
 done
 
@@ -83,10 +83,10 @@ note "校验 MADA profile 模板使用同一目录维护"
 for template in "$code_template" "$decision_template" "$research_template"; do
   assert_contains "$template" "wo:"
   assert_contains "$template" "parallel:"
-  assert_contains "$template" "planning_context:"
+  assert_contains "$template" "implementation_context:"
   assert_contains "$template" "review:"
 done
-for role in 需求澄清员 约束建模员 候选方案研究员 反方评审员 运维部署评审员 学习路线评审员 证据审计员; do
+for role in 约束建模员 候选方案研究员 反方评审员 运维部署评审员 学习路线评审员 证据审计员; do
   assert_contains "$decision_template" "$role"
 done
 
@@ -108,7 +108,7 @@ note "运行默认 wo config，确认 default.yaml 语义仍生成标准 wo.yaml
 
 yaml="$repo/wo.yaml"
 [[ -f "$yaml" ]] || fail "默认 wo config 未生成 wo.yaml"
-for text in "parallel:" "enabled: true" "planning_context:" "implementation_context:" "需求分析员"; do
+for text in "parallel:" "enabled: true" "implementation_context:" "代码库侦察员"; do
   assert_contains "$yaml" "$text"
 done
 

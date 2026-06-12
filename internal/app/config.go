@@ -485,6 +485,10 @@ func parallelGroupConfigFromInput(input parallelGroupConfigInput) (ParallelGroup
 
 func validateParallelConfig(config ParallelConfig) error {
 	for name, group := range config.Groups {
+		allowedStages, ok := allowedParallelMemberStages(name)
+		if !ok {
+			return fmt.Errorf("parallel.groups.%s 未知并行组", name)
+		}
 		switch group.Mode {
 		case "advisory", "gate_input":
 		default:
@@ -493,8 +497,33 @@ func validateParallelConfig(config ParallelConfig) error {
 		if len(group.Members) == 0 {
 			return fmt.Errorf("parallel.groups.%s.members 不能为空", name)
 		}
+		for i, member := range group.Members {
+			stage := strings.TrimSpace(member.Stage)
+			if stage == "" {
+				continue
+			}
+			if !allowedStages[stage] {
+				return fmt.Errorf("parallel.groups.%s.members[%d].stage 不能挂载到 %q", name, i, stage)
+			}
+		}
 	}
 	return nil
+}
+
+// allowedParallelMemberStages defines the only stage anchors the built-in DAG can schedule.
+func allowedParallelMemberStages(groupName string) (map[string]bool, bool) {
+	switch groupName {
+	case "planning_context":
+		return map[string]bool{"planning": true}, true
+	case "implementation_context":
+		return map[string]bool{"before_execution": true, "execution": true}, true
+	case "review":
+		return map[string]bool{"before_review": true, "review": true}, true
+	case "qa":
+		return map[string]bool{"before_qa": true, "qa": true}, true
+	default:
+		return nil, false
+	}
 }
 
 // validationConfigFromInput validates user-supplied quality gate commands.

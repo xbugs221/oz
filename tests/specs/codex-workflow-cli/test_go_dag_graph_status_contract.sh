@@ -48,10 +48,8 @@ note "wo graph mermaid 应展示紧凑中文状态图和默认并行成员"
 (cd "$project" && "$wo" graph --change demo --format mermaid) >"$tmp/graph.mmd"
 cat "$tmp/graph.mmd" >>"$log"
 for want in \
-  "需求分析员" \
   "代码库侦察员" \
   "外部资料研究员" \
-  "规划上下文" \
   "执行上下文" \
   "审核" \
   "测试" \

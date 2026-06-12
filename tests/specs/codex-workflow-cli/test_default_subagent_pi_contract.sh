@@ -47,7 +47,6 @@ note "generate default wo.yaml in a fresh project"
 
 cp "$PROJECT/wo.yaml" "$RESULT_DIR/wo.yaml"
 grep -q 'engine: go-dag' "$PROJECT/wo.yaml" || fail "default wo.yaml should keep engine: go-dag"
-grep -q 'planning_context:' "$PROJECT/wo.yaml" || fail "default wo.yaml should include planning_context"
 grep -q 'implementation_context:' "$PROJECT/wo.yaml" || fail "default wo.yaml should include implementation_context"
 
 member_count="$(grep -c '^            - name:' "$PROJECT/wo.yaml" || true)"
@@ -58,14 +57,12 @@ if grep -Eq '^[[:space:]]+tool: (codex|legacy-agent)$' "$PROJECT/wo.yaml"; then
   fail "default wo.yaml should not contain non-pi subagent tool"
 fi
 
-note "default graph still contains planning and implementation subagent nodes"
+note "default graph contains implementation subagent nodes without duplicated planning helpers"
 (
   cd "$PROJECT"
   "$WO_BIN" graph --change demo --format json
 ) >"$RESULT_DIR/graph.json" 2>"$RESULT_DIR/graph.err"
-grep -q 'planning_context' "$RESULT_DIR/graph.json" || fail "graph should include planning_context nodes"
 grep -q 'implementation_context' "$RESULT_DIR/graph.json" || fail "graph should include implementation_context nodes"
-grep -q '需求分析员' "$RESULT_DIR/graph.json" || fail "graph should include the requirement-analysis subagent"
 grep -q '代码库侦察员' "$RESULT_DIR/graph.json" || fail "graph should include the code exploration subagent"
 
 note "contract passed: default parallel subagent tool is pi"

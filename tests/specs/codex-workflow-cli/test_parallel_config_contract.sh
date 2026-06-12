@@ -23,11 +23,9 @@ func TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups(t *testing.T) {
     required := []string{
         "parallel:",
         "enabled: true",
-        "planning_context:",
         "implementation_context:",
         "review:",
         "qa:",
-        "需求分析员",
         "代码库侦察员",
         "外部资料研究员",
         "目标核对审核员",
