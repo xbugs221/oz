@@ -100,12 +100,12 @@ import re
 import sys
 
 prompt, session = sys.argv[1:3]
-output_match = re.search(r"^SUBAGENT_OUTPUT=(.+)$", prompt, re.M)
-if not output_match:
+name_match = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M)
+if not name_match:
     print(json.dumps({"type": "session", "id": "pi-main-session"}))
     raise SystemExit(0)
 
-name = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M).group(1).strip()
+name = name_match.group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
 change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
 count_path = pathlib.Path(os.environ["PI_ATTEMPT_FILE"])
@@ -272,8 +272,10 @@ attempts="$(cat "$TMP/pi-attempts")"
 [[ "$attempts" == "2" ]] || fail "expected exactly two pi subagent attempts, got $attempts"
 grep -q 'session=pi-subagent-session' "$RESULT_DIR/pi-prompts.log" || fail "retry must resume the original pi subagent session"
 grep -Eq 'evidence|字符串数组|string' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must include schema guidance for evidence"
-grep -q 'SUBAGENT_OUTPUT' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must name the artifact output path"
-grep -Eq '只重写|重写|rewrite' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must constrain the agent to rewrite only the artifact"
+if grep -q 'SUBAGENT_OUTPUT=' "$RESULT_DIR/pi-prompts.log"; then
+  fail "subagent prompt must not expose artifact output path"
+fi
+grep -q '最终只输出' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must require final JSON output"
 
 state="$(find "$TMP/state/wo/repos" -name state.json -type f -print | sort | tail -n 1)"
 test -n "$state" || fail "missing state.json"

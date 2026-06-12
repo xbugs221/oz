@@ -37,7 +37,7 @@ func TestLoadWorkflowConfigUsesDefaults(t *testing.T) {
 	if !config.Parallel.Enabled {
 		t.Fatal("parallel enabled = false, want enabled by default")
 	}
-	for _, group := range []string{"planning_context", "implementation_context", "review", "qa"} {
+	for _, group := range []string{"implementation_context", "review", "qa"} {
 		if _, ok := config.Parallel.Groups[group]; !ok {
 			t.Fatalf("parallel group %q missing from defaults", group)
 		}
@@ -82,7 +82,7 @@ func TestInitWorkflowConfigWritesDefaultMCYAML(t *testing.T) {
 	if len(config.Validation.Commands) != 0 {
 		t.Fatalf("validation commands = %v, want disabled default", config.Validation.Commands)
 	}
-	if !strings.Contains(string(data), "parallel:") || !strings.Contains(string(data), "name: 需求分析员") {
+	if !strings.Contains(string(data), "parallel:") || !strings.Contains(string(data), "name: 代码库侦察员") {
 		t.Fatalf("default wo.yaml missing parallel helper skeleton:\n%s", data)
 	}
 	if config.Validation.MaxAttemptsPerStage != 3 {
@@ -127,7 +127,7 @@ func TestDefaultWorkflowConfigYAMLRoundTripsRuntimeFields(t *testing.T) {
 	if loaded.Validation.MaxAttemptsPerStage != defaults.Validation.MaxAttemptsPerStage || len(loaded.Validation.Commands) != 0 {
 		t.Fatalf("validation = %#v, want default attempts and no commands", loaded.Validation)
 	}
-	for _, group := range []string{"planning_context", "implementation_context", "review", "qa"} {
+	for _, group := range []string{"implementation_context", "review", "qa"} {
 		if _, ok := loaded.Parallel.Groups[group]; !ok {
 			t.Fatalf("parallel group %q missing after default YAML round trip", group)
 		}
@@ -416,6 +416,9 @@ func TestLoadWorkflowConfigRejectsInvalidInput(t *testing.T) {
 		{name: "bad parallel mode", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: swarm\n          members:\n            - name: 审核员\n              purpose: 审核\n"},
 		{name: "empty parallel member name", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: gate_input\n          members:\n            - name: ''\n              purpose: 审核\n"},
 		{name: "bad parallel member tool", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        review:\n          mode: gate_input\n          members:\n            - name: 审核员\n              purpose: 审核\n              tool: unknown\n"},
+		{name: "fix subagent unsupported", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        implementation_context:\n          mode: advisory\n          members:\n            - name: 修复分析员\n              purpose: 分析修复阶段问题\n              stage: fix\n"},
+		{name: "planning member in execution group", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        implementation_context:\n          mode: advisory\n          members:\n            - name: 规划分析员\n              purpose: 分析规划阶段问题\n              stage: planning\n"},
+		{name: "unknown parallel group", body: "wo:\n  workflow:\n    parallel:\n      groups:\n        fix:\n          mode: advisory\n          members:\n            - name: 修复分析员\n              purpose: 分析修复阶段问题\n"},
 		{name: "legacy acceptance stage", body: "wo:\n  workflow:\n    stages:\n      acceptance:\n        cli: codex\n"},
 		{name: "legacy writing stage", body: "wo:\n  workflow:\n    stages:\n      writing:\n        cli: codex\n"},
 		{name: "legacy writing prompt", body: "wo:\n  prompts:\n    writing: old\n"},

@@ -30,24 +30,6 @@ wo:
     parallel:
       enabled: true
       groups:
-        planning_context:
-          mode: advisory
-          members:
-            - name: 需求分析员
-              purpose: 澄清代码变更目标、验收边界和风险
-              stage: planning
-              tool: pi
-              subagent: metis
-            - name: 代码库侦察员
-              purpose: 搜索相关模块、测试入口和既有实现模式
-              stage: planning
-              tool: pi
-              subagent: explore
-            - name: 外部资料研究员
-              purpose: 查询依赖库文档、版本约束和开源实现参考
-              stage: planning
-              tool: pi
-              subagent: librarian
         implementation_context:
           mode: advisory
           members:

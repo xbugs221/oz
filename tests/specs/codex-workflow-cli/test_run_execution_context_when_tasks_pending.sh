@@ -52,26 +52,24 @@ import re
 import sys
 
 prompt = sys.argv[1]
-output = re.search(r"SUBAGENT_OUTPUT=(.+)", prompt)
-if output:
-    name = re.search(r"SUBAGENT_NAME=(.+)", prompt)
+name = re.search(r"SUBAGENT_NAME=(.+)", prompt)
+if name:
     purpose = re.search(r"SUBAGENT_PURPOSE=(.+)", prompt)
     change_name = re.search(r"CURRENT_CHANGE=(.+)", prompt)
     member_name = name.group(1).strip() if name else "并行成员"
-    artifact = pathlib.Path(output.group(1).strip())
-    artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_text(json.dumps({
+    body = {
         "name": member_name,
         "change_name": change_name.group(1).strip() if change_name else "17-pending",
         "purpose": purpose.group(1).strip() if purpose else "执行前上下文",
         "status": "success",
         "summary": member_name + " 已提供 execution 前上下文",
         "evidence": ["test-results/17-skip-execution-context/pending-runs-context.log"]
-    }, ensure_ascii=False), encoding="utf-8")
+    }
     with pathlib.Path(os.environ["SUBAGENT_MARKER"]).open("a", encoding="utf-8") as handle:
         handle.write(member_name + "\n")
     print(json.dumps({"type": "session", "id": "fake-subagent-" + member_name}))
     print(json.dumps({"type": "thread.started", "thread_id": "fake-subagent-" + member_name}))
+    print(json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}]}}, ensure_ascii=False))
     raise SystemExit(0)
 
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
@@ -91,6 +89,9 @@ if stage == "execution":
     if "- [ ]" not in text:
         raise SystemExit("pending scenario expected an unchecked task before execution")
     task.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
+    evidence = repo / "test-results" / "temporary.log"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text("execution evidence\n", encoding="utf-8")
     print(json.dumps({"type": "session", "id": "fake-execution-session"}))
     print(json.dumps({"type": "thread.started", "thread_id": "fake-execution-session"}))
     raise SystemExit(0)
@@ -179,14 +180,7 @@ cat >"$project/docs/changes/$change/acceptance.json" <<'JSON'
       "assertions": ["task.md 中的执行任务从未勾选变为已勾选，workflow 保留 execution 前上下文"]
     }
   ],
-  "required_evidence": [
-    {
-      "id": "temporary-log",
-      "kind": "runtime_log",
-      "path": "test-results/temporary.log",
-      "purpose": "记录临时 workflow 运行"
-    }
-  ]
+  "required_evidence": []
 }
 JSON
 

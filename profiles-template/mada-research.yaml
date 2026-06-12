@@ -30,24 +30,6 @@ wo:
     parallel:
       enabled: true
       groups:
-        planning_context:
-          mode: advisory
-          members:
-            - name: 研究问题拆解员
-              purpose: 拆解调研问题、证据口径和不可混淆概念
-              stage: planning
-              tool: pi
-              subagent: metis
-            - name: 来源地图研究员
-              purpose: 找出一手资料、权威文档、数据集和可替代来源
-              stage: planning
-              tool: pi
-              subagent: librarian
-            - name: 方法约束评估员
-              purpose: 评估采样偏差、时间范围、定义差异和证据等级
-              stage: planning
-              tool: pi
-              subagent: explore
         implementation_context:
           mode: advisory
           members:

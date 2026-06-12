@@ -87,7 +87,6 @@ func (r *subagentOptionsCaptureRunner) SetArtifactCapture(capture *artifactCaptu
 // Run records the options supplied to a subagent and writes a valid member artifact.
 func (r *subagentOptionsCaptureRunner) Run(_ context.Context, _ string, prompt, _ string, options StageOptions) (string, error) {
 	r.options = options
-	output := promptValue(prompt, "SUBAGENT_OUTPUT")
 	name := promptValue(prompt, "SUBAGENT_NAME")
 	purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
 	changeName := promptValue(prompt, "CURRENT_CHANGE")
@@ -96,10 +95,7 @@ func (r *subagentOptionsCaptureRunner) Run(_ context.Context, _ string, prompt, 
 		r.capture.Append(body)
 		return "capture-session", nil
 	}
-	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		return "", err
-	}
-	return "capture-session", os.WriteFile(output, []byte(body), 0o644)
+	return "capture-session", nil
 }
 
 type subagentOptionsCaptureTool struct {
@@ -322,13 +318,13 @@ func TestNodeRunSubagentRetriesCaptureAndSchemaFailuresWithActionablePrompts(t *
 	if len(runner.prompts) != 3 {
 		t.Fatalf("prompts = %d, want 3", len(runner.prompts))
 	}
-	if !strings.Contains(runner.prompts[1], "未从最终回复捕获到合法 SUBAGENT_OUTPUT JSON object") ||
+	if !strings.Contains(runner.prompts[1], "未从最终回复捕获到合法 member artifact JSON object") ||
 		!strings.Contains(runner.prompts[1], "裸 JSON object") ||
 		strings.Contains(runner.prompts[1], "no such file") {
 		t.Fatalf("capture retry prompt is not actionable:\n%s", runner.prompts[1])
 	}
 	if !strings.Contains(runner.prompts[2], "evidence 第 1 项必须是字符串") ||
-		!strings.Contains(runner.prompts[2], "evidence: string[]") {
+		!strings.Contains(runner.prompts[2], "每一项必须是字符串") {
 		t.Fatalf("schema retry prompt missing evidence guidance:\n%s", runner.prompts[2])
 	}
 	path := memberArtifactPath(repo, state.RunID, "implementation_context", 0, "代码库侦察员")
@@ -379,7 +375,7 @@ func TestSubagentMemberArtifactRejectsNonEmptySecretsField(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := readNormalizeValidateMemberArtifact(path, "implementation_context", ParallelMemberConfig{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式"}, "demo")
-	if err == nil || !strings.Contains(err.Error(), "字段 secrets 不属于 SUBAGENT_OUTPUT schema") {
+	if err == nil || !strings.Contains(err.Error(), "字段 secrets 不属于 member artifact schema") {
 		t.Fatalf("error = %v, want secrets schema guidance", err)
 	}
 }

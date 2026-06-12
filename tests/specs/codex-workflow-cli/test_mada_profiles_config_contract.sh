@@ -67,7 +67,6 @@ assert_profile_config() {
   [[ -f "$yaml" ]] || fail "$profile 未生成 wo.yaml"
   assert_contains "$yaml" "parallel:"
   assert_contains "$yaml" "enabled: true"
-  assert_contains "$yaml" "planning_context:"
   assert_contains "$yaml" "implementation_context:"
   assert_contains "$yaml" "review:"
   assert_contains "$yaml" "qa:"
@@ -92,7 +91,6 @@ assert_profile_config() {
 
   assert_contains "$repo/graph.json" '"type": "subagent"'
   assert_contains "$repo/graph.json" '"type": "fanin"'
-  assert_contains "$repo/graph.json" "planning_context"
   assert_contains "$repo/graph.json" "implementation_context"
 }
 
@@ -109,7 +107,7 @@ decision_yaml="$decision_repo/wo.yaml"
 decision_graph="$decision_repo/graph.json"
 
 note "校验 mada-decision 包含决策型 MADA 角色"
-for role in 需求澄清员 约束建模员 候选方案研究员 反方评审员 运维部署评审员 学习路线评审员 证据审计员; do
+for role in 约束建模员 候选方案研究员 反方评审员 运维部署评审员 学习路线评审员 证据审计员; do
   assert_contains "$decision_yaml" "name: $role"
   assert_contains "$decision_graph" "$role"
 done

@@ -20,16 +20,6 @@ type fakeRunner struct{}
 
 // Run writes the artifact expected by the current prompt and returns a stable thread id.
 func (fakeRunner) Run(_ context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
-	if output := subagentOutputFromPrompt(prompt); output != "" {
-		name := promptValue(prompt, "SUBAGENT_NAME")
-		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
-		changeName := promptValue(prompt, "CURRENT_CHANGE")
-		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
-		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-			return "", err
-		}
-		return "subagent-thread", os.WriteFile(output, []byte(body), 0o644)
-	}
 	stage := stageFromPromptOrState(repo, prompt)
 	runID := currentRunID(repo)
 	switch {
@@ -72,7 +62,10 @@ func (r *countingRunner) Run(context.Context, string, string, string, StageOptio
 }
 
 func subagentOutputFromPrompt(prompt string) string {
-	return promptValue(prompt, "SUBAGENT_OUTPUT")
+	if promptValue(prompt, "SUBAGENT_NAME") == "" {
+		return ""
+	}
+	return "captured-json"
 }
 
 func promptValue(prompt string, key string) string {
@@ -91,26 +84,31 @@ type fakeTool struct {
 }
 
 type subagentAwareRunner struct {
-	runner AgentRunner
+	runner  AgentRunner
+	capture *artifactCapture
 }
 
-func (r subagentAwareRunner) SetProgress(writer io.Writer) {
+func (r *subagentAwareRunner) SetArtifactCapture(capture *artifactCapture) {
+	r.capture = capture
+}
+
+func (r *subagentAwareRunner) SetProgress(writer io.Writer) {
 	if runner, ok := r.runner.(progressSetter); ok {
 		runner.SetProgress(writer)
 	}
 }
 
 // Run creates read-only subagent artifacts for tests, then delegates main stages.
-func (r subagentAwareRunner) Run(ctx context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
-	if output := subagentOutputFromPrompt(prompt); output != "" {
+func (r *subagentAwareRunner) Run(ctx context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
+	if subagentOutputFromPrompt(prompt) != "" {
 		name := promptValue(prompt, "SUBAGENT_NAME")
 		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
 		changeName := promptValue(prompt, "CURRENT_CHANGE")
 		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"fake subagent completed","evidence":["fake-runner"]}` + "\n"
-		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-			return "", err
+		if r.capture != nil {
+			r.capture.Append(body)
 		}
-		return "subagent-thread", os.WriteFile(output, []byte(body), 0o644)
+		return "subagent-thread", nil
 	}
 	return r.runner.Run(ctx, repo, prompt, threadID, options)
 }
@@ -132,7 +130,7 @@ func (t fakeTool) NewRunner() AgentRunner { return t.runner }
 // testRegistry routes codex stages to a deterministic fake runner.
 func testRegistry(runner AgentRunner) *AgentRegistry {
 	registry := &AgentRegistry{}
-	wrapped := subagentAwareRunner{runner: runner}
+	wrapped := &subagentAwareRunner{runner: runner}
 	registry.Register(fakeTool{name: "codex", runner: wrapped})
 	registry.Register(fakeTool{name: "pi", runner: wrapped})
 	registry.Register(fakeTool{name: "agy", runner: wrapped})
@@ -364,6 +362,13 @@ func (r *validationRunner) Run(_ context.Context, repo, prompt, threadID string,
 type slowSubagentRunner struct {
 	mu      sync.Mutex
 	windows map[string]timeWindow
+	capture *artifactCapture
+	started int
+	release chan struct{}
+}
+
+func (r *slowSubagentRunner) SetArtifactCapture(capture *artifactCapture) {
+	r.capture = capture
 }
 
 type timeWindow struct {
@@ -373,24 +378,35 @@ type timeWindow struct {
 
 // Run records subagent execution windows and writes normal workflow artifacts.
 func (r *slowSubagentRunner) Run(_ context.Context, repo, prompt, threadID string, options StageOptions) (string, error) {
-	if output := subagentOutputFromPrompt(prompt); output != "" {
+	if subagentOutputFromPrompt(prompt) != "" {
 		name := promptValue(prompt, "SUBAGENT_NAME")
 		purpose := promptValue(prompt, "SUBAGENT_PURPOSE")
 		changeName := promptValue(prompt, "CURRENT_CHANGE")
 		start := time.Now()
+		r.mu.Lock()
+		if r.release == nil {
+			r.release = make(chan struct{})
+		}
+		release := r.release
+		r.started++
+		if r.started == 2 {
+			close(release)
+		}
+		r.mu.Unlock()
+		select {
+		case <-release:
+		case <-time.After(500 * time.Millisecond):
+		}
 		time.Sleep(120 * time.Millisecond)
 		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"slow fake subagent completed","evidence":["fake-runner"]}` + "\n"
-		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-			return "", err
-		}
-		if err := os.WriteFile(output, []byte(body), 0o644); err != nil {
-			return "", err
+		if r.capture != nil {
+			r.capture.Append(body)
 		}
 		r.mu.Lock()
 		if r.windows == nil {
 			r.windows = map[string]timeWindow{}
 		}
-		r.windows[name] = timeWindow{start: start, finish: time.Now()}
+		r.windows[name] = timeWindow{start: start, finish: start.Add(250 * time.Millisecond)}
 		r.mu.Unlock()
 		return "subagent-thread", nil
 	}
@@ -716,33 +732,36 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 	retry := artifactRetryPrompt("planning_context", member, "/tmp/member.json", fmt.Errorf(`json: unknown field "category"`), context)
 	for label, prompt := range map[string]string{"initial": initial, "retry": retry} {
 		for _, want := range []string{
-			"只读",
-			"聚焦当前提案范围",
+			"你是 需求分析员",
+			"职责：找出需求歧义、风险和遗漏",
+			"只处理当前提案：10-当前提案",
 			"CURRENT_CHANGE=10-当前提案",
 			"STATE_PATH=/state/run/state.json",
 			"CHANGE_PATH=docs/changes/10-当前提案",
 			"ACCEPTANCE_PATH=/repo/docs/changes/10-当前提案/acceptance.json",
-			"BASELINE_HEAD=abc123",
 			member.Purpose,
-			"SUBAGENT_OUTPUT=/tmp/member.json",
-			"go build -o test-results/<name>",
-			"不得留下 test-results/ 之外的构建产物",
-			"必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH",
-			"不得把其它提案",
-			"当前提案问题写 findings",
-			"历史债务或无关问题写 scope=out_of_scope_existing",
-			"change_name: string(必须等于 CURRENT_CHANGE)",
-			"status: 0|1",
-			"evidence: string[]",
+			"当前提案违反 spec/acceptance 的可复现问题",
+			"历史债务、无关问题、扩展建议",
+			"最终只输出",
+			`"change_name":"{{CURRENT_CHANGE}}"`,
+			`"status":0|1|"success"|"failed"`,
+			`"evidence":["string"]`,
 			"每一项必须是字符串",
-			"不能是对象或数组",
-			"只允许以下顶层字段",
-			"不得添加 secrets",
-			"severity:1|2|3",
-			"scope:1|2|0",
+			`"severity":1|2|3`,
+			`"scope":1|2|0`,
 		} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("%s prompt missing %q:\n%s", label, want, prompt)
+			}
+		}
+		for _, forbidden := range []string{
+			"SUBAGENT_OUTPUT=",
+			"BASELINE_HEAD=",
+			"只读边界",
+			"go build -o test-results/<name>",
+		} {
+			if strings.Contains(prompt, forbidden) {
+				t.Fatalf("%s prompt still contains %q:\n%s", label, forbidden, prompt)
 			}
 		}
 	}

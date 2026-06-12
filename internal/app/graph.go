@@ -27,6 +27,7 @@ type WorkflowNode struct {
 	Type      string `json:"type" yaml:"type"`
 	Group     string `json:"group,omitempty" yaml:"group,omitempty"`
 	Stage     string `json:"stage,omitempty" yaml:"stage,omitempty"`
+	RunStage  string `json:"run_stage,omitempty" yaml:"run_stage,omitempty"`
 	Member    string `json:"member,omitempty" yaml:"member,omitempty"`
 	Mode      string `json:"mode,omitempty" yaml:"mode,omitempty"`
 	Iteration int    `json:"iteration,omitempty" yaml:"iteration,omitempty"`
@@ -95,11 +96,11 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		Display:    WorkflowDisplay{Title: "wo workflow: " + changeName},
 	}
 	var beforeExecutionPrereqs []WorkflowEdge
-	if planning := addParallelGroup(&spec, workflow, "planning_context", "execution", 0, nil); planning != "" {
+	if planning := addParallelGroup(&spec, workflow, "planning_context", "planning", "execution", 0, nil); planning != "" {
 		beforeExecutionPrereqs = append(beforeExecutionPrereqs, WorkflowEdge{From: planning})
 	}
 	spec.addNode(WorkflowNode{ID: "execution", Name: "execution", Type: "main_stage", Stage: "execution"})
-	if before := addParallelGroup(&spec, workflow, "implementation_context", "execution", 0, beforeExecutionPrereqs); before != "" {
+	if before := addParallelGroup(&spec, workflow, "implementation_context", "execution", "execution", 0, beforeExecutionPrereqs); before != "" {
 		spec.addEdge(before, "execution", "")
 	} else if len(beforeExecutionPrereqs) > 0 {
 		spec.addEdge(beforeExecutionPrereqs[0].From, "execution", "")
@@ -110,7 +111,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		qa := fmt.Sprintf("qa_%d", i)
 		fix := fmt.Sprintf("fix_%d", i)
 		spec.addNode(WorkflowNode{ID: review, Name: review, Type: "main_stage", Stage: review, Iteration: i})
-		if fanin := addParallelGroup(&spec, workflow, "before_review", review, i, []WorkflowEdge{{From: previous}}); fanin != "" {
+		if fanin := addParallelGroup(&spec, workflow, "before_review", review, review, i, []WorkflowEdge{{From: previous}}); fanin != "" {
 			spec.addEdge(fanin, review, "")
 		} else {
 			spec.addEdge(previous, review, "")
@@ -119,7 +120,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		spec.addGate(reviewGate, "review gate", review, i)
 		spec.addEdge(review, reviewGate, "")
 		spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: i})
-		if fanin := addParallelGroup(&spec, workflow, "before_qa", qa, i, []WorkflowEdge{{From: reviewGate, Label: "review clean"}}); fanin != "" {
+		if fanin := addParallelGroup(&spec, workflow, "before_qa", qa, qa, i, []WorkflowEdge{{From: reviewGate, Label: "review clean"}}); fanin != "" {
 			spec.addEdge(fanin, qa, "")
 		} else {
 			spec.addEdge(reviewGate, qa, "review clean")
@@ -194,7 +195,7 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 }
 
 // addParallelGroup expands a configured subagent group into fan-out member nodes and a fan-in node.
-func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, stage string, iteration int, prerequisites []WorkflowEdge) string {
+func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, displayStage, runStage string, iteration int, prerequisites []WorkflowEdge) string {
 	groupName := configGroupName(visualGroup)
 	group, ok := workflow.Parallel.Groups[visualGroup]
 	if !ok {
@@ -209,7 +210,7 @@ func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, 
 		if iteration > 0 {
 			id = fmt.Sprintf("%s_%d_%d", visualGroup, iteration, i+1)
 		}
-		spec.addNode(WorkflowNode{ID: id, Name: groupName + " subagent: " + member.Name, Type: "subagent", Group: visualGroup, Stage: stage, Member: member.Name, Mode: group.Mode, Iteration: iteration})
+		spec.addNode(WorkflowNode{ID: id, Name: groupName + " subagent: " + member.Name, Type: "subagent", Group: visualGroup, Stage: displayStage, RunStage: runStage, Member: member.Name, Mode: group.Mode, Iteration: iteration})
 		for _, prerequisite := range prerequisites {
 			spec.addEdge(prerequisite.From, id, prerequisite.Label)
 		}
@@ -219,7 +220,7 @@ func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, 
 	if iteration > 0 {
 		fanin = fmt.Sprintf("%s_%d_fanin", visualGroup, iteration)
 	}
-	spec.addNode(WorkflowNode{ID: fanin, Name: groupName + " fan-in", Type: "fanin", Group: visualGroup, Stage: stage, Mode: group.Mode, Iteration: iteration})
+	spec.addNode(WorkflowNode{ID: fanin, Name: groupName + " fan-in", Type: "fanin", Group: visualGroup, Stage: displayStage, RunStage: runStage, Mode: group.Mode, Iteration: iteration})
 	for _, id := range memberIDs {
 		spec.addEdge(id, fanin, "")
 	}

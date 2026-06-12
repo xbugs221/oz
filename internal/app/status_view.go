@@ -574,7 +574,7 @@ type compactColumnWidth struct {
 func compactVisibleRows(rows []statusViewRow) []statusViewRow {
 	out := make([]statusViewRow, 0, len(rows))
 	for _, row := range rows {
-		if row.Kind == "stage" && row.Stage == "planning" && row.SessionID == "" && row.Marker == "✓" && row.DurationMinutes == nil {
+		if row.Kind == "stage" && row.Stage == "planning" && row.SessionID == "" && (row.Marker == "-" || row.Marker == "✓") && row.DurationMinutes == nil {
 			continue
 		}
 		out = append(out, row)

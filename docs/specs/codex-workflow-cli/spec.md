@@ -326,8 +326,8 @@
 - **当** 用户运行 `wo config`
 - **则** 生成的 `wo.yaml` 包含 `wo.workflow.parallel`
 - **且** `enabled` 默认为 `true`
-- **且** 包含 `planning_context`、`implementation_context`、`review`、`qa` 四类 groups
-- **且** 默认成员名称包含“需求分析员”“代码库侦察员”“外部资料研究员”“目标核对审核员”“CLI/API 测试员”等直观职责名
+- **且** 包含 `implementation_context`、`review`、`qa` 三类默认 groups
+- **且** 默认成员名称包含“代码库侦察员”“外部资料研究员”“目标核对审核员”“CLI/API 测试员”等直观职责名
 - **且** 不把 Sisyphus、Prometheus、Metis、Momus、Oracle 或 Explore 等内部 agent 名称作为主要用户可见成员名称
 
 #### 场景：并行层关闭时行为兼容
@@ -394,11 +394,11 @@
 - **且** sealed run 不为并行成员创建额外 session 或调用额外 `AgentRunner`
 - **且** archive gate 仍只接受现有证据链完整后完成
 
-#### 场景：planning 和 execution 并行上下文进入后续 prompt
+#### 场景：execution 并行上下文进入后续 prompt
 
-- **给定** `planning_context` 或 `implementation_context` 组已启用
+- **给定** `implementation_context` 组已启用
 - **当** sealed run 进入后续 execution、review 或 QA prompt
-- **则** prompt 必须引用当前 run 目录中的 `parallel-planning-context.json` 或 `parallel-implementation-context.json`
+- **则** prompt 必须引用当前 run 目录中的 `parallel-implementation-context.json`
 - **且** prompt 必须说明 `tool/subagent` 只作为提示词角色线索，不作为 CLI 参数
 - **且** advisory 成员失败时必须记录失败摘要并继续主阶段
 - **且** required 成员失败时必须阻断阶段完成或推进
@@ -2344,11 +2344,11 @@
 
 // Sources: 13-修正-wo-status-多轮并行状态展示
 
-系统必须把 execution 起跑的 sealed run 中已完成的 `planning_context` fan-in 视为规划准备完成。human status 不得因为没有真实 `planning` main_stage 而显示 `规划阶段 - - -`，也不得展开已完成的规划 subagent 明细。
+系统必须在默认 sealed run 中隐藏没有运行证据的规划占位行。若旧配置显式启用并完成了 `planning_context` fan-in，human status 仍可把它视为规划准备完成，且不得展开已完成的规划 subagent 明细。
 
 #### 场景：execution 起跑且 planning_context fan-in 成功时规划行显示完成
 
-- **给定** sealed run 从 execution 阶段起跑
+- **给定** sealed run 从 execution 阶段起跑且旧配置显式启用 `planning_context`
 - **且** `planning_context_*` fan-in 节点全部成功且 `parallel-planning-context.json` 存在
 - **当** 用户运行 `wo status -wN`
 - **则** `规划阶段` 行显示 `✓` marker
@@ -2408,7 +2408,7 @@
 
 ### 需求：默认 parallel subagents 与 DAG 图
 
-系统必须默认启用 parallel subagents，并在默认配置、DAG graph 和人类 status 中表达 planning context、implementation context、review 和 QA 的 fan-out/fan-in 语义。
+系统必须默认启用 parallel subagents，并在默认配置、DAG graph 和人类 status 中表达 implementation context、review 和 QA 的 fan-out/fan-in 语义。
 
 #### 场景：默认配置启用 parallel
 
@@ -2419,7 +2419,7 @@
 #### 场景：Mermaid 图展示 fan-out/fan-in
 
 - **当** 用户运行 `wo graph --change <change> --format mermaid`
-- **则** Mermaid 输出必须包含 planning context、implementation context、review、QA 的 subagent 节点和 fan-in 节点
+- **则** Mermaid 输出必须包含 implementation context、review、QA 的 subagent 节点和 fan-in 节点
 - **且** 图中必须包含 archive gate
 - **且** 默认图不得要求任何外部 workflow scheduler
 
@@ -2459,18 +2459,18 @@
 - **当** 用户分别运行 `wo config --profile mada-code`、`wo config --profile mada-decision`、`wo config --profile mada-research`
 - **则** 每次都必须生成 `wo.yaml`
 - **并且** YAML 中必须启用 `parallel.enabled`
-- **并且** 必须包含 `planning_context`、`implementation_context`、`review`、`qa` 四个并行组
-- **并且** `review` 和 `qa` 必须是 `gate_input`，`planning_context` 和 `implementation_context` 必须是 `advisory`
+- **并且** 必须包含 `implementation_context`、`review`、`qa` 三个默认并行组
+- **并且** `review` 和 `qa` 必须是 `gate_input`，`implementation_context` 必须是 `advisory`
 - **并且** `wo graph --change <change> --format json` 必须能成功读取该配置
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
-- **关键断言**：三类 profile 都生成标准配置；四类并行组模式正确
+- **关键断言**：三类 profile 都生成标准配置；三类默认并行组模式正确
 - **剩余风险**：不启动真实 agent，避免创建阶段依赖外部模型
 
 #### 场景：decision profile 包含决策评审所需角色
 
 - **给定** 一个临时 git 仓库
 - **当** 用户运行 `wo config --profile mada-decision`
-- **则** 生成的 `wo.yaml` 必须包含面向技术选型的角色：`需求澄清员`、`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
+- **则** 生成的 `wo.yaml` 必须包含面向技术选型的角色：`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
 - **并且** `wo graph --change <change> --format json` 必须展示这些 review 子代理节点
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
 - **关键断言**：decision profile 不退化为默认代码审查角色

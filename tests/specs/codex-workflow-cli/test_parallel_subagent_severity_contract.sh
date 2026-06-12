@@ -151,13 +151,12 @@ prompt = os.environ["PI_PROMPT"]
 attempt_file = pathlib.Path(os.environ["PI_ATTEMPT_FILE"])
 prompt_log = pathlib.Path(os.environ["PI_PROMPT_LOG"])
 
-output_match = re.search(r"^SUBAGENT_OUTPUT=(.+)$", prompt, re.M)
-if not output_match:
+name_match = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M)
+if not name_match:
     print(json.dumps({"type": "session", "id": "pi-main-session"}))
     raise SystemExit(0)
 
-output = pathlib.Path(output_match.group(1).strip())
-name = re.search(r"^SUBAGENT_NAME=(.+)$", prompt, re.M).group(1).strip()
+name = name_match.group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
 change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
 attempt = int(attempt_file.read_text(encoding="utf-8")) + 1 if attempt_file.exists() else 1
@@ -168,7 +167,7 @@ with prompt_log.open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({
         "attempt": attempt,
         "session": session,
-        "has_output": "SUBAGENT_OUTPUT" in prompt,
+        "has_output": "SUBAGENT_OUTPUT=" in prompt,
         "has_severity_guidance": "severity" in prompt or "严重级别" in prompt,
     }, ensure_ascii=False) + "\n")
 
@@ -194,12 +193,18 @@ body = {
         }
     ]
 }
-output.parent.mkdir(parents=True, exist_ok=True)
-output.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
 print(json.dumps({"type": "session", "id": "pi-planning-session"}))
+print(json.dumps({
+    "type": "message",
+    "message": {
+        "role": "assistant",
+        "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}],
+    },
+}, ensure_ascii=False))
 PY
 SH
 chmod +x "$FAKEBIN/pi"
+cp "$FAKEBIN/codex" "$FAKEBIN/agy"
 
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT/docs/changes/1-parallel-info-severity/tests"
@@ -254,7 +259,8 @@ cat >"$PROJECT/docs/changes/1-parallel-info-severity/acceptance.json" <<'JSON'
       "source": "change_contract",
       "path": "docs/changes/1-parallel-info-severity/tests/demo.sh",
       "command": "bash docs/changes/1-parallel-info-severity/tests/demo.sh",
-      "purpose": "prove change test entry exists"
+      "purpose": "prove change test entry exists",
+      "assertions": ["parallel subagent severity info is normalized without stopping workflow"]
     }
   ],
   "required_evidence": []
@@ -338,8 +344,8 @@ if len(records) == 2:
     retry = records[1]
     if retry.get("session") != "pi-planning-session":
         raise SystemExit(f"retry session = {retry.get('session')!r}, want pi-planning-session")
-    if not retry.get("has_output"):
-        raise SystemExit("retry prompt did not include SUBAGENT_OUTPUT")
+    if retry.get("has_output"):
+        raise SystemExit("retry prompt must not include SUBAGENT_OUTPUT path")
 print("parallel info severity assertions passed")
 PY
 

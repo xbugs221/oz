@@ -245,26 +245,27 @@ func subagentPromptContext(repo string, state State) (subagentContext, error) {
 }
 
 func subagentPrompt(groupName string, member ParallelMemberConfig, output string, context subagentContext) string {
+	_ = groupName
+	_ = output
 	return strings.Join([]string{
-		"只读，聚焦当前提案范围，" + member.Purpose,
-		subagentReadOnlyBoundaryPrompt(),
-		"当前 sealed run 只处理 CURRENT_CHANGE；必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH，再给出结论。",
-		"不要用工具写 SUBAGENT_OUTPUT；最终回复只输出一个 JSON object，wo 会把它保存到 SUBAGENT_OUTPUT。",
-		"如果看到其它 docs/changes/*，只能作为背景证据；不得把其它提案的任务、测试或缺口写成当前提案 blocker/major finding。",
-		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
-		"正向确认、已满足项或无操作项不要写入 findings；只能写入 summary/evidence。",
-		"只有违反 acceptance/spec 的可复现行为失败才能标为 blocker/major；更深覆盖建议、可维护性建议或未承诺扩展写 minor 或 out_of_scope_existing。",
+		"你是 " + member.Name + "，职责：" + member.Purpose + "。",
+		"",
+		"只处理当前提案：" + context.ChangeName + "。",
+		"先读取：",
 		"CURRENT_CHANGE=" + context.ChangeName,
 		"STATE_PATH=" + context.StatePath,
 		"CHANGE_PATH=" + context.ChangePath,
 		"ACCEPTANCE_PATH=" + context.AcceptancePath,
-		"BASELINE_HEAD=" + context.BaselineHead,
-		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
-		"SUBAGENT_OUTPUT=" + output,
 		"",
-		"把一个 JSON object 写到 SUBAGENT_OUTPUT，字段：",
+		"判断范围：",
+		"- 当前提案违反 spec/acceptance 的可复现问题，写入 findings。",
+		"- 历史债务、无关问题、扩展建议，写 scope=0，不得阻断。",
+		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
+		"- blocker/major 只用于当前提案范围内的明确失败。",
+		"",
+		"最终只输出一个 JSON object，不要输出 Markdown、解释或额外文本。字段必须严格为：",
 		memberArtifactSchemaPrompt(),
 	}, "\n") + "\n"
 }
@@ -493,46 +494,45 @@ func normalizeCapturedMemberRawJSON(raw map[string]interface{}) ([]byte, error) 
 	if value, ok := raw["secrets"]; ok {
 		arr, isArray := value.([]interface{})
 		if !isArray || len(arr) != 0 {
-			return nil, fmt.Errorf("字段 secrets 不属于 SUBAGENT_OUTPUT schema；如发现敏感信息，只能写入 evidence 或 findings，不能添加 secrets 字段")
+			return nil, fmt.Errorf("字段 secrets 不属于 member artifact schema；如发现敏感信息，只能写入 evidence 或 findings，不能添加 secrets 字段")
 		}
 		delete(raw, "secrets")
 	}
 	return json.Marshal(raw)
 }
 
-// artifactRetryPrompt builds a prompt that resumes the same subagent session to rewrite only SUBAGENT_OUTPUT.
+// artifactRetryPrompt builds a prompt that resumes the same subagent session to return corrected JSON.
 func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifactPath string, schemaErr error, context subagentContext) string {
+	_ = groupName
+	_ = artifactPath
 	return strings.Join([]string{
-		"只读，聚焦当前提案范围，" + member.Purpose,
-		subagentReadOnlyBoundaryPrompt(),
-		"当前 sealed run 只处理 CURRENT_CHANGE；必须先读取 STATE_PATH、CHANGE_PATH 和 ACCEPTANCE_PATH，再重写 artifact。",
-		"不要用工具写 SUBAGENT_OUTPUT；最终回复只输出一个 JSON object，wo 会把它保存到 SUBAGENT_OUTPUT。",
-		"如果看到其它 docs/changes/*，只能作为背景证据；不得把其它提案写成当前提案 blocker/major finding。",
-		"当前提案问题写 findings；历史债务或无关问题写 scope=out_of_scope_existing，不要阻断。",
+		"你是 " + member.Name + "，职责：" + member.Purpose + "。",
+		"",
+		"上次最终 JSON 格式错误：" + schemaErr.Error(),
+		"请基于当前提案重新输出一个合法 JSON object。",
+		"只处理当前提案：" + context.ChangeName + "。",
+		"",
 		"CURRENT_CHANGE=" + context.ChangeName,
 		"STATE_PATH=" + context.StatePath,
 		"CHANGE_PATH=" + context.ChangePath,
 		"ACCEPTANCE_PATH=" + context.AcceptancePath,
-		"BASELINE_HEAD=" + context.BaselineHead,
-		"SUBAGENT_GROUP=" + groupName,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
-		"SUBAGENT_OUTPUT=" + artifactPath,
 		"",
-		"SUBAGENT_OUTPUT 格式错误：" + schemaErr.Error(),
+		"判断范围：",
+		"- 当前提案违反 spec/acceptance 的可复现问题，写入 findings。",
+		"- 历史债务、无关问题、扩展建议，写 scope=0，不得阻断。",
+		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
+		"- blocker/major 只用于当前提案范围内的明确失败。",
+		"最终只输出裸 JSON object，不要使用 markdown 代码块，不要输出解释文字。",
 		memberArtifactSchemaPrompt(),
-		"只重写 SUBAGENT_OUTPUT；最终回复必须是裸 JSON object，不要使用 markdown 代码块，不要输出解释文字。",
 	}, "\n") + "\n"
-}
-
-// subagentReadOnlyBoundaryPrompt tells helper agents where validation side effects may live.
-func subagentReadOnlyBoundaryPrompt() string {
-	return "只读边界：不要新增、修改或删除仓库文件；如需构建或运行测试，所有 -o、日志、截图、trace、coverage 等运行输出只能写入 test-results/ 或系统临时目录；例如 Go 二进制用 go build -o test-results/<name> ./cmd/<name>，结束时不得留下 test-results/ 之外的构建产物。"
 }
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		"只允许以下顶层字段，不得添加 secrets、metadata、notes 或其它额外字段：name: string, change_name: string(必须等于 CURRENT_CHANGE), purpose: string, status: 0|1|\"success\"|\"failed\", summary: string, evidence: string[](每一项必须是字符串，不能是对象或数组), findings: [{title:string,severity:1|2|3,scope:1|2|0,evidence:string,recommendation:string}]",
+		`{"name":"` + "{{SUBAGENT_NAME}}" + `","change_name":"` + "{{CURRENT_CHANGE}}" + `","purpose":"` + "{{SUBAGENT_PURPOSE}}" + `","status":0|1|"success"|"failed","summary":"string","evidence":["string"],"findings":[{"title":"string","severity":1|2|3,"scope":1|2|0,"evidence":"string","recommendation":"string"}]}`,
+		"只允许这些顶层字段；evidence 每一项必须是字符串，不能是对象或数组；change_name 必须等于 CURRENT_CHANGE。",
 	}, "\n")
 }
 
@@ -543,7 +543,7 @@ func materializeCapturedMemberArtifact(path string, capture *artifactCapture, me
 	}
 	data, err := extractCapturedMemberJSONObject(capture.String(), member, expectedChange)
 	if err != nil {
-		return fmt.Errorf("未从最终回复捕获到合法 SUBAGENT_OUTPUT JSON object：%w；最终回复必须只包含一个裸 JSON object，不能使用 markdown 代码块或解释文字；JSON 字符串中的引号必须转义；evidence 必须是字符串数组", err)
+		return fmt.Errorf("未从最终回复捕获到合法 member artifact JSON object：%w；最终回复必须只包含一个裸 JSON object，不能使用 markdown 代码块或解释文字；JSON 字符串中的引号必须转义；evidence 必须是字符串数组", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

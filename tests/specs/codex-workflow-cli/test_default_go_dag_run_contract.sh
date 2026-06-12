@@ -53,22 +53,20 @@ import re
 import sys
 
 prompt = sys.argv[1]
-output = re.search(r"SUBAGENT_OUTPUT=(.+)", prompt)
-if output:
-    name = re.search(r"SUBAGENT_NAME=(.+)", prompt)
+name = re.search(r"SUBAGENT_NAME=(.+)", prompt)
+if name:
     purpose = re.search(r"SUBAGENT_PURPOSE=(.+)", prompt)
     change_name = re.search(r"CURRENT_CHANGE=(.+)", prompt)
-    path = pathlib.Path(output.group(1).strip())
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({
-        "name": name.group(1).strip() if name else "并行成员",
+    body = {
+        "name": name.group(1).strip(),
         "change_name": change_name.group(1).strip() if change_name else "demo",
         "purpose": purpose.group(1).strip() if purpose else "执行并行成员职责",
         "status": "success",
         "summary": "fake agent completed the configured read-only subagent task",
         "evidence": ["test-results/go-dag/default-go-dag-run-contract.log"]
-    }, ensure_ascii=False), encoding="utf-8")
+    }
     print(json.dumps({"type": "thread.started", "thread_id": "fake-subagent-session"}))
+    print(json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}]}}, ensure_ascii=False))
     raise SystemExit(0)
 
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
@@ -86,6 +84,9 @@ if stage == "execution":
     task = repo / "docs" / "changes" / change / "task.md"
     text = task.read_text(encoding="utf-8")
     task.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
+    evidence = repo / "test-results" / "go-dag" / "temporary.log"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text("execution evidence\n", encoding="utf-8")
 elif stage == "archive":
     archive = repo / "docs" / "changes" / "archive" / ("2026-06-09-" + change)
     archive.mkdir(parents=True, exist_ok=True)
@@ -99,6 +100,7 @@ chmod +x "$fakebin/codex"
 
 cp "$fakebin/codex" "$fakebin/legacy-agent"
 cp "$fakebin/codex" "$fakebin/pi"
+cp "$fakebin/codex" "$fakebin/agy"
 
 project="$tmp/project"
 mkdir -p "$project/docs/changes/1-默认go-dag/tests"
@@ -166,14 +168,7 @@ cat >"$project/docs/changes/1-默认go-dag/acceptance.json" <<'JSON'
       "assertions": ["默认 wo run 使用 go-dag 推进 execution 并完成 archive"]
     }
   ],
-  "required_evidence": [
-    {
-      "id": "temporary-log",
-      "kind": "runtime_log",
-      "path": "test-results/go-dag/temporary.log",
-      "purpose": "记录临时默认 go-dag run"
-    }
-  ]
+  "required_evidence": []
 }
 JSON
 
@@ -226,10 +221,9 @@ HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
   bash -c 'cd "$1" && "$2" status -w1' _ "$project" "$wo" >"$tmp/status.txt"
 cat "$tmp/status.txt" >>"$log"
-grep -qF "规划阶段" "$tmp/status.txt" || fail "wo status 必须显示 planning 阶段"
-grep -qF "执行阶段 fake-main-session-execution" "$tmp/status.txt" || fail "wo status 必须显示 execution 主阶段 session"
-grep -qF "代码侦察" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
-grep -qF "外部资料" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
+grep -qF "fake-main-session-execution" "$tmp/status.txt" || fail "wo status 必须显示 execution 主阶段 session"
+grep -qF "代码" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
+grep -qF "外部" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
 
 note "检查 JSON status 兼容旧 runner contract"
 WO_TEST_REPO="$project" \

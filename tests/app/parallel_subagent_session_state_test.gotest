@@ -346,15 +346,22 @@ func (t sessionStateTool) PlanningCommand(context.Context, string, string, io.Re
 // NewRunner returns the runner that writes member artifacts and session IDs.
 func (t sessionStateTool) NewRunner() AgentRunner { return t.runner }
 
-type sessionStateRunner struct{}
+type sessionStateRunner struct {
+	capture *artifactCapture
+}
 
-// Run writes the member artifact requested by SUBAGENT_OUTPUT and returns a member-specific session.
+func (r *sessionStateRunner) SetArtifactCapture(capture *artifactCapture) {
+	r.capture = capture
+}
+
+// Run returns the member artifact JSON and a member-specific session.
 func (r *sessionStateRunner) Run(_ context.Context, _ string, prompt, _ string, _ StageOptions) (string, error) {
-	return writeSessionStateMemberArtifact(prompt)
+	return writeSessionStateMemberArtifact(prompt, r.capture)
 }
 
 type blockingSessionStateRunner struct {
 	progress io.Writer
+	capture  *artifactCapture
 	started  chan struct{}
 	release  chan struct{}
 	once     sync.Once
@@ -370,6 +377,10 @@ func (r *blockingSessionStateRunner) SetProgress(writer io.Writer) {
 	r.progress = writer
 }
 
+func (r *blockingSessionStateRunner) SetArtifactCapture(capture *artifactCapture) {
+	r.capture = capture
+}
+
 // Run emits session started before writing the artifact, then waits for the test to release it.
 func (r *blockingSessionStateRunner) Run(_ context.Context, _ string, prompt, _ string, _ StageOptions) (string, error) {
 	name := sessionStatePromptValue(prompt, "SUBAGENT_NAME")
@@ -379,7 +390,7 @@ func (r *blockingSessionStateRunner) Run(_ context.Context, _ string, prompt, _ 
 	}
 	close(r.started)
 	<-r.release
-	return writeSessionStateMemberArtifact(prompt)
+	return writeSessionStateMemberArtifact(prompt, r.capture)
 }
 
 // releaseOnce unblocks the runner at most once.
@@ -432,14 +443,13 @@ func cloneSessionState(state State) State {
 	return next
 }
 
-// writeSessionStateMemberArtifact writes the JSON artifact expected by the subagent schema.
-func writeSessionStateMemberArtifact(prompt string) (string, error) {
-	output := sessionStatePromptValue(prompt, "SUBAGENT_OUTPUT")
+// writeSessionStateMemberArtifact emits the JSON artifact expected by the subagent schema.
+func writeSessionStateMemberArtifact(prompt string, capture *artifactCapture) (string, error) {
 	name := sessionStatePromptValue(prompt, "SUBAGENT_NAME")
 	changeName := sessionStatePromptValue(prompt, "CURRENT_CHANGE")
 	purpose := sessionStatePromptValue(prompt, "SUBAGENT_PURPOSE")
-	if output == "" || name == "" {
-		return "", fmt.Errorf("missing subagent prompt fields: output=%q name=%q", output, name)
+	if name == "" {
+		return "", fmt.Errorf("missing subagent prompt field: name=%q", name)
 	}
 	result := ParallelMemberResult{
 		Name:       name,
@@ -453,11 +463,8 @@ func writeSessionStateMemberArtifact(prompt string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(output, append(data, '\n'), 0o644); err != nil {
-		return "", err
+	if capture != nil {
+		capture.Append(string(append(data, '\n')))
 	}
 	return "session-" + memberArtifactFileName(name), nil
 }

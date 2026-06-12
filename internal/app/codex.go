@@ -43,6 +43,7 @@ type CodexCLI struct {
 	Path       string
 	ResolveErr error
 	Progress   io.Writer
+	Artifact   *artifactCapture
 }
 
 // NewCodexCLI resolves the codex executable using the host PATH.
@@ -54,6 +55,11 @@ func NewCodexCLI() *CodexCLI {
 // SetProgress redirects concise process progress for callers that own the UI.
 func (c *CodexCLI) SetProgress(progress io.Writer) {
 	c.Progress = progress
+}
+
+// SetArtifactCapture records assistant text for read-only subagent artifact materialization.
+func (c *CodexCLI) SetArtifactCapture(capture *artifactCapture) {
+	c.Artifact = capture
 }
 
 // Run executes codex exec/resume, extracts session metadata, and waits for process exit.
@@ -77,7 +83,7 @@ func (c CodexCLI) Run(ctx context.Context, repo, prompt, threadID string, option
 		return "", err
 	}
 	printCodexProcessStarted(c.Progress, cmd.Process.Pid)
-	observed, drainErr := drainCodexJSONL(stdout, c.Progress)
+	observed, drainErr := drainCodexJSONLWithCapture(stdout, c.Progress, c.Artifact)
 	waitErr := cmd.Wait()
 	printCodexProcessExited(c.Progress, cmd.Process.Pid, cmd.ProcessState.ExitCode())
 	if drainErr != nil {
@@ -134,6 +140,11 @@ type codexEvent struct {
 
 // drainCodexJSONL reads stdout while best-effort extracting session metadata.
 func drainCodexJSONL(stdout io.Reader, progress io.Writer) (threadID string, err error) {
+	return drainCodexJSONLWithCapture(stdout, progress, nil)
+}
+
+// drainCodexJSONLWithCapture reads stdout while extracting session metadata and final text.
+func drainCodexJSONLWithCapture(stdout io.Reader, progress io.Writer, capture *artifactCapture) (threadID string, err error) {
 	reader := bufio.NewReaderSize(stdout, 64*1024)
 	for {
 		line, readErr := reader.ReadBytes('\n')
@@ -141,6 +152,7 @@ func drainCodexJSONL(stdout io.Reader, progress io.Writer) (threadID string, err
 			if id := codexThreadIDFromLine(line, progress); id != "" {
 				threadID = id
 			}
+			capturePiText(line, capture)
 		}
 		if readErr == nil {
 			continue

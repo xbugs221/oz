@@ -123,7 +123,8 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	if err != nil {
 		return err
 	}
-	if state.Status != statusRunning || state.Stage != node.Stage {
+	runStage := workflowNodeRunStage(node)
+	if state.Status != statusRunning || state.Stage != runStage {
 		return nil
 	}
 	if e.goDAGShouldSkipCompletedExecutionContext(state, node) {
@@ -167,7 +168,7 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 
 // goDAGShouldSkipCompletedExecutionContext skips advisory execution helpers when task.md is already complete.
 func (e *Engine) goDAGShouldSkipCompletedExecutionContext(state State, node WorkflowNode) bool {
-	if node.Stage != "execution" || configGroupName(node.Group) != "implementation_context" {
+	if workflowNodeRunStage(node) != "execution" || configGroupName(node.Group) != "implementation_context" {
 		return false
 	}
 	if node.Type != "subagent" && node.Type != "fanin" {
@@ -216,7 +217,7 @@ func (e *Engine) recordGoDAGNode(runID string, nodeID string, nodeState DAGNodeS
 }
 
 func goDAGNodeArgs(node WorkflowNode) []string {
-	args := []string{"--stage", node.Stage, "--json"}
+	args := []string{"--stage", workflowNodeRunStage(node), "--json"}
 	if node.Group != "" {
 		args = append(args, "--group", node.Group)
 	}
@@ -227,6 +228,14 @@ func goDAGNodeArgs(node WorkflowNode) []string {
 		args = append(args, "--iteration", fmt.Sprint(node.Iteration))
 	}
 	return args
+}
+
+// workflowNodeRunStage returns the durable state-machine stage used by the scheduler.
+func workflowNodeRunStage(node WorkflowNode) string {
+	if node.RunStage != "" {
+		return node.RunStage
+	}
+	return node.Stage
 }
 
 func goDAGNodeArtifact(repo, runID string, node WorkflowNode) string {

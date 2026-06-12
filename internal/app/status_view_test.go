@@ -1,7 +1,10 @@
 // Package app tests compact workflow status rows for human status/watch output.
 package app
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestStatusViewReadsImplementationContextDAGNodes verifies status/watch sees renamed execution context nodes.
 func TestStatusViewReadsImplementationContextDAGNodes(t *testing.T) {
@@ -41,6 +44,18 @@ func TestCompactStatusLinesSkipsCompletedPlanningPlaceholder(t *testing.T) {
 	for _, line := range compactStatusLines(view) {
 		if line == "规划阶段 - ✓ -" {
 			t.Fatalf("planning placeholder should be hidden:\n%v", compactStatusLines(view))
+		}
+	}
+}
+
+// TestCompactStatusLinesSkipsEmptyPlanningPlaceholder verifies default sealed runs do not show idle planning.
+func TestCompactStatusLinesSkipsEmptyPlanningPlaceholder(t *testing.T) {
+	state := statusViewImplementationContextState()
+
+	view := buildHumanStatusView(t.TempDir(), state, state.RunID, "")
+	for _, line := range compactStatusLines(view) {
+		if strings.Contains(line, "规划") {
+			t.Fatalf("empty planning placeholder should be hidden:\n%v", compactStatusLines(view))
 		}
 	}
 }
