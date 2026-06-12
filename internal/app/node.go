@@ -173,6 +173,9 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 		path := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
 		result, err := readNormalizeValidateMemberArtifact(path, configName, member, state.ChangeName)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return e.failNodeState(state, fmt.Errorf("%w: fan-in 缺少成员 artifact，重试将重新执行当前并行轮次：%s", errGoDAGRetryableNode, path))
+			}
 			return e.failNodeState(state, err)
 		}
 		if err := writeMemberArtifact(path, result); err != nil {

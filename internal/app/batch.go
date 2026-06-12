@@ -431,6 +431,9 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 				for _, line := range compactStatusLines(view) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
+				if batch.Status == batchStatusRunning && isStaleRunningRun(repo, state) {
+					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 wo restart -%s 重试当前批量阶段", batchAlias))
+				}
 				continue
 			}
 		}

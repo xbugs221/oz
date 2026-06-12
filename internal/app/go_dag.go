@@ -12,6 +12,7 @@ import (
 )
 
 var errGoDAGValidationRetry = errors.New("go-dag validation retry")
+var errGoDAGRetryableNode = errors.New("go-dag retryable node")
 
 // StartGoDAGJSON creates a sealed run and executes the WorkflowSpec without external schedulers.
 func (e *Engine) StartGoDAGJSON(ctx context.Context, changeName string, stdout io.Writer) error {
@@ -154,7 +155,7 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 			e.recordGoDAGNode(runID, node.ID, next)
 			return nil
 		}
-		if e.goDAGShouldRetryNode(runID, node) {
+		if e.goDAGShouldRetryNode(runID, node, err) {
 			next.Status = "validation_failed"
 			e.recordGoDAGNode(runID, node.ID, next)
 			return errGoDAGValidationRetry
@@ -192,13 +193,32 @@ func (e *Engine) goDAGNodeReachedTerminalBlock(runID string) (string, bool) {
 	}
 }
 
-// goDAGShouldRetryNode preserves runLoop validation semantics for the default scheduler.
-func (e *Engine) goDAGShouldRetryNode(runID string, node WorkflowNode) bool {
+// goDAGShouldRetryNode preserves runLoop validation semantics and retries transient helper failures.
+func (e *Engine) goDAGShouldRetryNode(runID string, node WorkflowNode, nodeErr error) bool {
 	state, err := loadState(e.Repo, runID)
 	if err != nil {
 		return false
 	}
-	return node.Type == "main_stage" && state.Status == statusRunning && state.Stage == node.Stage && shouldForceStageRerun(state)
+	runStage := workflowNodeRunStage(node)
+	if node.Type == "main_stage" {
+		return state.Status == statusRunning && state.Stage == runStage && shouldForceStageRerun(state)
+	}
+	if !errors.Is(nodeErr, errGoDAGRetryableNode) {
+		return false
+	}
+	e.restoreRetryableGoDAGNodeRun(runID, runStage)
+	return true
+}
+
+// restoreRetryableGoDAGNodeRun keeps transient helper failures inside the DAG retry loop.
+func (e *Engine) restoreRetryableGoDAGNodeRun(runID string, stage string) {
+	err := mergeState(e.Repo, runID, func(state *State) {
+		if state.Stage == stage {
+			state.Status = statusRunning
+			state.Error = ""
+		}
+	})
+	warnWorkflowWrite("restore retryable go-dag node run", err)
 }
 
 // recordGoDAGNode updates state.json with node-level progress for status/debugging.

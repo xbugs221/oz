@@ -123,7 +123,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 			return boundaryErr
 		}
 		if err != nil {
-			return e.failNodeState(state, err)
+			return e.failNodeState(state, fmt.Errorf("%w: subagent %s 第 %d 次执行失败，可由 go-dag 重试：%v", errGoDAGRetryableNode, member.Name, attempt, err))
 		}
 		if err := materializeCapturedMemberArtifact(artifactPath, capture, member, state.ChangeName); err != nil {
 			schemaErr = err

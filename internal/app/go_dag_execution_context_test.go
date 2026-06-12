@@ -32,6 +32,39 @@ type goDAGContextFakeRunner struct {
 	capture   *artifactCapture
 }
 
+// TestGoDAGRetryableHelperErrorRestoresRunningState verifies transient helper failures stay retryable.
+func TestGoDAGRetryableHelperErrorRestoresRunningState(t *testing.T) {
+	repo := t.TempDir()
+	runID := "retryable-helper-run"
+	state := State{
+		RunID:      runID,
+		ChangeName: "demo",
+		Status:     statusFailed,
+		Stage:      "qa_1",
+		Error:      "transient helper failure",
+		Sessions:   map[string]string{},
+		Stages:     map[string]string{"qa_1": statusRunning},
+		Paths:      map[string]string{},
+		Workflow:   DefaultWorkflowConfig(),
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(repo, nil)
+	node := WorkflowNode{ID: "before_qa_1_4", Type: "subagent", Stage: "qa_1", Group: "qa", Member: "回归场景测试员"}
+
+	if !engine.goDAGShouldRetryNode(runID, node, errors.Join(errGoDAGRetryableNode, errors.New("temporary"))) {
+		t.Fatal("retryable helper error should request a go-dag retry")
+	}
+	restored, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Status != statusRunning || restored.Stage != "qa_1" || restored.Error != "" {
+		t.Fatalf("restored state = status %q stage %q error %q, want running qa_1 empty error", restored.Status, restored.Stage, restored.Error)
+	}
+}
+
 func (r *goDAGContextFakeRunner) SetArtifactCapture(capture *artifactCapture) {
 	r.capture = capture
 }

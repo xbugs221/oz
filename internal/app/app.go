@@ -1460,6 +1460,9 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 				for _, line := range compactStatusLines(view) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
+				if batch.Status == batchStatusRunning && isStaleRunningRun(repo, state) {
+					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 wo restart -%s 重试当前批量阶段", batchAlias))
+				}
 				continue
 			}
 		}
@@ -1490,6 +1493,9 @@ func runProposalStatusLines(repo string, state State, runAlias string, runningMa
 	lines := []string{statusHeaderText(state.ChangeName, view)}
 	for _, line := range compactStatusLines(view) {
 		lines = append(lines, fmt.Sprintf("  %s", line))
+	}
+	if isStaleRunningRun(repo, state) {
+		lines = append(lines, "  提示: 当前 run 的 lock 已失效，可运行 wo restart 重试当前阶段")
 	}
 	return lines
 }

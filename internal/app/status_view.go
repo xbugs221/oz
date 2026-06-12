@@ -4,6 +4,7 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,7 @@ var compactStageSpecs = []compactStageSpec{
 
 // buildStatusView converts durable workflow state into one reusable compact view.
 func buildStatusView(repo string, state State, displayID, runningMarker string) statusView {
+	state = humanDisplayState(repo, state)
 	ensureWorkflowConfig(&state)
 	normalizeStateMaps(&state)
 	view := statusView{
@@ -76,6 +78,7 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 
 // buildHumanStatusView builds the compact human view without internal parallel fan-in rows.
 func buildHumanStatusView(repo string, state State, displayID, runningMarker string) statusView {
+	state = humanDisplayState(repo, state)
 	ensureWorkflowConfig(&state)
 	normalizeStateMaps(&state)
 	view := statusView{
@@ -686,7 +689,7 @@ func compactOverallMarker(view statusView) string {
 	switch view.RunStatus {
 	case statusDone:
 		return "✓"
-	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusInterrupted:
+	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusInterrupted, statusStale:
 		return "x"
 	case statusRunning:
 		if view.Indicator != "" {
@@ -726,6 +729,26 @@ func compactOverallMarker(view statusView) string {
 	default:
 		return "-"
 	}
+}
+
+// humanDisplayState marks unowned running runs as stale without mutating durable state.
+func humanDisplayState(repo string, state State) State {
+	if isStaleRunningRun(repo, state) {
+		state.Status = statusStale
+	}
+	return state
+}
+
+// isStaleRunningRun reports running state whose owner lock is no longer live.
+func isStaleRunningRun(repo string, state State) bool {
+	if state.Status != statusRunning || state.RunID == "" {
+		return false
+	}
+	status, err := lockFileStatus(repo, state.RunID, runtime.GOOS)
+	if err != nil {
+		return false
+	}
+	return status == lockStatusStale
 }
 
 // statusCountedMarker compacts repeated completed rounds as ✓N before active or failed suffixes.

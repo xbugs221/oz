@@ -2,6 +2,7 @@
 package app
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -57,6 +58,31 @@ func TestCompactStatusLinesSkipsEmptyPlanningPlaceholder(t *testing.T) {
 		if strings.Contains(line, "规划") {
 			t.Fatalf("empty planning placeholder should be hidden:\n%v", compactStatusLines(view))
 		}
+	}
+}
+
+// TestHumanStatusMarksUnownedRunningRunStale verifies stale locks are not shown as live work.
+func TestHumanStatusMarksUnownedRunningRunStale(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	state.RunID = "stale-status-run"
+	if err := writeJSONFile(filepath.Join(runDir(repo, state.RunID), "lock"), LockInfo{PID: 99999999, RunID: state.RunID}); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := runProposalStatusLines(repo, state, "w1", "→")
+
+	if lines[0] != "- demo x -" {
+		t.Fatalf("header = %q, want stale marker", lines[0])
+	}
+	foundHint := false
+	for _, line := range lines {
+		if line == "  提示: 当前 run 的 lock 已失效，可运行 wo restart 重试当前阶段" {
+			foundHint = true
+		}
+	}
+	if !foundHint {
+		t.Fatalf("missing stale restart hint in lines: %#v", lines)
 	}
 }
 

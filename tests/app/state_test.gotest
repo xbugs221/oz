@@ -953,7 +953,7 @@ func TestGoDAGAdvanceArtifactGateFailurePersistsRetry(t *testing.T) {
 		t.Fatalf("archive stage = %q, want validation_failed", persisted.Stages["archive"])
 	}
 	node := WorkflowNode{ID: "archive", Type: "main_stage", Stage: "archive"}
-	if !engine.goDAGShouldRetryNode(runID, node) {
+	if !engine.goDAGShouldRetryNode(runID, node, nil) {
 		t.Fatal("go-dag should retry archive after persisted artifact gate failure")
 	}
 }

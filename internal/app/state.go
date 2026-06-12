@@ -26,6 +26,7 @@ import (
 const (
 	statusRunning                   = "running"
 	statusFailed                    = "failed"
+	statusStale                     = "stale"
 	statusDone                      = "done"
 	statusAborted                   = "aborted_manual_intervention"
 	statusArchived                  = "archived_superseded"
