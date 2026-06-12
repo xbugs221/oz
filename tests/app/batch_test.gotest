@@ -874,17 +874,17 @@ func TestPrintHumanStatusRunningBatch(t *testing.T) {
 		t.Fatalf("batch output should hide batch/run details and unstarted labels:\n%s", got)
 	}
 	// Every created run should show its stage checklist indented.
-	if !strings.Contains(got, "  执行阶段 exec-thread ✓ -") {
+	if !strings.Contains(got, "  执行 exec-thread") || !strings.Contains(got, "✓ -") {
 		t.Fatalf("output missing current run stage detail:\n%s", got)
 	}
-	if !strings.Contains(got, "  规划阶段 - - -") {
+	if !strings.Contains(got, "  规划 -") {
 		t.Fatalf("output missing completed run stage detail:\n%s", got)
 	}
 	assertLineOrder(t, got,
 		"- 1-a",
 		"- 2-b",
-		"  执行阶段 exec-thread ✓ -",
-		"  审核阶段 - → -",
+		"  执行 exec-thread",
+		"  审核 -",
 		"- 3-c",
 	)
 }
@@ -1046,7 +1046,7 @@ func TestPrintHumanStatusSingleRunNoBatch(t *testing.T) {
 	if strings.Contains(got, "批量任务") || strings.Contains(got, "最近一次批量工作流") {
 		t.Fatalf("single run output should not contain batch terms:\n%s", got)
 	}
-	if !strings.Contains(got, "执行阶段 - → -") {
+	if !strings.Contains(got, "执行 - → -") {
 		t.Fatalf("single run output missing expected line:\n%s", got)
 	}
 }
@@ -1268,7 +1268,7 @@ func TestPrintHumanStatusDefaultPrefersLatestBatch(t *testing.T) {
 	if strings.Contains(w1Output, "最近一次批量工作流") {
 		t.Fatalf("-w1 output should not contain default batch hint:\n%s", w1Output)
 	}
-	if !strings.Contains(w1Output, "执行阶段 - → -") {
+	if !strings.Contains(w1Output, "执行 - → -") {
 		t.Fatalf("-w1 output missing expected line:\n%s", w1Output)
 	}
 }
@@ -1337,7 +1337,7 @@ func TestPrintHumanStatusShortRefsResolveHistory(t *testing.T) {
 	if err := printHumanStatus(&stdout, repo, "-w2"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "执行阶段 - → -") {
+	if !strings.Contains(stdout.String(), "执行 - → -") {
 		t.Fatalf("-w2 should show older workflow:\n%s", stdout.String())
 	}
 	if err := printHumanStatus(&stdout, repo, "-b99"); err == nil || !strings.Contains(err.Error(), "找不到 b99") {
@@ -1375,10 +1375,10 @@ func TestPrintHumanStatusBatchCurrentRunShowsActiveReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "  审核阶段 review-thread → -") {
+	if !strings.Contains(got, "  审核 review-thread") || !strings.Contains(got, "→ -") {
 		t.Fatalf("output missing active review stage with arrow:\n%s", got)
 	}
-	if !strings.Contains(got, "  执行阶段 - ✓ -") || strings.Contains(got, "  执行阶段 run-2") {
+	if !strings.Contains(got, "  执行 -") || !strings.Contains(got, "✓ -") || strings.Contains(got, "  执行 run-2") {
 		t.Fatalf("pre-completed executor should not use run id:\n%s", got)
 	}
 }
@@ -2086,10 +2086,10 @@ func TestWatchSpinnerReplacesArrowInRunningStage(t *testing.T) {
 
 	lines := watchRunStatusLines(repo, run, "w1", "|")
 	got := strings.Join(lines, "\n")
-	if !strings.HasPrefix(got, "- demo\n") {
+	if !strings.HasPrefix(got, "- demo | -\n") {
 		t.Fatalf("watch output should start from proposal list:\n%s", got)
 	}
-	if !strings.Contains(got, "  执行阶段 - | -") {
+	if !strings.Contains(got, "  执行 - | -") {
 		t.Fatalf("watch body should put spinner on running stage:\n%s", got)
 	}
 }

@@ -33,7 +33,7 @@ func TestBuildStatusViewAggregatesFixStages(t *testing.T) {
 
 	view := buildStatusView(repo, state, "w1", "→")
 	row := statusViewRowByName(t, view, "修正阶段")
-	if row.Marker != "✓✓" {
+	if row.Marker != "✓2" {
 		t.Fatalf("fix marker = %q, want two completed rounds", row.Marker)
 	}
 	if row.SessionID != "fixer-session" {
@@ -46,7 +46,7 @@ func TestBuildStatusViewAggregatesFixStages(t *testing.T) {
 	if row.Artifacts["stage_artifact"] != wantArtifact {
 		t.Fatalf("fix artifact = %q, want %q", row.Artifacts["stage_artifact"], wantArtifact)
 	}
-	if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), "修正阶段 fixer-session ✓✓ 8.00") {
+	if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), "修正 fixer-session ✓2 8.00") {
 		t.Fatalf("human status missing compact fix row:\n%s", strings.Join(compactStatusLines(view), "\n"))
 	}
 }
@@ -269,7 +269,8 @@ func TestBuildStatusViewMarksRunningIteratedStages(t *testing.T) {
 			if !strings.HasSuffix(row.Artifacts["stage_artifact"], tc.artifact) {
 				t.Fatalf("%s artifact = %q, want suffix %q", tc.rowName, row.Artifacts["stage_artifact"], tc.artifact)
 			}
-			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), tc.rowName+" "+tc.sessionValue+" ✓→") {
+			humanName := compactHumanRowName(row)
+			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), humanName+" "+tc.sessionValue+" ✓→") {
 				t.Fatalf("human status missing running %s row:\n%s", tc.rowName, strings.Join(compactStatusLines(view), "\n"))
 			}
 		})
@@ -347,7 +348,8 @@ func TestBuildStatusViewMarksFailedIteratedStages(t *testing.T) {
 			if !strings.HasSuffix(row.Artifacts["stage_artifact"], tc.artifact) {
 				t.Fatalf("%s artifact = %q, want suffix %q", tc.rowName, row.Artifacts["stage_artifact"], tc.artifact)
 			}
-			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), tc.rowName+" "+tc.sessionValue+" ✓x") {
+			humanName := compactHumanRowName(row)
+			if !strings.Contains(strings.Join(compactStatusLines(view), "\n"), humanName+" "+tc.sessionValue+" ✓x") {
 				t.Fatalf("human status missing failed %s row:\n%s", tc.rowName, strings.Join(compactStatusLines(view), "\n"))
 			}
 		})

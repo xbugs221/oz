@@ -31,6 +31,20 @@ func TestStatusViewKeepsSkippedImplementationContextUnreached(t *testing.T) {
 	}
 }
 
+// TestCompactStatusLinesSkipsCompletedPlanningPlaceholder verifies pre-created proposals do not show a noise row.
+func TestCompactStatusLinesSkipsCompletedPlanningPlaceholder(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.Stage = "execution"
+	state.Stages = map[string]string{"planning": "completed", "execution": statusRunning}
+
+	view := buildHumanStatusView(t.TempDir(), state, state.RunID, "")
+	for _, line := range compactStatusLines(view) {
+		if line == "规划阶段 - ✓ -" {
+			t.Fatalf("planning placeholder should be hidden:\n%v", compactStatusLines(view))
+		}
+	}
+}
+
 // statusViewImplementationContextState returns a minimal execution state with two configured helpers.
 func statusViewImplementationContextState() State {
 	workflow := DefaultWorkflowConfig()

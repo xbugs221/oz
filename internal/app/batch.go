@@ -422,16 +422,19 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 
 	for _, changeName := range batch.Changes {
 		runID := batch.RunIDs[changeName]
-		lines = append(lines, fmt.Sprintf("- %s", changeName))
 		if runID != "" {
 			if state, err := loadState(repo, runID); err == nil {
 				runRefs, _ := ListRunRefs(repo)
 				runAlias := RunAliasForID(runRefs, runID)
-				for _, line := range compactStatusLines(buildHumanStatusView(repo, state, runAlias, "→")) {
+				view := buildHumanStatusView(repo, state, runAlias, "→")
+				lines = append(lines, statusHeaderText(changeName, view))
+				for _, line := range compactStatusLines(view) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
+				continue
 			}
 		}
+		lines = append(lines, fmt.Sprintf("- %s", changeName))
 	}
 	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
 		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)

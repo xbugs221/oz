@@ -52,21 +52,22 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 	saveCompactResult(t, "status-w1.txt", gotStatus)
 
 	wantStatusLines := []string{
-		"- 7-统一输出",
-		"  规划阶段 planner-session ✓ 2.00",
-		"  执行阶段 writer-session → 6.50",
-		"    代码侦察 subagent-session-1 ✓ 1.10",
-		"    外部资料 subagent-session-2 ✓ 0.80",
-		"  审核阶段 reviewer-session - -",
-		"  测试阶段 - - -",
-		"  归档阶段 - - -",
+		"- 7-统一输出 → 10.40 分钟",
+		"  规划   planner-session    ✓ 2.00",
+		"  执行   writer-session     → 6.50",
+		"    代码 subagent-session-1 ✓ 1.10",
+		"    外部 subagent-session-2 ✓ 0.80",
+		"  审核   reviewer-session   -  -",
+		"  修正   -                  -  -",
+		"  测试   -                  -  -",
+		"  归档   -                  -  -",
 	}
 	for _, want := range wantStatusLines {
 		if !hasExactLine(gotStatus, want) {
 			t.Fatalf("status output missing exact line %q:\n%s", want, gotStatus)
 		}
 	}
-	if !strings.HasPrefix(gotStatus, "- 7-统一输出\n") {
+	if !strings.HasPrefix(gotStatus, "- 7-统一输出 → 10.40 分钟\n") {
 		t.Fatalf("status first line must be proposal list item:\n%s", gotStatus)
 	}
 	for _, banned := range []string{"工作流", "批量任务", "引擎", "耗时", "- 并行", "implementation_context", "代码库侦察员 success"} {
@@ -78,17 +79,17 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 	gotWatch := strings.Join(watchStatusLines(repo, "run", StatusRef{Alias: "w1", ID: state.RunID}, "|"), "\n")
 	saveCompactResult(t, "watch-w1.txt", gotWatch)
 	for _, want := range []string{
-		"- 7-统一输出",
-		"  规划阶段 planner-session ✓ 2.00",
-		"  执行阶段 writer-session | 6.50",
-		"    代码侦察 subagent-session-1 ✓ 1.10",
-		"    外部资料 subagent-session-2 ✓ 0.80",
+		"- 7-统一输出 | 10.40 分钟",
+		"  规划   planner-session    ✓ 2.00",
+		"  执行   writer-session     |  6.50",
+		"    代码 subagent-session-1 ✓ 1.10",
+		"    外部 subagent-session-2 ✓ 0.80",
 	} {
 		if !hasExactLine(gotWatch, want) {
 			t.Fatalf("watch output missing exact line %q:\n%s", want, gotWatch)
 		}
 	}
-	if !strings.HasPrefix(gotWatch, "- 7-统一输出\n") {
+	if !strings.HasPrefix(gotWatch, "- 7-统一输出 | 10.40 分钟\n") {
 		t.Fatalf("watch first line must be proposal list item:\n%s", gotWatch)
 	}
 
@@ -106,10 +107,10 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 	gotBatch := strings.Join(watchStatusLines(repo, "batch", StatusRef{Alias: "b1", ID: batchID}, "|"), "\n")
 	saveCompactResult(t, "watch-b1.txt", gotBatch)
 	for _, want := range []string{
-		"- 7-统一输出",
-		"  规划阶段 planner-session ✓ 2.00",
-		"  执行阶段 writer-session | 6.50",
-		"    代码侦察 subagent-session-1 ✓ 1.10",
+		"- 7-统一输出 | 10.40 分钟",
+		"  规划   planner-session    ✓ 2.00",
+		"  执行   writer-session     |  6.50",
+		"    代码 subagent-session-1 ✓ 1.10",
 		"- 8-待执行",
 	} {
 		if !hasExactLine(gotBatch, want) {
@@ -414,6 +415,6 @@ if not joined.startswith("-" + long_change):
     raise SystemExit(f"第一条业务内容应是提案列表，实际屏幕为 {joined!r}")
 if re.search(r"([|/\\\\-]?b1|[|/\\\\-]?w1)", joined):
     raise SystemExit(f"最终屏幕仍残留运行 header: {joined!r}")
-if not re.search(r"执行阶段writer-session[|/\\\\-]", joined):
-    raise SystemExit("最终屏幕缺少执行阶段 spinner marker")
+if not re.search(r"执行writer-session[|/\\\\-]", joined):
+    raise SystemExit("最终屏幕缺少执行 spinner marker")
 PY

@@ -95,5 +95,5 @@ cat >"$RUN_DIR/state.json" <<'JSON'
 JSON
 
 STATUS=$(cd "$REPO" && "$WO" status)
-printf '%s\n' "$STATUS" | grep -q -- "规划阶段 - ✓ -"
-printf '%s\n' "$STATUS" | grep -q -- "执行阶段"
+! printf '%s\n' "$STATUS" | grep -q -- "规划阶段 - ✓ -"
+printf '%s\n' "$STATUS" | grep -q -- "执行"

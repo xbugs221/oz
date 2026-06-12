@@ -1436,16 +1436,19 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 
 	for _, changeName := range batch.Changes {
 		runID := batch.RunIDs[changeName]
-		lines = append(lines, fmt.Sprintf("- %s", changeName))
 		if runID != "" {
 			if state, err := loadState(repo, runID); err == nil {
 				runRefs, _ := ListRunRefs(repo)
 				runAlias := RunAliasForID(runRefs, runID)
-				for _, line := range compactStatusLines(buildHumanStatusView(repo, state, runAlias, spinner)) {
+				view := buildHumanStatusView(repo, state, runAlias, spinner)
+				lines = append(lines, statusHeaderText(changeName, view))
+				for _, line := range compactStatusLines(view) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
+				continue
 			}
 		}
+		lines = append(lines, fmt.Sprintf("- %s", changeName))
 	}
 	if batch.Status == batchStatusFailed || batch.Status == batchStatusAborted {
 		lines = append(lines, batchFailureLines(repo, *batch, batchAlias)...)
@@ -1468,8 +1471,9 @@ func watchRunStatusLines(repo string, state State, runAlias string, spinner stri
 
 // runProposalStatusLines renders one workflow under its change proposal list item.
 func runProposalStatusLines(repo string, state State, runAlias string, runningMarker string) []string {
-	lines := []string{fmt.Sprintf("- %s", state.ChangeName)}
-	for _, line := range compactStatusLines(buildHumanStatusView(repo, state, runAlias, runningMarker)) {
+	view := buildHumanStatusView(repo, state, runAlias, runningMarker)
+	lines := []string{statusHeaderText(state.ChangeName, view)}
+	for _, line := range compactStatusLines(view) {
 		lines = append(lines, fmt.Sprintf("  %s", line))
 	}
 	return lines

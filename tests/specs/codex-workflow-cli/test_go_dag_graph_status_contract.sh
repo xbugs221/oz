@@ -116,13 +116,12 @@ func TestGoDAGHumanStatusContract(t *testing.T) {
 	}
 	text := stdout.String()
 	for _, want := range []string{
-		"- demo",
-		"  规划阶段 - ✓ -",
-		"  执行阶段 exec-session ✓ -",
-		"  审核阶段 - → -",
-		"  修正阶段 - - -",
-		"  测试阶段 - - -",
-		"  归档阶段 - - -",
+		"- demo → -",
+		"  执行 exec-session ✓ -",
+		"  审核 -            → -",
+		"  修正 -            -  -",
+		"  测试 -            -  -",
+		"  归档 -            -  -",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("status output missing %q:\n%s", want, text)

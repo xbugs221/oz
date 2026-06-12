@@ -56,17 +56,16 @@ func TestHumanStatusMultiRoundParallelDisplayContract(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"规划阶段 - ✓ -",
-		"执行阶段 executor-session ✓ 9.00",
-		"审核阶段 reviewer-session ✓✓x 3.00",
-		"修正阶段 fixer-session ✓✓ 4.00",
-		"代码侦察 impl-code ✓ 1.00",
-		"外部资料 impl-docs ✓ 1.00",
-		"目标核对 review3-target ✓ 1.00",
-		"代码质量 review3-quality ✓ 1.00",
-		"测试有效 review3-test ✓ 1.00",
-		"风险检查 review3-risk ✓ 1.00",
-		"上下文 review3-context ✓ 1.00",
+		"执行   executor-session ✓   9.00",
+		"审核   reviewer-session ✓2x 3.00",
+		"修正   fixer-session    ✓2  4.00",
+		"代码 impl-code        ✓   1.00",
+		"外部 impl-docs        ✓   1.00",
+		"目标 review3-target   ✓   1.00",
+		"代码 review3-quality  ✓   1.00",
+		"测试 review3-test     ✓   1.00",
+		"风险 review3-risk     ✓   1.00",
+		"上下 review3-context  ✓   1.00",
 	} {
 		if !hasExactCompactLine(text, want) {
 			t.Fatalf("human status missing exact line %q:\n%s", want, text)

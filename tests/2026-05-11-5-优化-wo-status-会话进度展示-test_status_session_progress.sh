@@ -59,10 +59,10 @@ cat > "$run_dir/state.json" <<'JSON'
 JSON
 
 HOME="$home" XDG_STATE_HOME="$state_home" "$bin" status > status.txt
-grep -q -- '执行阶段 executor-thread ✓' status.txt
-grep -q -- '审核阶段 reviewer-thread ✓✓' status.txt
-grep -q -- '归档阶段 archiver-thread →' status.txt
-! grep -q -- '归档阶段 executor-thread' status.txt
+grep -q -- '执行 executor-thread ✓' status.txt
+grep -q -- '审核 .*reviewer-thread .*✓2' status.txt
+grep -q -- '归档 archiver-thread →' status.txt
+! grep -q -- '归档 executor-thread' status.txt
 
 HOME="$home" XDG_STATE_HOME="$state_home" "$bin" status --run-id demo-run --json > status.json
 grep -q '"run_id":"demo-run"' status.json

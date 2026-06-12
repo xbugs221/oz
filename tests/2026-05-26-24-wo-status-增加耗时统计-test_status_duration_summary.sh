@@ -197,31 +197,31 @@ WO="$TMPDIR/wo"
 go build -C "$REPO_ROOT" -o "$WO" ./cmd/wo
 
 "$WO" status -w1 > status-w1.txt
-grep -qF -- "执行阶段 executor-thread ✓ 100.00" status-w1.txt
-grep -qF -- "审核阶段 reviewer-thread ✓ 120.00" status-w1.txt
-grep -qF -- "归档阶段 archiver-thread ✓ 80.00" status-w1.txt
+grep -qE -- "执行 +executor-thread +✓ +100.00" status-w1.txt
+grep -qE -- "审核 +reviewer-thread +✓ +120.00" status-w1.txt
+grep -qE -- "归档 +archiver-thread +✓ +80.00" status-w1.txt
 ! grep -qF -- "耗时" status-w1.txt
-! grep -qF -- "分钟" status-w1.txt
+head -1 status-w1.txt | grep -qF -- "- 1-演示统计 ✓ 300.00 分钟"
 
 python3 - <<'PY'
 from pathlib import Path
 
 lines = Path("status-w1.txt").read_text(encoding="utf-8").splitlines()
-execution = next(i for i, line in enumerate(lines) if "执行阶段 executor-thread ✓ 100.00" in line)
-review = next(i for i, line in enumerate(lines) if "审核阶段 reviewer-thread ✓ 120.00" in line)
-archive = next(i for i, line in enumerate(lines) if "归档阶段 archiver-thread ✓ 80.00" in line)
+execution = next(i for i, line in enumerate(lines) if "执行" in line and "executor-thread" in line and "100.00" in line)
+review = next(i for i, line in enumerate(lines) if "审核" in line and "reviewer-thread" in line and "120.00" in line)
+archive = next(i for i, line in enumerate(lines) if "归档" in line and "archiver-thread" in line and "80.00" in line)
 if not execution < review < archive:
     raise SystemExit("duration columns must stay in stage order")
 PY
 
 "$WO" status -w2 > status-w2.txt
-grep -qF -- "执行阶段 executor-thread ✓ 1.50" status-w2.txt
-grep -qF -- "归档阶段 archiver-thread ✓ 1.25" status-w2.txt
-grep -qF -- "审核阶段 reviewer-thread ✓ -" status-w2.txt
+grep -qE -- "执行 +executor-thread +✓ +1.50" status-w2.txt
+grep -qE -- "归档 +archiver-thread +✓ +1.25" status-w2.txt
+grep -qE -- "审核 +reviewer-thread +✓ +-" status-w2.txt
 
 "$WO" status -w3 > status-w3.txt
-grep -qF -- "审核阶段 reviewer-thread ✓✓ 6.00" status-w3.txt
-grep -qF -- "修正阶段 fixer-thread ✓✓ 8.00" status-w3.txt
+grep -qE -- "审核 +reviewer-thread +✓2 +6.00" status-w3.txt
+grep -qE -- "修正 +fixer-thread +✓2 +8.00" status-w3.txt
 ! grep -qF -- "review_1" status-w3.txt
 ! grep -qF -- "review_2" status-w3.txt
 ! grep -qF -- "fix_1" status-w3.txt
@@ -230,8 +230,8 @@ grep -qF -- "修正阶段 fixer-thread ✓✓ 8.00" status-w3.txt
 "$WO" status > status-batch.txt
 head -1 status-batch.txt | grep -qF "批量任务 b1 running 1/2"
 grep -qF -- "- 1-演示统计" status-batch.txt
-grep -qF -- "  执行阶段 executor-thread ✓ 100.00" status-batch.txt
-grep -qF -- "  审核阶段 reviewer-thread ✓ 120.00" status-batch.txt
+grep -qE -- "  执行 +executor-thread +✓ +100.00" status-batch.txt
+grep -qE -- "  审核 +reviewer-thread +✓ +120.00" status-batch.txt
 grep -qF -- "- 3-尚未开始" status-batch.txt
 
 python3 - <<'PY'
