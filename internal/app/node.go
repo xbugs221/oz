@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -173,8 +174,9 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 		path := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
 		result, err := readNormalizeValidateMemberArtifact(path, configName, member, state.ChangeName)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return e.failNodeState(state, fmt.Errorf("%w: fan-in 缺少成员 artifact，重试将重新执行当前并行轮次：%s", errGoDAGRetryableNode, path))
+			if errors.Is(err, os.ErrNotExist) {
+				artifact.Members = append(artifact.Members, missingParallelMemberResult(member, state.ChangeName, path))
+				continue
 			}
 			return e.failNodeState(state, err)
 		}
@@ -194,6 +196,19 @@ func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
 		return e.failNodeState(state, err)
 	}
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage, Group: groupName, Artifact: path})
+}
+
+// missingParallelMemberResult records absent helper output without blocking the main workflow.
+func missingParallelMemberResult(member ParallelMemberConfig, changeName, path string) ParallelMemberResult {
+	return ParallelMemberResult{
+		Name:       member.Name,
+		ChangeName: changeName,
+		Purpose:    member.Purpose,
+		Status:     "missing",
+		Summary:    "helper artifact missing; main stage should proceed with remaining context",
+		Evidence:   []string{"missing artifact: " + path},
+		Required:   member.Required,
+	}
 }
 
 // failNodeState records node failures in durable run state.

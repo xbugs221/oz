@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var mergeSubagentSessionState = mergeState
+var subagentAttemptTimeout = 10 * time.Minute
 
 type artifactCaptureSetter interface {
 	SetArtifactCapture(*artifactCapture)
@@ -113,12 +115,17 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if runner, ok := runner.(artifactCaptureSetter); ok {
 			runner.SetArtifactCapture(capture)
 		}
+		attemptCtx, cancelAttempt := subagentAttemptContext(ctx)
 		if attempt > 1 {
 			retryPrompt := artifactRetryPrompt(groupName, member, artifactPath, schemaErr, promptContext)
-			sessionID, err = runner.Run(ctx, e.Repo, retryPrompt, sessionID, options)
+			sessionID, err = runner.Run(attemptCtx, e.Repo, retryPrompt, sessionID, options)
 		} else {
-			sessionID, err = runner.Run(ctx, e.Repo, prompt, "", options)
+			sessionID, err = runner.Run(attemptCtx, e.Repo, prompt, "", options)
 		}
+		if attemptCtx.Err() == context.DeadlineExceeded {
+			err = fmt.Errorf("%w: subagent %s 第 %d 次执行超过 %s，可由 go-dag 重试", errGoDAGRetryableNode, member.Name, attempt, subagentAttemptTimeout)
+		}
+		cancelAttempt()
 		if boundaryErr := e.checkSubagentReadOnlyBoundary(state, member, attempt, artifactPath, attemptHead, attemptDiff); boundaryErr != nil {
 			return boundaryErr
 		}
@@ -170,6 +177,14 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		}
 	}
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage, Group: groupName, Member: memberName, Artifact: artifactPath})
+}
+
+// subagentAttemptContext bounds one helper invocation while preserving parent cancellation.
+func subagentAttemptContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if subagentAttemptTimeout <= 0 {
+		return context.WithCancel(parent)
+	}
+	return context.WithTimeout(parent, subagentAttemptTimeout)
 }
 
 // checkSubagentReadOnlyBoundary enforces the read-only contract after every subagent tool attempt.

@@ -2,7 +2,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type goDAGContextFakeTool struct {
@@ -62,6 +65,80 @@ func TestGoDAGRetryableHelperErrorRestoresRunningState(t *testing.T) {
 	}
 	if restored.Status != statusRunning || restored.Stage != "qa_1" || restored.Error != "" {
 		t.Fatalf("restored state = status %q stage %q error %q, want running qa_1 empty error", restored.Status, restored.Stage, restored.Error)
+	}
+}
+
+// TestNodeFaninRecordsMissingMemberAndContinues verifies helper gaps are advisory context.
+func TestNodeFaninRecordsMissingMemberAndContinues(t *testing.T) {
+	repo := t.TempDir()
+	runID := "fanin-missing-member-run"
+	workflow := DefaultWorkflowConfig()
+	workflow.Parallel = ParallelConfig{
+		Enabled: true,
+		Groups: map[string]ParallelGroupConfig{
+			"implementation_context": {
+				Mode: "advisory",
+				Members: []ParallelMemberConfig{
+					{Name: "代码库侦察员", Purpose: "collect files", Stage: "before_execution", Tool: "codex"},
+					{Name: "外部资料研究员", Purpose: "collect docs", Stage: "before_execution", Tool: "codex"},
+				},
+			},
+		},
+	}
+	state := State{RunID: runID, ChangeName: "demo", Status: statusRunning, Stage: "execution", Workflow: workflow}
+	first := workflow.Parallel.Groups["implementation_context"].Members[0]
+	if err := writeMemberArtifact(memberArtifactPath(repo, runID, "implementation_context", 0, first.Name), ParallelMemberResult{
+		Name:       first.Name,
+		ChangeName: "demo",
+		Purpose:    first.Purpose,
+		Status:     "success",
+		Summary:    "context ready",
+		Evidence:   []string{"unit-test"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	err := NewEngine(repo, nil).nodeFanin(state, []string{"--group", "before_execution", "--stage", "execution"}, &stdout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result nodeResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("fanin status = %q, want completed", result.Status)
+	}
+	artifact, err := ReadParallelArtifact(parallelArtifactPath(runDir(repo, runID), "implementation_context", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(artifact.Members) != 2 {
+		t.Fatalf("members = %#v, want reported member plus missing placeholder", artifact.Members)
+	}
+	missing := artifact.Members[1]
+	if missing.Name != "外部资料研究员" || missing.Status != "missing" || len(missing.Evidence) == 0 {
+		t.Fatalf("missing placeholder = %#v", missing)
+	}
+}
+
+// TestSubagentAttemptContextTimesOut verifies helper attempts do not wait forever.
+func TestSubagentAttemptContextTimesOut(t *testing.T) {
+	previous := subagentAttemptTimeout
+	subagentAttemptTimeout = time.Millisecond
+	t.Cleanup(func() { subagentAttemptTimeout = previous })
+
+	ctx, cancel := subagentAttemptContext(context.Background())
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		if ctx.Err() != context.DeadlineExceeded {
+			t.Fatalf("attempt context error = %v, want deadline exceeded", ctx.Err())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("attempt context did not time out")
 	}
 }
 

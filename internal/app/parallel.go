@@ -125,14 +125,14 @@ func ValidateParallelReviewGate(runPath string, workflow WorkflowConfig, iterati
 	return nil
 }
 
-// ValidateParallelQAGate blocks clean QA when enabled helper failures were ignored.
+// ValidateParallelQAGate blocks clean QA only when helper output reports hard current-change findings.
 func ValidateParallelQAGate(runPath string, workflow WorkflowConfig, iteration int, qa QA) error {
 	artifact, ok, err := readEnabledParallelArtifact(runPath, workflow, "qa", iteration)
 	if err != nil || !ok {
 		return err
 	}
-	if qa.Decision == "clean" && (artifactHasSevereFinding(artifact) || artifactHasMemberFailure(artifact)) {
-		return fmt.Errorf("clean qa 不得忽略 parallel-qa-%d.json 中的 gate_input finding 或成员失败", iteration)
+	if qa.Decision == "clean" && artifactHasSevereFinding(artifact) {
+		return fmt.Errorf("clean qa 不得忽略 parallel-qa-%d.json 中的 gate_input finding", iteration)
 	}
 	return nil
 }

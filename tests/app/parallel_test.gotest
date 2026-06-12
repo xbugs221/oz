@@ -234,8 +234,8 @@ func TestArtifactDoneBlocksRequiredImplementationContextFailure(t *testing.T) {
 	}
 }
 
-// TestAdvanceBlocksCleanQAWhenParallelRequiredMemberFails verifies QA clean cannot ignore required helper failures.
-func TestAdvanceBlocksCleanQAWhenParallelRequiredMemberFails(t *testing.T) {
+// TestAdvanceAllowsCleanQAWhenParallelRequiredMemberFails verifies QA helper failures are advisory.
+func TestAdvanceAllowsCleanQAWhenParallelRequiredMemberFails(t *testing.T) {
 	// Given: a QA stage with complete acceptance coverage but a failed required helper.
 	repo := gitRepo(t)
 	runID := "parallel-qa-gate-run"
@@ -257,12 +257,12 @@ func TestAdvanceBlocksCleanQAWhenParallelRequiredMemberFails(t *testing.T) {
 	// When: the state machine advances the QA stage.
 	err := (&Engine{Repo: repo}).advance(&state)
 
-	// Then: archive remains blocked because clean QA ignored a required helper failure.
-	if err == nil || !strings.Contains(err.Error(), "parallel-qa-1.json") {
-		t.Fatalf("advance should reject ignored parallel QA failure, got %v", err)
+	// Then: archive can proceed because helper failure is recorded as context for the main QA.
+	if err != nil {
+		t.Fatalf("advance should allow advisory parallel QA failure, got %v", err)
 	}
-	if state.Stage != "qa_1" {
-		t.Fatalf("stage advanced despite parallel QA gate: %s", state.Stage)
+	if state.Stage != "archive" {
+		t.Fatalf("stage = %s, want archive", state.Stage)
 	}
 }
 
