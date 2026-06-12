@@ -267,8 +267,8 @@ func isNoActionBlockingFinding(finding Finding) bool {
 	}
 	text := strings.ToLower(strings.TrimSpace(finding.Title + "\n" + finding.Recommendation))
 	for _, phrase := range []string{
-		"无操作", "无需", "不用处理", "不需要处理", "确认", "已满足", "已通过", "均已通过", "无遗漏",
-		"no action", "nothing to do", "accepted", "satisfied", "passed", "complete",
+		"无操作", "无需", "不用处理", "不需要处理", "已确认", "确认通过", "确认满足", "已满足", "已通过", "均已通过", "无遗漏",
+		"no action", "nothing to do", "accepted", "satisfied", "passed", "completed",
 	} {
 		if strings.Contains(text, phrase) {
 			return true
