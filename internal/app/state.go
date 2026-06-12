@@ -976,7 +976,7 @@ func (e *Engine) artifactDone(state State) (bool, error) {
 		if err != nil || !done {
 			return done, err
 		}
-		if err := ValidateParallelContextGate(base, state.Workflow); err != nil {
+		if err := e.validateExecutionParallelContextGate(state); err != nil {
 			return false, newStageArtifactGateError(err)
 		}
 		return true, nil

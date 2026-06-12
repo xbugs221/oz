@@ -167,6 +167,12 @@ func (e *Engine) validateExecutionParallelContextGate(state State) error {
 
 // executionImplementationContextWasSkipped reports the go-dag path where already-done tasks skipped advisory helpers.
 func (e *Engine) executionImplementationContextWasSkipped(state State) bool {
+	if state.Engine != "go-dag" && state.Workflow.Engine != "go-dag" {
+		return false
+	}
+	if len(state.DAGNodes) == 0 {
+		return false
+	}
 	if state.Stage != "execution" || !state.Workflow.Parallel.Enabled {
 		return false
 	}

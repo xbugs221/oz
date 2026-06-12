@@ -147,6 +147,29 @@ func TestGoDAGCompletedExecutionStillRunsValidation(t *testing.T) {
 	}
 }
 
+// TestGoDAGArtifactDoneAllowsSkippedImplementationContext keeps execution gates aligned with skipped helper nodes.
+func TestGoDAGArtifactDoneAllowsSkippedImplementationContext(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [x] task\n")
+	goDAGContextInstallFakeOz(t)
+	runID := "done-execution-artifact-gate-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	state.DAGNodes = map[string]DAGNodeState{
+		"execution": {Status: "running"},
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	done, err := (&Engine{Repo: repo}).artifactDone(state)
+	if err != nil || !done {
+		t.Fatalf("artifactDone should allow skipped go-dag implementation context, done=%v err=%v", done, err)
+	}
+}
+
 // TestWorkflowSpecOrdersImplementationContextBeforeExecution protects subagent read-only boundaries.
 func TestWorkflowSpecOrdersImplementationContextBeforeExecution(t *testing.T) {
 	workflow := DefaultWorkflowConfig()
