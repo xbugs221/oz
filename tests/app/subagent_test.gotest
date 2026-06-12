@@ -341,6 +341,49 @@ func TestNodeRunSubagentRetriesCaptureAndSchemaFailuresWithActionablePrompts(t *
 	}
 }
 
+// TestSubagentMemberArtifactDropsEmptySecretsField tolerates harmless model-side security metadata noise.
+func TestSubagentMemberArtifactDropsEmptySecretsField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	if err := os.WriteFile(path, []byte(`{
+		"name": "代码库侦察员",
+		"change_name": "demo",
+		"purpose": "汇总 execution 需要读取的文件和测试模式",
+		"status": "success",
+		"summary": "ok",
+		"evidence": ["go.mod: module github.com/xbugs221/oz"],
+		"secrets": []
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := readNormalizeValidateMemberArtifact(path, "implementation_context", ParallelMemberConfig{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式"}, "demo")
+	if err != nil {
+		t.Fatalf("empty secrets field should be normalized away: %v", err)
+	}
+	if result.Summary != "ok" || len(result.Evidence) != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+// TestSubagentMemberArtifactRejectsNonEmptySecretsField keeps secret findings inside evidence or findings.
+func TestSubagentMemberArtifactRejectsNonEmptySecretsField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "member.json")
+	if err := os.WriteFile(path, []byte(`{
+		"name": "代码库侦察员",
+		"change_name": "demo",
+		"purpose": "汇总 execution 需要读取的文件和测试模式",
+		"status": "success",
+		"summary": "ok",
+		"evidence": ["go.mod: module github.com/xbugs221/oz"],
+		"secrets": ["token"]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readNormalizeValidateMemberArtifact(path, "implementation_context", ParallelMemberConfig{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式"}, "demo")
+	if err == nil || !strings.Contains(err.Error(), "字段 secrets 不属于 SUBAGENT_OUTPUT schema") {
+		t.Fatalf("error = %v, want secrets schema guidance", err)
+	}
+}
+
 // TestExtractCapturedMemberJSONObjectSkipsNestedObjects protects Pi text capture from report JSON fragments.
 func TestExtractCapturedMemberJSONObjectSkipsNestedObjects(t *testing.T) {
 	member := ParallelMemberConfig{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式"}

@@ -438,6 +438,10 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return ParallelMemberResult{}, fmt.Errorf("JSON 解析失败：%w", err)
 	}
+	normalizedData, err := normalizeCapturedMemberRawJSON(raw)
+	if err != nil {
+		return ParallelMemberResult{}, err
+	}
 	if ev, ok := raw["evidence"]; ok && ev != nil {
 		arr, isArray := ev.([]interface{})
 		if !isArray {
@@ -476,12 +480,24 @@ func readAndValidateMemberArtifact(path string) (ParallelMemberResult, error) {
 		}
 	}
 	var result ParallelMemberResult
-	dec := json.NewDecoder(bytes.NewReader(bytes.TrimSpace(data)))
+	dec := json.NewDecoder(bytes.NewReader(normalizedData))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&result); err != nil {
 		return ParallelMemberResult{}, err
 	}
 	return result, nil
+}
+
+// normalizeCapturedMemberRawJSON removes harmless model-side compatibility noise before strict decode.
+func normalizeCapturedMemberRawJSON(raw map[string]interface{}) ([]byte, error) {
+	if value, ok := raw["secrets"]; ok {
+		arr, isArray := value.([]interface{})
+		if !isArray || len(arr) != 0 {
+			return nil, fmt.Errorf("字段 secrets 不属于 SUBAGENT_OUTPUT schema；如发现敏感信息，只能写入 evidence 或 findings，不能添加 secrets 字段")
+		}
+		delete(raw, "secrets")
+	}
+	return json.Marshal(raw)
 }
 
 // artifactRetryPrompt builds a prompt that resumes the same subagent session to rewrite only SUBAGENT_OUTPUT.
@@ -516,7 +532,7 @@ func subagentReadOnlyBoundaryPrompt() string {
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		"name: string, change_name: string(必须等于 CURRENT_CHANGE), purpose: string, status: 0|1|\"success\"|\"failed\", summary: string, evidence: string[](每一项必须是字符串，不能是对象或数组), findings: [{title:string,severity:1|2|3,scope:1|2|0,evidence:string,recommendation:string}]",
+		"只允许以下顶层字段，不得添加 secrets、metadata、notes 或其它额外字段：name: string, change_name: string(必须等于 CURRENT_CHANGE), purpose: string, status: 0|1|\"success\"|\"failed\", summary: string, evidence: string[](每一项必须是字符串，不能是对象或数组), findings: [{title:string,severity:1|2|3,scope:1|2|0,evidence:string,recommendation:string}]",
 	}, "\n")
 }
 

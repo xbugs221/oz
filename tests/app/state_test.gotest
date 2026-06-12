@@ -736,6 +736,8 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 			"evidence: string[]",
 			"每一项必须是字符串",
 			"不能是对象或数组",
+			"只允许以下顶层字段",
+			"不得添加 secrets",
 			"severity:1|2|3",
 			"scope:1|2|0",
 		} {
