@@ -279,6 +279,16 @@ sessions = state.get("sessions", {})
 subagent_sessions = [key for key in sessions if "subagent:implementation_context" in key]
 if len(subagent_sessions) != 2:
     raise SystemExit(f"pending task should record 2 implementation_context subagent sessions, got {subagent_sessions}")
+
+processes = state.get("processes", [])
+process_roles = {item.get("role"): item for item in processes}
+for name in ["代码侦察", "外部资料"]:
+    role = f"subagent:implementation_context:{name}:0"
+    process = process_roles.get(role)
+    if not process:
+        raise SystemExit(f"missing process row for {role}: {processes}")
+    if process.get("stage") != "execution" or process.get("provider") != "pi" or process.get("status") != "completed" or not process.get("session_id"):
+        raise SystemExit(f"bad process row for {role}: {process}")
 PY
 
 note "PASS: task 未完成时 execution context subagents 正常运行"

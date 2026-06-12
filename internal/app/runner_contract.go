@@ -29,6 +29,7 @@ type RunnerState struct {
 	Stages        map[string]string `json:"stages"`
 	Paths         map[string]string `json:"paths"`
 	Sessions      map[string]string `json:"sessions"`
+	Processes     []ProcessState    `json:"processes,omitempty"`
 	Error         string            `json:"error"`
 	Observability *statusView       `json:"observability,omitempty"`
 }
@@ -55,6 +56,7 @@ type changeSummary struct {
 // runnerStateFromState converts durable state into the runner-facing DTO.
 func runnerStateFromState(state State) RunnerState {
 	normalizeStateMaps(&state)
+	refreshStateProcesses(&state)
 	return RunnerState{
 		RunID:      state.RunID,
 		ChangeName: state.ChangeName,
@@ -63,6 +65,7 @@ func runnerStateFromState(state State) RunnerState {
 		Stages:     state.Stages,
 		Paths:      state.Paths,
 		Sessions:   state.Sessions,
+		Processes:  state.Processes,
 		Error:      state.Error,
 	}
 }

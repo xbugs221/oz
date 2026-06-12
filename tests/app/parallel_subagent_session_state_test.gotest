@@ -85,6 +85,54 @@ func TestParallelSubagentSessionsAreMergedWithoutDroppingPeers(t *testing.T) {
 		if row.SessionID != want || row.Marker != "✓" {
 			t.Fatalf("status row for %s = session:%q marker:%q, want session:%q marker:✓", member.Name, row.SessionID, row.Marker, want)
 		}
+		process := sessionStateProcessByRole(t, finalState.Processes, "subagent:implementation_context:"+member.Name+":0")
+		if process.Stage != "execution" || process.Provider != "pi" || process.SessionID != want || process.Status != statusRunning {
+			t.Fatalf("process for %s = %#v, want execution/pi/running/%s", member.Name, process, want)
+		}
+	}
+}
+
+// TestStateProcessesKeepDisplayStage verifies downstream renderers need not infer subagent ownership.
+func TestStateProcessesKeepDisplayStage(t *testing.T) {
+	repo := gitRepo(t)
+	workflow := DefaultWorkflowConfig()
+	workflow.Parallel.Groups["planning_context"] = ParallelGroupConfig{
+		Mode: "advisory",
+		Members: []ParallelMemberConfig{
+			{Name: "需求分析员", Purpose: "澄清目标", Stage: "planning", Tool: "pi"},
+		},
+	}
+	state := State{
+		RunID:      "run-process-stage",
+		ChangeName: "demo",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Engine:     "go-dag",
+		Sessions: map[string]string{
+			sessionStateKey("pi", "subagent:planning_context:需求分析员:0"): "planning-subagent-session",
+		},
+		DAGNodes: map[string]DAGNodeState{
+			"planning_context_1": {Status: "success"},
+		},
+		Stages:   map[string]string{},
+		Paths:    map[string]string{},
+		Workflow: workflow,
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := loadState(repo, state.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process := sessionStateProcessByRole(t, persisted.Processes, "subagent:planning_context:需求分析员:0")
+	if process.Stage != "planning" || process.Provider != "pi" || process.Status != "completed" || process.SessionID != "planning-subagent-session" {
+		t.Fatalf("planning process = %#v, want stage planning with completed pi session", process)
+	}
+	dto := runnerStateFromState(persisted)
+	process = sessionStateProcessByRole(t, dto.Processes, "subagent:planning_context:需求分析员:0")
+	if process.Stage != "planning" {
+		t.Fatalf("runner dto process = %#v, want planning stage", process)
 	}
 }
 
@@ -490,6 +538,18 @@ func sessionStateStatusRowByFullName(t *testing.T, view statusView, fullName str
 	}
 	t.Fatalf("missing status row for %s in %#v", fullName, view.Rows)
 	return statusViewRow{}
+}
+
+// sessionStateProcessByRole returns the structured process row used by external renderers.
+func sessionStateProcessByRole(t *testing.T, processes []ProcessState, role string) ProcessState {
+	t.Helper()
+	for _, process := range processes {
+		if process.Role == role {
+			return process
+		}
+	}
+	t.Fatalf("missing process for role %s in %#v", role, processes)
+	return ProcessState{}
 }
 
 // sessionStateStatusRowByStage returns the parent status row for one stage.
