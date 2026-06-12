@@ -696,7 +696,7 @@ func TestQAArtifactGateRerunsQAInsteadOfFailing(t *testing.T) {
 	if state.Status != statusDone || state.Stage != "done" {
 		t.Fatalf("state = %s/%s, want done/done", state.Status, state.Stage)
 	}
-	qaGate := state.Validation["qa_1"]
+	qaGate := state.ArtifactGates["qa_1"]
 	if qaGate.Kind != validationKindArtifact || qaGate.Status != validationStatusPassed || qaGate.Attempts != 1 || qaGate.LastError != "" {
 		t.Fatalf("qa artifact gate state = %#v, want one repaired artifact-gate failure", qaGate)
 	}
@@ -731,10 +731,13 @@ func TestSubagentPromptsSpellStrictFindingSchema(t *testing.T) {
 			"不得把其它提案",
 			"当前提案问题写 findings",
 			"历史债务或无关问题写 scope=out_of_scope_existing",
-			"change_name(必须等于 CURRENT_CHANGE)",
-			"status(0=ok,1=fail)",
-			"severity(1/2/3)",
-			"scope(1=当前,2=回归,0=无关)",
+			"change_name: string(必须等于 CURRENT_CHANGE)",
+			"status: 0|1",
+			"evidence: string[]",
+			"每一项必须是字符串",
+			"不能是对象或数组",
+			"severity:1|2|3",
+			"scope:1|2|0",
 		} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("%s prompt missing %q:\n%s", label, want, prompt)
@@ -921,9 +924,9 @@ func TestGoDAGAdvanceArtifactGateFailurePersistsRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate := persisted.Validation["archive"]
+	gate := persisted.ArtifactGates["archive"]
 	if gate.Kind != validationKindArtifact || gate.Status != validationStatusFailed || gate.Attempts != 1 {
-		t.Fatalf("archive validation = %#v, want persisted artifact gate failure", gate)
+		t.Fatalf("archive artifact gate = %#v, want persisted artifact gate failure", gate)
 	}
 	if persisted.Stages["archive"] != "validation_failed" {
 		t.Fatalf("archive stage = %q, want validation_failed", persisted.Stages["archive"])
@@ -2979,7 +2982,7 @@ func cleanReviewJSON() string {
 
 // acceptanceJSON returns a valid strict acceptance contract for test stages.
 func acceptanceJSON() string {
-	return `{"summary":"demo acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"pnpm exec tsx --test docs/changes/demo/tests/demo.acceptance.test.ts","purpose":"cover the demo contract","assertions":["demo workflow persists the user-visible result after execution"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove the demo runtime path"}]}` + "\n"
+	return `{"summary":"demo acceptance","coverage":[{"spec":"demo workflow","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"covered by contract test evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"pnpm exec tsx --test docs/changes/demo/tests/demo.acceptance.test.ts","purpose":"cover the demo contract and produce screenshot-demo at test-results/demo.png","assertions":["demo workflow persists the user-visible result after execution and writes screenshot-demo to test-results/demo.png"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove the demo runtime path"}]}` + "\n"
 }
 
 // fixReviewJSON returns a valid strict needs_fix artifact for test stages.

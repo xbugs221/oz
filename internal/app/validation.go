@@ -58,10 +58,10 @@ func shouldValidateStage(state State) bool {
 
 // shouldForceStageRerun reports whether a failed validation gate must re-enter the same stage.
 func shouldForceStageRerun(state State) bool {
-	if state.Validation == nil {
-		return false
+	if state.ArtifactGates != nil && state.ArtifactGates[state.Stage].Status == validationStatusFailed {
+		return true
 	}
-	return state.Validation[state.Stage].Status == validationStatusFailed
+	return state.Validation != nil && state.Validation[state.Stage].Status == validationStatusFailed
 }
 
 // clearStageValidationFailure records that the current stage has passed its latest gate.
@@ -73,6 +73,21 @@ func clearStageValidationFailure(state *State) {
 	current.Status = validationStatusPassed
 	current.LastError = ""
 	state.Validation[state.Stage] = current
+}
+
+// clearStageArtifactGateFailure records that the current stage artifact now passes its gate.
+func clearStageArtifactGateFailure(state *State) {
+	if state.ArtifactGates == nil {
+		return
+	}
+	current := state.ArtifactGates[state.Stage]
+	if current.Kind == "" && current.Status == "" {
+		return
+	}
+	current.Kind = validationKindArtifact
+	current.Status = validationStatusPassed
+	current.LastError = ""
+	state.ArtifactGates[state.Stage] = current
 }
 
 type stageArtifactGateError struct {
@@ -111,10 +126,13 @@ func isStageArtifactGateError(err error) bool {
 // recordStageArtifactGateFailure persists a schema/contract failure for a same-stage retry.
 func recordStageArtifactGateFailure(repo string, state *State, failure error) error {
 	ensureWorkflowConfig(state)
-	if state.Validation == nil {
-		state.Validation = map[string]StageValidationState{}
+	if state.ArtifactGates == nil {
+		state.ArtifactGates = map[string]StageValidationState{}
 	}
-	current := state.Validation[state.Stage]
+	if state.Stages == nil {
+		state.Stages = map[string]string{}
+	}
+	current := state.ArtifactGates[state.Stage]
 	current.Attempts++
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	attempt := ValidationAttempt{
@@ -137,7 +155,7 @@ func recordStageArtifactGateFailure(repo string, state *State, failure error) er
 	current.LastArtifact = artifactPath
 	current.Status = validationStatusFailed
 	current.LastError = failure.Error()
-	state.Validation[state.Stage] = current
+	state.ArtifactGates[state.Stage] = current
 	if current.Attempts >= state.Workflow.Validation.MaxAttemptsPerStage {
 		state.Status = statusValidationBlocked
 		state.Stage = statusValidationBlocked
@@ -221,10 +239,10 @@ func firstValidationError(attempt ValidationAttempt) string {
 
 // validationFailurePrompt injects the previous failed gate into the next executor turn.
 func validationFailurePrompt(repo string, state State) string {
-	if state.Validation == nil {
-		return ""
-	}
 	current := state.Validation[state.Stage]
+	if gate, ok := state.ArtifactGates[state.Stage]; ok && gate.Status == validationStatusFailed {
+		current = gate
+	}
 	if current.Status != validationStatusFailed || current.LastArtifact == "" {
 		return ""
 	}

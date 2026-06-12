@@ -148,8 +148,8 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	if err != nil {
 		next.Status = "failed"
 		next.Error = err.Error()
-		if e.goDAGNodeReachedTerminalBlock(runID) {
-			next.Status = statusValidationBlocked
+		if terminalStatus, ok := e.goDAGNodeReachedTerminalBlock(runID); ok {
+			next.Status = terminalStatus
 			e.recordGoDAGNode(runID, node.ID, next)
 			return nil
 		}
@@ -178,12 +178,17 @@ func (e *Engine) goDAGShouldSkipCompletedExecutionContext(state State, node Work
 }
 
 // goDAGNodeReachedTerminalBlock reports non-failed workflow blocks created by node logic.
-func (e *Engine) goDAGNodeReachedTerminalBlock(runID string) bool {
+func (e *Engine) goDAGNodeReachedTerminalBlock(runID string) (string, bool) {
 	state, err := loadState(e.Repo, runID)
 	if err != nil {
-		return false
+		return "", false
 	}
-	return state.Status == statusValidationBlocked
+	switch state.Status {
+	case statusValidationBlocked, statusAcceptanceContractBlocked:
+		return state.Status, true
+	default:
+		return "", false
+	}
 }
 
 // goDAGShouldRetryNode preserves runLoop validation semantics for the default scheduler.

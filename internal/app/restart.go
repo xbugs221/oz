@@ -224,7 +224,7 @@ func ensureRunRestartable(state State) error {
 		return nil
 	case statusDone:
 		return fmt.Errorf("工作流 %s 已完成，不能重启", state.RunID)
-	case statusBlocked, statusValidationBlocked, statusAborted, "aborted":
+	case statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusAborted, "aborted":
 		return fmt.Errorf("工作流 %s 已达到 %s，不能自动重启", state.RunID, state.Status)
 	default:
 		return fmt.Errorf("工作流 %s 状态 %s 不能重启", state.RunID, state.Status)

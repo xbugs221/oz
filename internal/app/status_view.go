@@ -133,6 +133,9 @@ func statusStageRow(repo string, state State, spec compactStageSpec) statusViewR
 	if state.Status == statusValidationBlocked && spec.role == "qa" {
 		row.Marker = "x"
 	}
+	if state.Status == statusAcceptanceContractBlocked && spec.role == "executor" {
+		row.Marker = "x"
+	}
 	if minutes, ok := statusStageDuration(state, stages, time.Now().UTC()); ok {
 		row.DurationMinutes = &minutes
 	}
@@ -683,7 +686,7 @@ func compactOverallMarker(view statusView) string {
 	switch view.RunStatus {
 	case statusDone:
 		return "✓"
-	case statusFailed, statusBlocked, statusValidationBlocked, statusInterrupted:
+	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusInterrupted:
 		return "x"
 	case statusRunning:
 		if view.Indicator != "" {

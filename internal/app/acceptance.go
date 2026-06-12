@@ -16,6 +16,9 @@ type AcceptanceTest = acceptance.Test
 // AcceptanceEvidence records one runtime artifact that QA must collect.
 type AcceptanceEvidence = acceptance.Evidence
 
+// Coverage links spec scenarios to concrete tests and QA evidence.
+type Coverage = acceptance.Coverage
+
 // ReadAcceptance loads and validates the acceptance JSON file.
 func ReadAcceptance(path string) (Acceptance, error) {
 	data, err := os.ReadFile(path)

@@ -126,7 +126,11 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 			return e.failNodeState(state, err)
 		}
 		if err := materializeCapturedMemberArtifact(artifactPath, capture, member, state.ChangeName); err != nil {
-			return e.failNodeState(state, err)
+			schemaErr = err
+			if attempt == 3 {
+				return e.failNodeState(state, fmt.Errorf("subagent %s artifact 格式校验失败（%s）：%w", member.Name, artifactPath, schemaErr))
+			}
+			continue
 		}
 		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
 		if schemaErr == nil {
@@ -501,7 +505,7 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"",
 		"SUBAGENT_OUTPUT 格式错误：" + schemaErr.Error(),
 		memberArtifactSchemaPrompt(),
-		"只重写 SUBAGENT_OUTPUT。",
+		"只重写 SUBAGENT_OUTPUT；最终回复必须是裸 JSON object，不要使用 markdown 代码块，不要输出解释文字。",
 	}, "\n") + "\n"
 }
 
@@ -512,7 +516,7 @@ func subagentReadOnlyBoundaryPrompt() string {
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		"name, change_name(必须等于 CURRENT_CHANGE), purpose, status(0=ok,1=fail), summary, evidence[], findings[{title,severity(1/2/3),scope(1=当前,2=回归,0=无关),evidence,recommendation}]",
+		"name: string, change_name: string(必须等于 CURRENT_CHANGE), purpose: string, status: 0|1|\"success\"|\"failed\", summary: string, evidence: string[](每一项必须是字符串，不能是对象或数组), findings: [{title:string,severity:1|2|3,scope:1|2|0,evidence:string,recommendation:string}]",
 	}, "\n")
 }
 
@@ -523,7 +527,7 @@ func materializeCapturedMemberArtifact(path string, capture *artifactCapture, me
 	}
 	data, err := extractCapturedMemberJSONObject(capture.String(), member, expectedChange)
 	if err != nil {
-		return nil
+		return fmt.Errorf("未从最终回复捕获到合法 SUBAGENT_OUTPUT JSON object：%w；最终回复必须只包含一个裸 JSON object，不能使用 markdown 代码块或解释文字；JSON 字符串中的引号必须转义；evidence 必须是字符串数组", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

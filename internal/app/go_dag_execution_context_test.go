@@ -337,7 +337,7 @@ func goDAGContextChange(t *testing.T, repo, task string) {
 		"design.md":       "demo\n",
 		"spec.md":         "demo\n",
 		"task.md":         task,
-		"acceptance.json": `{"summary":"demo","required_tests":[]}` + "\n",
+		"acceptance.json": `{"summary":"demo","coverage":[{"spec":"demo workflow","tests":["contract-demo"],"evidence":["runtime-demo"],"risk":"covered by runtime log"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"pnpm exec tsx --test docs/changes/demo/tests/demo.acceptance.test.ts","purpose":"produce runtime-demo at test-results/demo.log","assertions":["execution writes runtime-demo to test-results/demo.log"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove demo runtime path"}]}` + "\n",
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {

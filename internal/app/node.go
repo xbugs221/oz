@@ -70,6 +70,19 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 		}
 		return err
 	}
+	clearStageArtifactGateFailure(&state)
+	if stage == "execution" {
+		preflightPassed, err := e.runAcceptancePreflight(&state)
+		if err != nil {
+			return e.failNodeState(state, err)
+		}
+		if !preflightPassed {
+			if err := saveState(e.Repo, state); err != nil {
+				return err
+			}
+			return fmt.Errorf("%s acceptance preflight 未通过", stage)
+		}
+	}
 	validationPassed, err := e.validateStage(ctx, &state)
 	if err != nil {
 		return e.failNodeState(state, err)

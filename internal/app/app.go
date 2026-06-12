@@ -782,7 +782,7 @@ func stoppedRunReason(state State) string {
 	if state.Status != "" && state.Status != statusFailed {
 		return state.Status
 	}
-	if state.Stage == statusBlocked || state.Stage == statusValidationBlocked {
+	if state.Stage == statusBlocked || state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked {
 		return state.Stage
 	}
 	if state.Status != "" {
@@ -815,6 +815,12 @@ func humanRunFailureSummary(state State, changeName string) string {
 			reason = "阶段验证达到上限，不能自动继续"
 		}
 		return prefix + stageRole + "失败：" + reason
+	case state.Status == statusAcceptanceContractBlocked || state.Stage == statusAcceptanceContractBlocked:
+		reason := state.Error
+		if reason == "" {
+			reason = "验收合同预检未通过，不能自动继续"
+		}
+		return prefix + stageRole + "失败：" + reason
 	case state.Status == statusAborted || state.Status == "aborted":
 		reason := state.Error
 		if reason == "" {
@@ -845,6 +851,8 @@ func humanStageRole(stage string) string {
 		return "审核阶段"
 	case stage == statusValidationBlocked:
 		return "阶段验证"
+	case stage == statusAcceptanceContractBlocked:
+		return "验收预检"
 	default:
 		return "当前阶段"
 	}
@@ -1061,6 +1069,13 @@ func stageChecklistLinesForRepo(repo string, state State, runtime map[string]sta
 			reason = "阶段验证达到上限，工作流已中断"
 		}
 		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusValidationBlocked, reason))
+	}
+	if state.Status == statusAcceptanceContractBlocked || state.Stage == statusAcceptanceContractBlocked {
+		reason := state.Error
+		if reason == "" {
+			reason = "验收合同预检未通过，工作流已中断"
+		}
+		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusAcceptanceContractBlocked, reason))
 	}
 	if len(lines) == 0 {
 		return []string{"- 写 未知 →"}
@@ -1512,6 +1527,13 @@ func watchStageChecklistLines(state State, runtime map[string]stageRuntime, spin
 			reason = "阶段验证达到上限，工作流已中断"
 		}
 		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusValidationBlocked, reason))
+	}
+	if state.Status == statusAcceptanceContractBlocked || state.Stage == statusAcceptanceContractBlocked {
+		reason := state.Error
+		if reason == "" {
+			reason = "验收合同预检未通过，工作流已中断"
+		}
+		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusAcceptanceContractBlocked, reason))
 	}
 	if len(lines) == 0 {
 		return []string{"- 写 未知 " + spinner}

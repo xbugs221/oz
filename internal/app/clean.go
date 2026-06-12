@@ -28,12 +28,13 @@ type CleanOptions struct {
 
 // cleanableRunStatuses defines run statuses that wo clean considers garbage.
 var cleanableRunStatuses = map[string]bool{
-	statusFailed:            true,
-	statusInterrupted:       true,
-	statusBlocked:           true,
-	statusValidationBlocked: true,
-	statusAborted:           true,
-	"aborted":               true,
+	statusFailed:                    true,
+	statusInterrupted:               true,
+	statusBlocked:                   true,
+	statusValidationBlocked:         true,
+	statusAcceptanceContractBlocked: true,
+	statusAborted:                   true,
+	"aborted":                       true,
 }
 
 // cleanableBatchStatuses defines batch statuses that wo clean considers garbage.

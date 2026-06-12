@@ -86,6 +86,9 @@ func normalizeStateMaps(state *State) {
 	if state.Paths == nil {
 		state.Paths = map[string]string{}
 	}
+	if state.ArtifactGates == nil {
+		state.ArtifactGates = map[string]StageValidationState{}
+	}
 }
 
 // writeRunnerContract writes the JSON capability contract to stdout.

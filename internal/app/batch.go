@@ -340,10 +340,10 @@ func (e *Engine) failBatch(batchID, changeName, runID string, err error) error {
 
 func isBatchTerminalState(state State) bool {
 	switch state.Status {
-	case statusFailed, statusBlocked, statusValidationBlocked, statusAborted, statusInterrupted, "aborted":
+	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusAborted, statusInterrupted, "aborted":
 		return true
 	}
-	return state.Stage == statusBlocked || state.Stage == statusValidationBlocked
+	return state.Stage == statusBlocked || state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked
 }
 
 func saveBatchState(repo string, batch BatchState) error {

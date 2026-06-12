@@ -1,0 +1,49 @@
+{
+  "summary": "拆分 wo 阶段产物门禁和命令 validation 状态，并在 execution 后新增 acceptance preflight；第一版 preflight 发现验收合同不可执行时进入专用阻断状态。",
+  "coverage": [
+    {
+      "spec": "需求：artifact gate 与 validation gate 状态分离 / 场景：artifact gate failure 不再写入 command validation 状态",
+      "tests": [
+        "gate-state-preflight-contract"
+      ],
+      "evidence": [
+        "gate-state-preflight-log"
+      ],
+      "risk": "旧 run 中历史 validation.kind=artifact 只要求兼容展示，不要求迁移。"
+    },
+    {
+      "spec": "需求：execution 后执行 acceptance preflight / 场景：evidence 无 producer 时阻断为验收合同问题",
+      "tests": [
+        "gate-state-preflight-contract"
+      ],
+      "evidence": [
+        "gate-state-preflight-log"
+      ],
+      "risk": "producer 追溯第一版是保守启发式，不执行 live/browser 环境。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "gate-state-preflight-contract",
+      "source": "change_contract",
+      "path": "docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "command": "bash docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "purpose": "证明 artifact gate 状态与 command validation 状态分离，并证明 execution 后 acceptance preflight 会阻断 evidence 无 producer 的验收合同。",
+      "assertions": [
+        "artifact gate failure 写入 state.artifact_gates 而不是 state.validation",
+        "evidence 无 required test 生产者时 run 进入 blocked_acceptance_contract",
+        "preflight 失败写入 state.acceptance_preflight 且不消耗 review/fix 轮次",
+        "evidence 可从 required test 命令、路径、用途或断言追溯生产者时 preflight 通过"
+      ],
+      "expected_initial_failure": "当前实现还没有 State.ArtifactGates、State.AcceptancePreflight、blocked_acceptance_contract 和 runAcceptancePreflight，因此应失败于目标行为缺失。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "gate-state-preflight-log",
+      "kind": "runtime_log",
+      "path": "test-results/19-gate-state-preflight/contract.log",
+      "purpose": "记录创建阶段契约测试运行结果；该文件由 gate-state-preflight-contract 命令生成，是本地运行产物，不进入 git。"
+    }
+  ]
+}

@@ -24,15 +24,16 @@ import (
 )
 
 const (
-	statusRunning           = "running"
-	statusFailed            = "failed"
-	statusDone              = "done"
-	statusAborted           = "aborted_manual_intervention"
-	statusArchived          = "archived_superseded"
-	statusInterrupted       = "interrupted"
-	statusBlocked           = "blocked_review_limit"
-	statusValidationBlocked = "blocked_validation_limit"
-	errNoInitialCommit      = "首次 git commit 前不能启动 wo run，请创建初始提交后重试"
+	statusRunning                   = "running"
+	statusFailed                    = "failed"
+	statusDone                      = "done"
+	statusAborted                   = "aborted_manual_intervention"
+	statusArchived                  = "archived_superseded"
+	statusInterrupted               = "interrupted"
+	statusBlocked                   = "blocked_review_limit"
+	statusValidationBlocked         = "blocked_validation_limit"
+	statusAcceptanceContractBlocked = "blocked_acceptance_contract"
+	errNoInitialCommit              = "首次 git commit 前不能启动 wo run，请创建初始提交后重试"
 )
 
 var stateFileMu sync.Mutex
@@ -48,25 +49,27 @@ const (
 
 // State is the durable source of truth for one sealed run.
 type State struct {
-	RunID        string                          `json:"run_id"`
-	ChangeName   string                          `json:"change_name"`
-	Sealed       bool                            `json:"sealed"`
-	Status       string                          `json:"status"`
-	Stage        string                          `json:"stage"`
-	Engine       string                          `json:"engine,omitempty"`
-	Error        string                          `json:"error"`
-	BatchID      string                          `json:"batch_id,omitempty"`
-	BatchIndex   int                             `json:"batch_index,omitempty"`
-	BatchTotal   int                             `json:"batch_total,omitempty"`
-	BaselineHead string                          `json:"baseline_head"`
-	BaselineDiff string                          `json:"baseline_diff"`
-	Sessions     map[string]string               `json:"sessions"`
-	Stages       map[string]string               `json:"stages"`
-	StageTimings map[string]StageTiming          `json:"stage_timings,omitempty"`
-	DAGNodes     map[string]DAGNodeState         `json:"dag_nodes,omitempty"`
-	Paths        map[string]string               `json:"paths"`
-	Validation   map[string]StageValidationState `json:"validation,omitempty"`
-	Workflow     WorkflowConfig                  `json:"workflow_config"`
+	RunID               string                          `json:"run_id"`
+	ChangeName          string                          `json:"change_name"`
+	Sealed              bool                            `json:"sealed"`
+	Status              string                          `json:"status"`
+	Stage               string                          `json:"stage"`
+	Engine              string                          `json:"engine,omitempty"`
+	Error               string                          `json:"error"`
+	BatchID             string                          `json:"batch_id,omitempty"`
+	BatchIndex          int                             `json:"batch_index,omitempty"`
+	BatchTotal          int                             `json:"batch_total,omitempty"`
+	BaselineHead        string                          `json:"baseline_head"`
+	BaselineDiff        string                          `json:"baseline_diff"`
+	Sessions            map[string]string               `json:"sessions"`
+	Stages              map[string]string               `json:"stages"`
+	StageTimings        map[string]StageTiming          `json:"stage_timings,omitempty"`
+	DAGNodes            map[string]DAGNodeState         `json:"dag_nodes,omitempty"`
+	Paths               map[string]string               `json:"paths"`
+	Validation          map[string]StageValidationState `json:"validation,omitempty"`
+	ArtifactGates       map[string]StageValidationState `json:"artifact_gates,omitempty"`
+	AcceptancePreflight AcceptancePreflightState        `json:"acceptance_preflight,omitempty"`
+	Workflow            WorkflowConfig                  `json:"workflow_config"`
 }
 
 // DAGNodeState records observable Go DAG node progress for human status and debugging.
@@ -397,6 +400,20 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 		}
 		if !done {
 			continue
+		}
+		clearStageArtifactGateFailure(&state)
+		if state.Stage == "execution" {
+			preflightPassed, err := e.runAcceptancePreflight(&state)
+			if err != nil {
+				return err
+			}
+			if !preflightPassed {
+				if err := saveState(e.Repo, state); err != nil {
+					return err
+				}
+				e.printProgress(state, "blocked")
+				continue
+			}
 		}
 		validationPassed, err := e.validateStage(ctx, &state)
 		if err != nil {
@@ -1646,10 +1663,10 @@ func FindStartupRuns(repo string) (string, []State, error) {
 // isStoppedRunState reports terminal states that should not be shown as running work.
 func isStoppedRunState(state State) bool {
 	switch state.Status {
-	case statusFailed, statusBlocked, statusValidationBlocked, statusAborted, "aborted":
+	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusAborted, "aborted":
 		return true
 	default:
-		return state.Stage == statusBlocked || state.Stage == statusValidationBlocked
+		return state.Stage == statusBlocked || state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked
 	}
 }
 

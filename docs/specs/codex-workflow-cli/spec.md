@@ -58,7 +58,7 @@
 
 #### 场景：失败停止
 
-- **当** 当前 run 状态为 `failed`、`aborted`、`blocked_review_limit` 或 `blocked_validation_limit`
+- **当** 当前 run 状态为 `failed`、`aborted`、`blocked_review_limit`、`blocked_validation_limit` 或 `blocked_acceptance_contract`
 - **则** batch 状态变为 `failed`
 - **且** batch state 记录当前 change、run id 和错误信息
 - **且** 后续 change 不得启动
@@ -928,6 +928,45 @@
 - **则** batch worker 必须继续执行后续 change
 - **且** batch state 不得因为可修复 artifact gate failure 进入 `failed`
 - **且** 只有达到重试上限、真实 agent/backend 失败或不可恢复阻断时，batch 才能停止为 `failed`
+
+#### 场景：artifact gate 状态与 validation gate 分离
+
+- **当** 阶段 artifact gate 发现产物缺失、格式非法或合同不满足
+- **则** 系统必须把失败写入 `state.artifact_gates[stage]`
+- **且** 不得把 artifact gate failure 写入 `state.validation[stage]`
+- **且** 同一阶段 artifact gate 修复通过后必须清理当前 stage 的 artifact gate `last_error`
+- **且** 旧 run 中已有的 `state.validation[stage].kind=artifact` 仍必须能作为历史 artifact gate 失败被提示和展示
+- **测试**：`tests/specs/codex-workflow-cli/test_gate_state_acceptance_preflight_contract.sh`
+- **关键断言**：artifact gate failure 写入 `artifact_gates`，不污染 `validation.execution`
+
+### 需求：execution 后 acceptance preflight
+
+// Sources: 19-拆分wo门禁状态并新增验收预检阻断
+
+系统必须在 execution artifact gate 通过后、进入 validation gate 或 review/archive 前预检 sealed acceptance 合同，提前阻断不可执行或不可复核的验收证据要求。
+
+#### 场景：evidence 无 producer 时阻断为验收合同问题
+
+- **给定** `acceptance.json.required_evidence` 中存在一个 evidence id
+- **并且** 该 evidence 虽被 `coverage[].evidence` 引用，但同一 coverage 引用的 `required_tests` 没有在 `command`、`path`、`purpose` 或 `assertions` 中追溯到该 evidence 的 id 或 path
+- **当** execution artifact gate 已通过
+- **则** 系统必须写入 `state.acceptance_preflight.status=failed`
+- **且** run 状态必须变为 `blocked_acceptance_contract`
+- **且** 错误信息必须指出无法追溯 producer 的 evidence id
+- **且** 不得进入 review、QA、fix 或 archive
+- **且** preflight 失败不得写入 `state.validation[execution]` 或消耗 review/fix 轮次
+- **测试**：`tests/specs/codex-workflow-cli/test_gate_state_acceptance_preflight_contract.sh`
+- **关键断言**：无 producer 的 evidence 使 run 进入 `blocked_acceptance_contract`，并写入 `state.acceptance_preflight.status=failed`
+
+#### 场景：evidence 可追溯 producer 时 preflight 通过
+
+- **给定** `acceptance.json.required_evidence` 中的 evidence id 被 `coverage[].evidence` 引用
+- **并且** 同一 coverage 引用的某个 `required_tests` 在 `command`、`path`、`purpose` 或 `assertions` 中追溯到该 evidence 的 id 或 path
+- **当** execution artifact gate 已通过
+- **则** 系统必须写入 `state.acceptance_preflight.status=passed`
+- **且** run 保持 `running/execution`，继续执行正常 validation gate 和后续推进
+- **测试**：`tests/specs/codex-workflow-cli/test_gate_state_acceptance_preflight_contract.sh`
+- **关键断言**：可追溯 evidence producer 时 preflight 通过，run 仍保持 `running/execution`
 
 ### 需求：sealed run 配置快照
 
