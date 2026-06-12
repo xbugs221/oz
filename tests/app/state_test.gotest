@@ -2602,7 +2602,7 @@ func TestBundledReviewPromptUsesLatestHistoryOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"完整变更", "docs/changes/demo", "review-5.json", "review-4.json", "fix-4-summary.md", "历史 review 数量：4", "严格 JSON", "evidence 必须可复核", "workflow_failure"} {
+	for _, want := range []string{"完整变更", "docs/changes/demo", "review-5.json", "review-4.json", "fix-4-summary.md", "历史 review 数量：4", "严格 JSON", "evidence[]`: 字符串数组", "每一项必须是字符串", "不能是对象或数组", "workflow_failure"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("review prompt missing %q:\n%s", want, got)
 		}
@@ -2610,6 +2610,35 @@ func TestBundledReviewPromptUsesLatestHistoryOnly(t *testing.T) {
 	for _, reject := range []string{"review-1.json", "review-2.json", "review-3.json", "fix-1-summary.md", "fix-2-summary.md", "fix-3-summary.md", "Previous reviews:", "Previous fixes:"} {
 		if strings.Contains(got, reject) {
 			t.Fatalf("review prompt listed old history %q:\n%s", reject, got)
+		}
+	}
+}
+
+// TestBundledQAPromptSpellsEvidenceStringArray keeps QA artifacts inside the strict schema.
+func TestBundledQAPromptSpellsEvidenceStringArray(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", "wo-qa.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := t.TempDir()
+	state := State{
+		RunID:      "run",
+		ChangeName: "demo",
+		Stage:      "qa_1",
+		Workflow:   DefaultWorkflowConfig(),
+		Stages:     map[string]string{},
+	}
+	context, err := promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := renderPromptTemplate("wo-qa", string(data), context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"qa-1.json", "acceptance_matrix", "evidence[]`: 字符串数组", "每一项必须是字符串", "不能是对象或数组"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("qa prompt missing %q:\n%s", want, got)
 		}
 	}
 }

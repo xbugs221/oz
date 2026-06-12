@@ -122,7 +122,7 @@ func (e *Engine) prepareRestartRun(runID string, allowUnknownLock bool) (State, 
 	}
 	state.Status = statusRunning
 	state.Error = ""
-	if state.Stage == "" || state.Stage == statusInterrupted {
+	if state.Stage == "" || state.Stage == statusInterrupted || state.Stage == statusAcceptanceContractBlocked {
 		state.Stage = "execution"
 	}
 	if state.Stages != nil && state.Stage != "" && state.Stages[state.Stage] == statusInterrupted {
@@ -220,11 +220,11 @@ func (e *Engine) prepareRestartBatch(batchID string, allowUnknownLock bool) erro
 // ensureRunRestartable rejects terminal states that require manual intervention.
 func ensureRunRestartable(state State) error {
 	switch state.Status {
-	case statusFailed, statusInterrupted, statusRunning:
+	case statusFailed, statusInterrupted, statusRunning, statusAcceptanceContractBlocked:
 		return nil
 	case statusDone:
 		return fmt.Errorf("工作流 %s 已完成，不能重启", state.RunID)
-	case statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusAborted, "aborted":
+	case statusBlocked, statusValidationBlocked, statusAborted, "aborted":
 		return fmt.Errorf("工作流 %s 已达到 %s，不能自动重启", state.RunID, state.Status)
 	default:
 		return fmt.Errorf("工作流 %s 状态 %s 不能重启", state.RunID, state.Status)

@@ -73,6 +73,7 @@ func TestRestartRunDetachedResetsInterruptedAndRunningStates(t *testing.T) {
 	}{
 		{name: "interrupted", status: statusInterrupted, stage: statusInterrupted, wantStage: "execution"},
 		{name: "running", status: statusRunning, stage: "review_1", wantStage: "review_1"},
+		{name: "acceptance-contract", status: statusAcceptanceContractBlocked, stage: statusAcceptanceContractBlocked, wantStage: "execution"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := gitRepo(t)

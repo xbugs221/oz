@@ -43,7 +43,7 @@ Fix summary: `{{.LatestPreviousFixSummaryPath}}`
 
 - `summary`
 - `decision`: 0=clean, 1=needs_fix
-- `evidence[]`: evidence 必须可复核，写命令、artifact、截图、trace、QA、控制台或网络证据
+- `evidence[]`: 字符串数组；每一项必须是字符串，不能是对象或数组；内容必须可复核，写命令、artifact、截图、trace、QA、控制台或网络证据
 - `findings[]`: `{title,severity,scope,evidence,recommendation}`
 - `severity`: 1=blocker, 2=major, 3=minor
 - `scope`: 1=current_change, 2=introduced_regression, 0=out_of_scope_existing

@@ -35,7 +35,7 @@
 
 - `summary`
 - `decision`: 0=clean, 1=needs_fix
-- `evidence[]`: 可复核测试、截图、trace、控制台、网络或运行时证据
+- `evidence[]`: 字符串数组；每一项必须是字符串，不能是对象或数组；内容必须是可复核测试、截图、trace、控制台、网络或运行时证据
 - `acceptance_matrix[]`: `{id,status,artifact,evidence}`，`status`: 0=passed, 1=failed
 - `findings[]`: `{title,severity,scope,evidence,recommendation}`
 - `severity`: 1=blocker, 2=major, 3=minor
