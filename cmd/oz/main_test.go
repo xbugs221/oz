@@ -68,17 +68,25 @@ func writeValidChange(t *testing.T, project, change string) {
 		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留\n",
 		"task.md":     "## 1. 实现\n\n- [x] 1.1 完成实现\n",
 		"acceptance.json": `{
-  "summary": "验证归档测试随提案保留",
-  "required_tests": [
-    {
-      "id": "archive-test",
-      "source": "change_contract",
-      "path": "docs/changes/` + change + `/tests/archive_test.go",
-      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
-      "purpose": "证明提案包含真实测试入口",
-      "assertions": ["归档后提案测试文件仍随 active change 保留"]
-    }
-  ],
+	  "summary": "验证归档测试随提案保留",
+	  "coverage": [
+	    {
+	      "spec": "需求：归档测试 / 场景：归档包含测试",
+	      "tests": ["archive-test"],
+	      "evidence": ["archive-log"],
+	      "risk": "运行日志只证明测试命令执行结果"
+	    }
+	  ],
+	  "required_tests": [
+	    {
+	      "id": "archive-test",
+	      "source": "change_contract",
+	      "path": "docs/changes/` + change + `/tests/archive_test.go",
+	      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
+	      "purpose": "证明提案包含真实测试入口，并生成 archive-log 到 test-results/archive.log",
+	      "assertions": ["归档后提案测试文件仍随 active change 保留，测试命令写出 archive-log 运行证据"]
+	    }
+	  ],
   "required_evidence": [
     {
       "id": "archive-log",
@@ -406,13 +414,13 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
   "required_tests": [
     {
       "id": "archive-test",
-      "source": "change_contract",
-      "path": "docs/changes/` + change + `/tests/archive_test.go",
-      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
-      "purpose": "覆盖契约",
-      "assertions": ["归档后测试文件仍保留"],
-      "expected_initial_failure": "未实现归档时测试文件缺失"
-    }
+	      "source": "change_contract",
+	      "path": "docs/changes/` + change + `/tests/archive_test.go",
+	      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
+	      "purpose": "覆盖契约并生成 archive-log 到 test-results/archive.log",
+	      "assertions": ["归档后测试文件仍保留，测试命令写出 archive-log 运行证据"],
+	      "expected_initial_failure": "未实现归档时测试文件缺失"
+	    }
   ],
   "required_evidence": [
     {"id": "archive-log", "kind": "runtime_log", "path": "test-results/archive.log", "purpose": "记录测试结果"}
@@ -427,7 +435,42 @@ func TestValidateChecksAcceptanceContract(t *testing.T) {
 		t.Fatalf("expected coverage acceptance to pass:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
 	}
 	body = `{
-  "summary": "验收矩阵引用未知测试必须失败",
+  "summary": "验收证据必须有 producer",
+  "coverage": [
+    {
+      "spec": "需求：归档测试 / 场景：归档包含测试",
+      "tests": ["archive-test"],
+      "evidence": ["archive-log"],
+      "risk": "故意缺少 producer"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "archive-test",
+      "source": "change_contract",
+      "path": "docs/changes/` + change + `/tests/archive_test.go",
+      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
+      "purpose": "覆盖契约",
+      "assertions": ["归档后测试文件仍保留"]
+    }
+  ],
+  "required_evidence": [
+    {"id": "archive-log", "kind": "runtime_log", "path": "test-results/archive.log", "purpose": "记录测试结果"}
+  ]
+}
+`
+	if err := os.WriteFile(acceptancePath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected evidence without producer to fail")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "producer") || !strings.Contains(result.stdout+result.stderr, "archive-log") {
+		t.Fatalf("missing evidence producer diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+	body = `{
+	  "summary": "验收矩阵引用未知测试必须失败",
   "coverage": [
     {"spec": "需求：归档测试 / 场景：归档包含测试", "tests": ["missing-test"], "evidence": [], "risk": "缺少证据"}
   ],

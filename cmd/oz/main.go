@@ -586,7 +586,9 @@ func validateAcceptanceFiles(root string, contract acceptance.Contract) []string
 	// validateAcceptanceFiles binds acceptance.json entries to real tests and evidence references.
 	errs := []string{}
 	projectRoot := filepath.Dir(root)
+	tests := map[string]acceptance.Test{}
 	for i, test := range contract.RequiredTests {
+		tests[test.ID] = test
 		if filepath.IsAbs(test.Path) || strings.TrimSpace(test.Path) == "." {
 			errs = append(errs, fmt.Sprintf("required_tests[%d].path 必须是相对测试路径：%s", i, test.Path))
 			continue
@@ -603,8 +605,168 @@ func validateAcceptanceFiles(root string, contract acceptance.Contract) []string
 		if filepath.IsAbs(evidence.Path) || strings.TrimSpace(evidence.Path) == "." {
 			errs = append(errs, fmt.Sprintf("required_evidence[%d].path 必须是相对产物路径：%s", i, evidence.Path))
 		}
+		if !acceptanceEvidenceHasProducer(projectRoot, evidence, contract.Coverage, tests) {
+			errs = append(errs, fmt.Sprintf("required_evidence[%d] %q 无法追溯到 required_tests producer：必须在 coverage 绑定的 required_tests 的 command/purpose/assertions、测试文件或同目录 .sh wrapper 中明确产出 evidence id/path", i, evidence.ID))
+		}
 	}
 	return errs
+}
+
+func acceptanceEvidenceHasProducer(projectRoot string, evidence acceptance.Evidence, coverage []acceptance.Coverage, tests map[string]acceptance.Test) bool {
+	// acceptanceEvidenceHasProducer matches wo preflight: evidence needs a coverage link and a concrete producer.
+	for _, item := range coverage {
+		if !stringSliceContains(item.Evidence, evidence.ID) {
+			continue
+		}
+		for _, testID := range item.Tests {
+			test, ok := tests[testID]
+			if ok && (acceptanceTestMentionsEvidence(test, evidence) || acceptanceTestScriptProducesEvidence(projectRoot, test, evidence)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func acceptanceTestMentionsEvidence(test acceptance.Test, evidence acceptance.Evidence) bool {
+	// acceptanceTestMentionsEvidence conservatively traces a runtime artifact to test metadata.
+	needles := acceptanceEvidenceNeedles(evidence)
+	haystacks := []string{test.ID, test.Path, test.Command, test.Purpose}
+	haystacks = append(haystacks, test.Assertions...)
+	for _, needle := range needles {
+		if needle == "" {
+			continue
+		}
+		for _, haystack := range haystacks {
+			if strings.Contains(haystack, needle) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func acceptanceTestScriptProducesEvidence(projectRoot string, test acceptance.Test, evidence acceptance.Evidence) bool {
+	// acceptanceTestScriptProducesEvidence inspects the declared test and nearby shell wrappers.
+	needles := acceptanceEvidenceNeedles(evidence)
+	for _, relPath := range acceptanceProducerCandidatePaths(projectRoot, test) {
+		body, ok := readProjectRelativeFile(projectRoot, relPath)
+		if !ok || !acceptanceTextMentionsAny(body, needles) {
+			continue
+		}
+		if acceptanceProducerScriptMentionsTest(body, test) || relPath == test.Path {
+			return true
+		}
+	}
+	return false
+}
+
+func acceptanceProducerCandidatePaths(projectRoot string, test acceptance.Test) []string {
+	// acceptanceProducerCandidatePaths returns declared test files and sibling shell wrappers.
+	seen := map[string]bool{}
+	paths := []string{}
+	add := func(path string) {
+		path = strings.Trim(strings.TrimSpace(path), `"'`)
+		if path == "" || strings.HasPrefix(path, "-") || filepath.IsAbs(path) {
+			return
+		}
+		path = filepath.ToSlash(filepath.Clean(path))
+		if path == "." || seen[path] {
+			return
+		}
+		seen[path] = true
+		paths = append(paths, path)
+	}
+	add(test.Path)
+	for _, field := range strings.Fields(test.Command) {
+		if strings.Contains(field, "/") {
+			add(field)
+		}
+	}
+	if test.Path == "" {
+		return paths
+	}
+	dir := filepath.Dir(filepath.FromSlash(test.Path))
+	entries, err := os.ReadDir(filepath.Join(projectRoot, dir))
+	if err != nil {
+		return paths
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sh") {
+			continue
+		}
+		add(filepath.ToSlash(filepath.Join(dir, entry.Name())))
+	}
+	return paths
+}
+
+func acceptanceProducerScriptMentionsTest(body string, test acceptance.Test) bool {
+	// acceptanceProducerScriptMentionsTest keeps sibling wrappers tied to the declared required_test.
+	if test.Path != "" && strings.Contains(body, test.Path) {
+		return true
+	}
+	base := filepath.Base(filepath.FromSlash(test.Path))
+	if base != "." && base != "" && strings.Contains(body, base) {
+		return true
+	}
+	for _, field := range strings.Fields(test.Command) {
+		field = strings.Trim(strings.TrimSpace(field), `"'`)
+		if field != "" && strings.Contains(field, "/") && strings.Contains(body, field) {
+			return true
+		}
+	}
+	return false
+}
+
+func acceptanceEvidenceNeedles(evidence acceptance.Evidence) []string {
+	// acceptanceEvidenceNeedles includes stable identifiers and artifact names.
+	needles := []string{}
+	for _, needle := range []string{evidence.ID, evidence.Path} {
+		needle = strings.TrimSpace(needle)
+		if needle != "" {
+			needles = append(needles, needle)
+		}
+	}
+	if evidence.Path != "" {
+		base := filepath.Base(filepath.FromSlash(evidence.Path))
+		if base != "." && base != "" && base != evidence.Path {
+			needles = append(needles, base)
+		}
+	}
+	return needles
+}
+
+func acceptanceTextMentionsAny(body string, needles []string) bool {
+	// acceptanceTextMentionsAny checks whether local producer content names evidence output.
+	for _, needle := range needles {
+		if needle != "" && strings.Contains(body, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func readProjectRelativeFile(projectRoot, relPath string) (string, bool) {
+	// readProjectRelativeFile reads only paths under the validated project.
+	relPath = filepath.Clean(filepath.FromSlash(relPath))
+	if relPath == "." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || filepath.IsAbs(relPath) {
+		return "", false
+	}
+	body, err := os.ReadFile(filepath.Join(projectRoot, relPath))
+	if err != nil {
+		return "", false
+	}
+	return string(body), true
+}
+
+func stringSliceContains(values []string, want string) bool {
+	// stringSliceContains keeps contract id matching exact and case-sensitive.
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func validateRuntimeArtifactPolicy(projectRoot, changeDir string) []string {
