@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -159,6 +160,166 @@ func Validate(contract Contract) error {
 		}
 	}
 	return nil
+}
+
+// EvidenceHasProducer reports whether an evidence artifact is tied to a required test producer.
+func EvidenceHasProducer(projectRoot string, evidence Evidence, coverage []Coverage, tests map[string]Test) bool {
+	for _, item := range coverage {
+		if !stringSliceContains(item.Evidence, evidence.ID) {
+			continue
+		}
+		for _, testID := range item.Tests {
+			test, ok := tests[testID]
+			if ok && (testMentionsEvidence(test, evidence) || testScriptProducesEvidence(projectRoot, test, evidence)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func testMentionsEvidence(test Test, evidence Evidence) bool {
+	// testMentionsEvidence conservatively traces a runtime artifact to required_test metadata.
+	needles := evidenceNeedles(evidence)
+	haystacks := []string{test.ID, test.Path, test.Command, test.Purpose}
+	haystacks = append(haystacks, test.Assertions...)
+	for _, needle := range needles {
+		if needle == "" {
+			continue
+		}
+		for _, haystack := range haystacks {
+			if strings.Contains(haystack, needle) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func testScriptProducesEvidence(projectRoot string, test Test, evidence Evidence) bool {
+	// testScriptProducesEvidence inspects the declared test and nearby shell wrappers.
+	if strings.TrimSpace(projectRoot) == "" {
+		return false
+	}
+	needles := evidenceNeedles(evidence)
+	for _, relPath := range producerCandidatePaths(projectRoot, test) {
+		body, ok := readRelativeFile(projectRoot, relPath)
+		if !ok || !textMentionsAny(body, needles) {
+			continue
+		}
+		if producerScriptMentionsTest(body, test) || relPath == test.Path {
+			return true
+		}
+	}
+	return false
+}
+
+func producerCandidatePaths(projectRoot string, test Test) []string {
+	// producerCandidatePaths returns declared test files and sibling shell wrappers.
+	seen := map[string]bool{}
+	paths := []string{}
+	add := func(path string) {
+		path = strings.Trim(strings.TrimSpace(path), `"'`)
+		if path == "" || strings.HasPrefix(path, "-") || filepath.IsAbs(path) {
+			return
+		}
+		path = filepath.ToSlash(filepath.Clean(path))
+		if path == "." || seen[path] {
+			return
+		}
+		seen[path] = true
+		paths = append(paths, path)
+	}
+	add(test.Path)
+	for _, field := range strings.Fields(test.Command) {
+		if strings.Contains(field, "/") {
+			add(field)
+		}
+	}
+	if test.Path == "" {
+		return paths
+	}
+	dir := filepath.Dir(filepath.FromSlash(test.Path))
+	entries, err := os.ReadDir(filepath.Join(projectRoot, dir))
+	if err != nil {
+		return paths
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sh") {
+			continue
+		}
+		add(filepath.ToSlash(filepath.Join(dir, entry.Name())))
+	}
+	return paths
+}
+
+func producerScriptMentionsTest(body string, test Test) bool {
+	// producerScriptMentionsTest keeps sibling wrappers tied to the declared required_test.
+	if test.Path != "" && strings.Contains(body, test.Path) {
+		return true
+	}
+	base := filepath.Base(filepath.FromSlash(test.Path))
+	if base != "." && base != "" && strings.Contains(body, base) {
+		return true
+	}
+	for _, field := range strings.Fields(test.Command) {
+		field = strings.Trim(strings.TrimSpace(field), `"'`)
+		if field != "" && strings.Contains(field, "/") && strings.Contains(body, field) {
+			return true
+		}
+	}
+	return false
+}
+
+func evidenceNeedles(evidence Evidence) []string {
+	// evidenceNeedles includes stable identifiers and artifact names.
+	needles := []string{}
+	for _, needle := range []string{evidence.ID, evidence.Path} {
+		needle = strings.TrimSpace(needle)
+		if needle != "" {
+			needles = append(needles, needle)
+		}
+	}
+	if evidence.Path != "" {
+		base := filepath.Base(filepath.FromSlash(evidence.Path))
+		if base != "." && base != "" && base != evidence.Path {
+			needles = append(needles, base)
+		}
+	}
+	return needles
+}
+
+func textMentionsAny(body string, needles []string) bool {
+	// textMentionsAny checks whether local producer content names evidence output.
+	for _, needle := range needles {
+		if needle != "" && strings.Contains(body, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func readRelativeFile(projectRoot, relPath string) (string, bool) {
+	// readRelativeFile reads only paths under the validated project.
+	relPath = filepath.Clean(filepath.FromSlash(relPath))
+	if relPath == "." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || filepath.IsAbs(relPath) {
+		return "", false
+	}
+	body, err := os.ReadFile(filepath.Join(projectRoot, relPath))
+	if err != nil {
+		return "", false
+	}
+	return string(body), true
+}
+
+func stringSliceContains(values []string, want string) bool {
+	// stringSliceContains keeps contract id matching exact and case-sensitive.
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func weakAssertion(assertion string) bool {

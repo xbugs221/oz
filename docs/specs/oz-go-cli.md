@@ -41,6 +41,8 @@
 - **并且** `required_tests[].assertions` 必须至少包含一条业务级断言
 - **并且** `coverage[].tests` 必须引用真实存在的 `required_tests[].id`
 - **并且** `coverage[].evidence` 必须引用真实存在的 `required_evidence[].id`
+- **并且** `required_evidence[]` 必须能追溯到 `coverage` 绑定的 `required_tests` producer
+- **并且** producer 追溯规则必须由 `internal/acceptance` 统一实现，`oz validate` 和 `wo` 预检复用同一规则
 
 ### 场景：下游校验接口拒绝弱验收合同
 
