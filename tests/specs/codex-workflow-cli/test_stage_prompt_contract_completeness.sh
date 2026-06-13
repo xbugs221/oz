@@ -163,6 +163,5 @@ GO
 
 (
   cd "$ROOT"
-  OZ_MIGRATED_APP_RUN='TestParallelEnabledPromptsCarryFanoutArtifacts|TestBundledOzSkillPromptsDelegateToSkills' \
-    go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1
+  go test ./internal/app -run 'TestParallelEnabledPromptsCarryFanoutArtifacts|TestBundledOzSkillPromptsDelegateToSkills' -count=1
 ) | tee -a "$RESULT_DIR/contract.log"

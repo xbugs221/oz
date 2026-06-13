@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证长期业务测试位于根目录 tests，生产源码 internal 不再保存长期 Go 测试。
-# Sources: 14-精简后端为-codex-pi-并迁移测试
+# 文件功能目的：验证迁移测试层已收敛，根测试门禁代表当前真实业务合同。
+# Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -19,20 +19,15 @@ fail() {
   exit 1
 }
 
-note "扫描 internal 目录下的 Go 测试文件"
-if internal_tests="$(cd "$ROOT" && find internal -type f -name '*_test.go' | sort)" && [[ -n "$internal_tests" ]]; then
-  printf '%s\n' "$internal_tests" | tee -a "$LOG"
-  fail "internal 目录仍包含长期 Go 测试文件"
-fi
-
 note "检查根目录 tests 存在业务测试入口"
 [[ -d "$ROOT/tests" ]] || fail "缺少根目录 tests 目录"
 root_test_count="$(cd "$ROOT" && find tests -type f \( -name '*_test.go' -o -name '*.gotest' -o -name '*.sh' \) | wc -l | tr -d ' ')"
 [[ "$root_test_count" -gt 0 ]] || fail "根目录 tests 下没有可运行测试入口"
 
-note "检查迁移后的 app Go 测试可由 go test 执行"
-if find "$ROOT/tests/app" -type f -name '*.gotest' -print -quit | grep -q .; then
-  (cd "$ROOT" && go test ./tests/app/...) 2>&1 | tee -a "$LOG" || fail "tests/app 迁移测试不能由 go test 执行"
+note "检查 tests/app 不再保留 .gotest 迁移输入"
+if app_gotests="$(cd "$ROOT" && find tests/app -type f -name '*.gotest' | sort)" && [[ -n "$app_gotests" ]]; then
+  printf '%s\n' "$app_gotests" | tee -a "$LOG"
+  fail "tests/app 仍存在 .gotest 迁移测试输入"
 fi
 
 note "检查 tests/app 或 tests/specs 至少存在一个分组"
@@ -40,4 +35,10 @@ if [[ ! -d "$ROOT/tests/app" && ! -d "$ROOT/tests/specs" ]]; then
   fail "根目录 tests 缺少 app 或 specs 分组"
 fi
 
-note "contract passed: source and tests are physically separated"
+note "检查核心真实测试包可单独运行"
+(cd "$ROOT" && go test ./internal/app ./cmd/oz ./tests -count=1) 2>&1 | tee -a "$LOG" || fail "核心真实测试包未通过"
+
+note "检查根目录 Go 测试门禁稳定"
+(cd "$ROOT" && go test ./... -count=1) 2>&1 | tee -a "$LOG" || fail "go test ./... 未通过"
+
+note "contract passed: migrated app tests no longer hide inside root gate"

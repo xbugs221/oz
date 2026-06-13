@@ -2268,18 +2268,19 @@
 
 ### 需求：业务回归测试约束
 
-// Sources: 14-精简后端为-codex-pi-并迁移测试
+// Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同
 
 系统新增测试必须围绕 workflow 使用场景，而不是只为了覆盖私有函数。
 
-#### 场景：生产源码和长期测试分离
+#### 场景：根测试门禁代表当前真实业务合同
 
-- **当** 扫描 `internal/` 目录
-- **则** 不存在长期 `*_test.go`
+- **当** 扫描 `tests/app/` 目录
+- **则** 不存在 `*.gotest` 迁移测试输入
 - **且** 根目录 `tests/` 下存在可运行的业务测试入口
-- **且** 迁移后的 `tests/app` Go 测试可通过 `go test ./tests/app/...` 执行
+- **且** `go test ./...` 必须通过
+- **且** 现有真实包测试必须继续运行
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
-- **关键断言**：生产源码目录无长期 Go 测试，根目录测试入口可执行
+- **关键断言**：`tests/app` 不再用 `.gotest` 隐藏迁移层，根目录 Go 门禁稳定
 
 #### 场景：主规格和发布门禁使用根目录测试
 
@@ -2306,6 +2307,15 @@
 - **且** 新增 shell 业务测试必须通过
 - **且** 测试说明必须能解释每个新增测试覆盖的用户风险
 - **且** 不要求达到 100% 覆盖率
+
+#### 场景：后续重构拥有稳定测试基线
+
+- **当** 根测试门禁完成
+- **则** `go test ./internal/app ./cmd/oz ./tests` 必须通过
+- **且** 该结果不能依赖删除根门禁或跳过真实业务断言
+- **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
+- **关键断言**：核心 app、oz CLI 和根测试包可单独证明当前基线可用
+- **剩余风险**：该测试不替代全部业务 shell 测试，CI 仍需继续运行根目录 `tests/*.sh`
 
 ### 需求：极简 human status 不泄漏 parallel fan-in
 

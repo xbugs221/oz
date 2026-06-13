@@ -17,8 +17,7 @@ mkdir -p "$(dirname "$LOG")"
 note "运行长期 Go 回归，验证非当前 change 可追加且当前 run/source/rename 仍受保护"
 (
   cd "$ROOT"
-  OZ_MIGRATED_APP_RUN='TestDetectManualInterventionAllowsUnrelatedActiveChange|TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff|TestDetectManualInterventionBlocksCurrentRunPaths|TestDetectManualInterventionBlocksCurrentChangeRename' \
-    go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1
+  go test ./internal/app -run 'TestDetectManualInterventionAllowsUnrelatedActiveChange|TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff|TestDetectManualInterventionBlocksCurrentRunPaths|TestDetectManualInterventionBlocksCurrentChangeRename' -count=1
 ) 2>&1 | tee -a "$LOG"
 
 note "contract passed: running demand insertion keeps current-run guards"

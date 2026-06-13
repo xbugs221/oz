@@ -1,4 +1,4 @@
-// Package app_test verifies migrated internal app tests remain executable from root tests.
+// Package app_test keeps the legacy dynamic migrated-test runner available for shell contracts.
 package app_test
 
 import (
@@ -10,14 +10,18 @@ import (
 	"testing"
 )
 
-// TestMigratedAppTestsRunWithGoToolchain compiles production app code with migrated tests.
+// TestMigratedAppTestsRunWithGoToolchain compiles production app code with dynamic migrated tests.
 func TestMigratedAppTestsRunWithGoToolchain(t *testing.T) {
-	// The migrated files intentionally live outside internal/app, so this test
-	// builds a temporary module copy where Go can execute them as package app.
+	// Some root shell contracts still create short-lived .gotest files under
+	// tests/app, so this test builds a temporary module copy where Go can
+	// execute those dynamic inputs as package app.
 	root := repoRoot(t)
 	gotestFiles := listFiles(t, filepath.Join(root, "tests", "app"), ".gotest")
 	if len(gotestFiles) == 0 {
-		t.Fatal("tests/app has no migrated .gotest files to execute")
+		if strings.TrimSpace(os.Getenv("OZ_MIGRATED_APP_RUN")) != "" {
+			t.Fatalf("OZ_MIGRATED_APP_RUN=%q was set, but tests/app has no dynamic .gotest files to execute", os.Getenv("OZ_MIGRATED_APP_RUN"))
+		}
+		t.Skip("tests/app has no dynamic .gotest files to execute")
 	}
 
 	work := t.TempDir()
