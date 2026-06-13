@@ -2,6 +2,8 @@
 package app
 
 import (
+	"bytes"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,6 +86,149 @@ func TestHumanStatusMarksUnownedRunningRunStale(t *testing.T) {
 	if !foundHint {
 		t.Fatalf("missing stale restart hint in lines: %#v", lines)
 	}
+}
+
+// TestStatusViewRendersRunningBatch verifies batch status shows progress, active run rows, and stale restart guidance.
+func TestStatusViewRendersRunningBatch(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	state.RunID = "batch-running-run"
+	state.ChangeName = "23-统一状态展示视图模型"
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(runDir(repo, state.RunID), "lock"), LockInfo{PID: 99999999, RunID: state.RunID}); err != nil {
+		t.Fatal(err)
+	}
+	batch := BatchState{
+		BatchID:      "batch-running",
+		Status:       batchStatusRunning,
+		Changes:      []string{"01-已完成", state.ChangeName},
+		CurrentIndex: 1,
+		RunIDs:       map[string]string{state.ChangeName: state.RunID},
+	}
+
+	lines := batchStatusLines(repo, &batch, "b1", nil)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "批量任务 b1 running 2/2") {
+		t.Fatalf("running batch output missing progress:\n%s", joined)
+	}
+	if !strings.Contains(joined, "- "+state.ChangeName+" x -") || !strings.Contains(joined, "执行") {
+		t.Fatalf("running batch output missing current stale run rows:\n%s", joined)
+	}
+	if !strings.Contains(joined, "wo restart -b1 重试当前批量阶段") {
+		t.Fatalf("running batch output missing stale batch restart hint:\n%s", joined)
+	}
+}
+
+// TestStatusViewRendersFailedBatch verifies stopped batches expose failure reason and restart guidance.
+func TestStatusViewRendersFailedBatch(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	state.RunID = "batch-failed-run"
+	state.ChangeName = "23-统一状态展示视图模型"
+	state.Status = statusFailed
+	state.Stage = "execution"
+	state.Error = "测试失败"
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	batch := BatchState{
+		BatchID:      "batch-failed",
+		Status:       batchStatusFailed,
+		Changes:      []string{"01-已完成", state.ChangeName},
+		CurrentIndex: 1,
+		RunIDs:       map[string]string{state.ChangeName: state.RunID},
+		FailedChange: state.ChangeName,
+		FailedRunID:  state.RunID,
+	}
+
+	lines := batchStatusLines(repo, &batch, "b2", nil)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "- "+state.ChangeName+" x") {
+		t.Fatalf("failed batch output missing failed run row:\n%s", joined)
+	}
+	if !strings.Contains(joined, "错误: "+state.ChangeName+" 的写阶段失败：测试失败") {
+		t.Fatalf("failed batch output missing failure summary:\n%s", joined)
+	}
+	if !strings.Contains(joined, "wo restart -b2 删除失败记录并继续该批量任务") {
+		t.Fatalf("failed batch output missing restart guidance:\n%s", joined)
+	}
+}
+
+// TestPrintHumanStatusRendersSharedView verifies the status command reads durable state and renders compact rows.
+func TestPrintHumanStatusRendersSharedView(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	state.RunID = "status-print-run"
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := printHumanStatus(&stdout, repo, "-w1"); err != nil {
+		t.Fatal(err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "- demo →") {
+		t.Fatalf("status output missing shared header:\n%s", out)
+	}
+	if !strings.Contains(out, "执行") || !strings.Contains(out, "→") {
+		t.Fatalf("status output missing compact execution row:\n%s", out)
+	}
+}
+
+// TestWatchRendersSharedViewWithSpinner verifies watch output swaps the running marker through the renderer.
+func TestWatchRendersSharedViewWithSpinner(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	state.RunID = "status-watch-run"
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := watchStatusLines(repo, "run", StatusRef{Alias: "w1", ID: state.RunID}, "|")
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "- demo |") {
+		t.Fatalf("watch output missing spinner header:\n%s", joined)
+	}
+	if !strings.Contains(joined, "执行") || !strings.Contains(joined, "|") {
+		t.Fatalf("watch output missing spinner compact row:\n%s", joined)
+	}
+}
+
+// TestRunnerStatusViewSerializesObservability verifies runner JSON keeps the shared status view contract.
+func TestRunnerStatusViewSerializesObservability(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	dto := runnerStateFromStatusView(repo, state, "w1")
+	data, err := json.Marshal(dto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Observability struct {
+			DisplayID string `json:"display_id"`
+			Engine    string `json:"engine"`
+			Rows      []struct {
+				Kind   string `json:"kind"`
+				Name   string `json:"name"`
+				Marker string `json:"marker"`
+			} `json:"rows"`
+		} `json:"observability"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Observability.DisplayID != "w1" || payload.Observability.Engine != "go-dag" {
+		t.Fatalf("unexpected observability identity: %#v", payload.Observability)
+	}
+	for _, row := range payload.Observability.Rows {
+		if row.Kind == "stage" && row.Name == "执行阶段" && row.Marker == "→" {
+			return
+		}
+	}
+	t.Fatalf("runner observability missing running execution row: %s", data)
 }
 
 // statusViewImplementationContextState returns a minimal execution state with two configured helpers.

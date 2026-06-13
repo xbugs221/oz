@@ -1406,6 +1406,8 @@
 
 ### 需求：人类 run status 极简固定列视图
 
+// Sources: 23-统一状态展示视图模型
+
 系统必须支持用户通过 `wo status` 和 `wo watch` 查看同一套极简固定列进度视图，而不是内部 workflow stage 列表、标题摘要或 engine 诊断行。
 
 #### 场景：查询人类状态
@@ -1426,6 +1428,25 @@
 - **则** stdout 第一行必须仍是提案列表项
 - **且** spinner 帧必须替换 `执行阶段` 行的 running marker
 - **且** stdout 不得显示 spinner workflow header，例如 `| w1`
+
+#### 场景：状态文本渲染从 app.go 迁出
+
+- **当** 检查 `internal/app` 状态展示实现
+- **则** `internal/app` 必须存在 status render 源文件
+- **且** `app.go` 不得继续定义 `watchBatchStatusLines`、`watchRunStatusLines`、`runProposalStatusLines` 或 `watchStageChecklistLines` 等文本拼接 helper
+- **且** `printHumanStatus`、`watchStatusLines` 和 runner JSON 必须复用共享状态 view/render 路径
+- **测试**：`tests/specs/codex-workflow-cli/test_status_view_render_contract.sh`
+- **关键断言**：状态展示职责离开 `app.go`，并通过相关 status/watch/runner Go 回归测试
+- **剩余风险**：静态检查不约束 renderer 的最终私有函数命名
+
+#### 场景：用户可见状态输出保持稳定
+
+- **当** 执行状态展示规格测试
+- **则** batch、single run、watch spinner、compact rows 和 runner JSON 相关 Go 测试必须通过
+- **且** 测试必须覆盖 shared view/render 后的 human status、watch 和机器 JSON 输出合同
+- **测试**：`tests/specs/codex-workflow-cli/test_status_view_render_contract.sh`
+- **关键断言**：状态输出文案和 JSON runner contract 不因职责迁移发生漂移
+- **剩余风险**：不覆盖终端宽度和 TTY 控制序列细节
 
 #### 场景：窄 TTY 刷新不残留旧帧首行
 
