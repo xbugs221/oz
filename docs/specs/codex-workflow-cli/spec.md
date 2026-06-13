@@ -117,6 +117,8 @@
 
 ### 需求：Sealed run 自动推进
 
+// Sources: 22-抽离工作流状态机决策
+
 系统必须在用户确认开始执行后禁止人工介入，并按配置化 execution、review、qa、fix、archive 阶段自动推进。
 
 #### 场景：运行中新增非当前需求提案
@@ -166,6 +168,16 @@
 - **且** `i < max_review_iterations`
 - **则** 系统进入 `fix_i`
 - **则** 修复完成后进入 `review_{i+1}`
+
+#### 场景：阶段跳转规则由独立决策层表达
+
+- **当** sealed run 需要推进 execution、review、fix、QA 或 archive 阶段
+- **则** 系统必须通过独立 stage decision 层表达下一阶段、下一状态和阻断原因
+- **且** 该决策层必须可被 `internal/app` 的 Go 测试直接验证
+- **且** `state.go` 不得重新承载全部阶段跳转规则
+- **测试**：`tests/specs/codex-workflow-cli/test_stage_decision_contract.sh`
+- **关键断言**：独立 stage decision 源文件、`StageDecision`/`DecideNextStage` 合同、关键状态机回归测试和 `state.go` 行数阈值同时满足
+- **剩余风险**：该测试覆盖 fake runner 和状态文件行为，不替代真实外部 agent CLI 的端到端执行
 
 #### 场景：Artifact 枚举值支持 KISS 数字码
 

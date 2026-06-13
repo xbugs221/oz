@@ -1,0 +1,41 @@
+{
+  "summary": "工作流阶段跳转和完成判断从 state.go 抽成独立决策层，同时保持现有 go-dag 与 validation 行为",
+  "coverage": [
+    {
+      "spec": "需求：阶段跳转规则可独立测试 / 场景：执行、审核、修正、QA、归档阶段的下一步由决策层表达",
+      "tests": ["stage-decision-contract"],
+      "evidence": ["stage-decision-contract-log"],
+      "risk": "允许最终函数命名调整，但必须保留独立决策层和测试"
+    },
+    {
+      "spec": "需求：抽离不改变工作流可观察行为 / 场景：go-dag、validation、artifact gate 和 review/fix/qa 流程测试继续通过",
+      "tests": ["stage-decision-contract"],
+      "evidence": ["stage-decision-contract-log"],
+      "risk": "fake runner 无法覆盖真实 agent CLI 行为，后续 CI 仍需跑完整测试"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "stage-decision-contract",
+      "source": "change_contract",
+      "path": "docs/changes/22-抽离工作流状态机决策/tests/stage-decision-contract_test.sh",
+      "command": "bash docs/changes/22-抽离工作流状态机决策/tests/stage-decision-contract_test.sh",
+      "purpose": "验证独立状态机决策层存在并生成 stage-decision-contract-log 到 test-results/refactor-stability/stage-decision-contract.log",
+      "assertions": [
+        "internal/app 必须存在 stage_decision.go 或等价 stage decision 源文件",
+        "源码必须定义 StageDecision 类型和 DecideNextStage 或等价下一阶段决策函数",
+        "go test ./internal/app 的状态机、go-dag、validation 关键路径必须通过",
+        "internal/app/state.go 行数必须降到 1900 行以内，证明职责已实质迁出"
+      ],
+      "expected_initial_failure": "当前 state.go 仍承载大部分状态机决策且没有独立 StageDecision 层"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "stage-decision-contract-log",
+      "kind": "runtime_log",
+      "path": "test-results/refactor-stability/stage-decision-contract.log",
+      "purpose": "记录状态机结构断言、state.go 行数和 Go 测试输出"
+    }
+  ]
+}
