@@ -197,6 +197,39 @@ func TestWatchRendersSharedViewWithSpinner(t *testing.T) {
 	}
 }
 
+// TestStatusHeaderUsesWorkflowWallTime verifies the header measures elapsed run time, not row totals.
+func TestStatusHeaderUsesWorkflowWallTime(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.RunID = "20260525T000000.000000000Z"
+	state.Status = statusDone
+	state.Stage = statusDone
+	state.Stages = map[string]string{
+		"execution": "completed",
+		"review_1":  "completed",
+	}
+	state.StageTimings = map[string]StageTiming{
+		"execution": {StartedAt: "2026-05-25T00:10:00Z", FinishedAt: "2026-05-25T00:20:00Z"},
+		"review_1":  {StartedAt: "2026-05-25T01:00:00Z", FinishedAt: "2026-05-25T01:30:00Z"},
+	}
+	state.DAGNodes = map[string]DAGNodeState{
+		"implementation_context_1": {
+			Status:     "success",
+			StartedAt:  "2026-05-25T00:05:00Z",
+			FinishedAt: "2026-05-25T00:25:00Z",
+		},
+	}
+
+	view := buildHumanStatusView(t.TempDir(), state, state.RunID, "")
+	header := statusHeaderText(state.ChangeName, view)
+
+	if !strings.Contains(header, "90.00 分钟") {
+		t.Fatalf("header = %q, want wall time from run start to last activity", header)
+	}
+	if strings.Contains(header, "60.00 分钟") {
+		t.Fatalf("header = %q, should not sum visible stage and subagent durations", header)
+	}
+}
+
 // TestRunnerStatusViewSerializesObservability verifies runner JSON keeps the shared status view contract.
 func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 	repo := t.TempDir()

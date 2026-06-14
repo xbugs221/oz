@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -325,6 +326,86 @@ func TestGoDAGSubagentsWritingOwnArtifactsDoNotConflict(t *testing.T) {
 			t.Fatalf("member artifact %s was not written", artifact)
 		}
 	}
+}
+
+// TestGoDAGSubagentsInSameStageStartConcurrently verifies helper fan-out is real parallel work.
+func TestGoDAGSubagentsInSameStageStartConcurrently(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "20260614T000000.000000000Z"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := newConcurrentSubagentRunner()
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	done := make(chan error, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go func() {
+		done <- engine.runGoDAGLocked(ctx, state)
+	}()
+
+	select {
+	case <-runner.bothStarted:
+		close(runner.release)
+	case err := <-done:
+		t.Fatalf("workflow finished before both subagents started: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("second subagent did not start while first subagent was still running")
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+type concurrentSubagentRunner struct {
+	mu          sync.Mutex
+	started     int
+	bothStarted chan struct{}
+	release     chan struct{}
+}
+
+// newConcurrentSubagentRunner returns a fake backend that blocks helpers until two are active.
+func newConcurrentSubagentRunner() *concurrentSubagentRunner {
+	return &concurrentSubagentRunner{
+		bothStarted: make(chan struct{}),
+		release:     make(chan struct{}),
+	}
+}
+
+// Run writes subagent artifacts while proving both helper calls overlap before release.
+func (r *concurrentSubagentRunner) Run(ctx context.Context, repo, prompt, threadID string, _ StageOptions) (string, error) {
+	if name := goDAGContextPromptValue(prompt, "SUBAGENT_NAME"); name != "" {
+		r.mu.Lock()
+		r.started++
+		if r.started == 2 {
+			close(r.bothStarted)
+		}
+		r.mu.Unlock()
+		select {
+		case <-r.release:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		purpose := goDAGContextPromptValue(prompt, "SUBAGENT_PURPOSE")
+		changeName := goDAGContextPromptValue(prompt, "CURRENT_CHANGE")
+		artifactPath := goDAGContextPromptValue(prompt, "ARTIFACT_PATH")
+		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"context ready","evidence":["unit-test"]}` + "\n"
+		if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(artifactPath, []byte(body), 0o644); err != nil {
+			return "", err
+		}
+		return "subagent-" + name, nil
+	}
+	task := filepath.Join(repo, "docs", "changes", "demo", "task.md")
+	return "executor-thread", os.WriteFile(task, []byte("- [x] task\n"), 0o644)
 }
 
 // goDAGContextPromptValue reads key=value metadata from generated prompts.

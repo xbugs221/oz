@@ -103,16 +103,9 @@ func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
 	return nil
 }
 
-// runGoDAGReadyNodes executes ready nodes, keeping subagents serial so run artifact guards are deterministic.
+// runGoDAGReadyNodes executes one dependency-ready wave concurrently.
 func (e *Engine) runGoDAGReadyNodes(ctx context.Context, runID string, ready []WorkflowNode) <-chan goDAGNodeResult {
 	results := make(chan goDAGNodeResult, len(ready))
-	if readyContainsSubagent(ready) {
-		for _, node := range ready {
-			results <- goDAGNodeResult{nodeID: node.ID, err: e.runGoDAGNode(ctx, runID, node)}
-		}
-		close(results)
-		return results
-	}
 	var wg sync.WaitGroup
 	for _, node := range ready {
 		wg.Add(1)
@@ -124,16 +117,6 @@ func (e *Engine) runGoDAGReadyNodes(ctx context.Context, runID string, ready []W
 	wg.Wait()
 	close(results)
 	return results
-}
-
-// readyContainsSubagent reports whether the ready wave has helper nodes with run-local artifacts.
-func readyContainsSubagent(ready []WorkflowNode) bool {
-	for _, node := range ready {
-		if node.Type == "subagent" {
-			return true
-		}
-	}
-	return false
 }
 
 type goDAGNodeResult struct {

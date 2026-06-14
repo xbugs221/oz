@@ -309,7 +309,7 @@ func runArtifactFileSnapshot(root string) (map[string]string, error) {
 	return files, nil
 }
 
-// classifyRunArtifactChanges blocks run-local writes outside the active member artifact directory.
+// classifyRunArtifactChanges blocks run-local writes outside subagent-owned artifact/progress paths.
 func classifyRunArtifactChanges(root string, before map[string]string, allowedDir string, beforeState State, sessionKey string) (runArtifactGuard, error) {
 	after, err := runArtifactFileSnapshot(root)
 	if err != nil {
@@ -325,8 +325,11 @@ func classifyRunArtifactChanges(root string, before map[string]string, allowedDi
 		if allowedRel != "" && allowedRel != "." && (path == allowedRel || strings.HasPrefix(path, allowedRel+"/")) {
 			continue
 		}
+		if isWritableParallelMemberArtifact(path, after) {
+			continue
+		}
 		if path == "state.json" {
-			ok, err := stateJSONOnlySessionChange(root, beforeState, sessionKey)
+			ok, err := stateJSONOnlySubagentProgressChange(root, beforeState, sessionKey)
 			if err != nil {
 				return runArtifactGuard{}, err
 			}
@@ -339,8 +342,20 @@ func classifyRunArtifactChanges(root string, before map[string]string, allowedDi
 	return runArtifactGuard{Blocked: len(blocked) > 0, Paths: blocked}, nil
 }
 
-// stateJSONOnlySessionChange allows framework-owned subagent session progress persistence.
-func stateJSONOnlySessionChange(root string, before State, sessionKey string) (bool, error) {
+// isWritableParallelMemberArtifact allows sibling helpers to create or rewrite their own member.json concurrently.
+func isWritableParallelMemberArtifact(path string, after map[string]string) bool {
+	if after[path] == "" {
+		return false
+	}
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	if len(parts) < 4 || parts[0] != "parallel-members" {
+		return false
+	}
+	return parts[len(parts)-1] == "member.json" && strings.HasSuffix(parts[len(parts)-2], ".artifact")
+}
+
+// stateJSONOnlySubagentProgressChange allows framework-owned subagent progress persistence.
+func stateJSONOnlySubagentProgressChange(root string, before State, sessionKey string) (bool, error) {
 	if strings.TrimSpace(sessionKey) == "" {
 		return false, nil
 	}
@@ -355,31 +370,15 @@ func stateJSONOnlySessionChange(root string, before State, sessionKey string) (b
 	if after.Sessions == nil {
 		return false, nil
 	}
-	sessionID, ok := after.Sessions[sessionKey]
-	if !ok || sessionID == "" {
+	if !subagentSessionChangesAllowed(before.Sessions, after.Sessions) {
 		return false, nil
 	}
-	for key, value := range after.Sessions {
-		if key == sessionKey {
-			continue
-		}
-		if before.Sessions == nil || before.Sessions[key] != value {
-			return false, nil
-		}
-	}
-	for key, value := range before.Sessions {
-		if key == sessionKey {
-			continue
-		}
-		if after.Sessions[key] != value {
-			return false, nil
-		}
+	if !subagentDAGNodeChangesAllowed(before.Workflow, before.DAGNodes, after.DAGNodes) {
+		return false, nil
 	}
 	normalized := after
 	normalized.Sessions = copyStringMap(before.Sessions)
-	if !processSessionOnlyAllowed(before.Processes, after.Processes, sessionKey, sessionID) {
-		return false, nil
-	}
+	normalized.DAGNodes = copyDAGNodeMap(before.DAGNodes)
 	normalized.Processes = append([]ProcessState(nil), before.Processes...)
 	beforeData, err := json.Marshal(before)
 	if err != nil {
@@ -392,27 +391,6 @@ func stateJSONOnlySessionChange(root string, before State, sessionKey string) (b
 	return bytes.Equal(beforeData, normalizedData), nil
 }
 
-// processSessionOnlyAllowed checks the process view only gained the same subagent session id.
-func processSessionOnlyAllowed(before, after []ProcessState, sessionKey, sessionID string) bool {
-	_, role, ok := strings.Cut(sessionKey, ":")
-	if !ok || role == "" {
-		return false
-	}
-	if len(before) != len(after) {
-		return false
-	}
-	for i := range before {
-		expected := before[i]
-		if expected.Role == role {
-			expected.SessionID = sessionID
-		}
-		if expected != after[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // copyStringMap duplicates state maps before normalizing allowed deltas.
 func copyStringMap(values map[string]string) map[string]string {
 	if values == nil {
@@ -423,6 +401,75 @@ func copyStringMap(values map[string]string) map[string]string {
 		copied[key] = value
 	}
 	return copied
+}
+
+// copyDAGNodeMap duplicates DAG node state before normalizing framework progress deltas.
+func copyDAGNodeMap(values map[string]DAGNodeState) map[string]DAGNodeState {
+	if values == nil {
+		return nil
+	}
+	copied := make(map[string]DAGNodeState, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
+}
+
+// subagentSessionChangesAllowed limits state.json deltas to subagent session additions or updates.
+func subagentSessionChangesAllowed(before, after map[string]string) bool {
+	for key, value := range before {
+		if after[key] != value {
+			return false
+		}
+	}
+	for key, value := range after {
+		if before != nil && before[key] == value {
+			continue
+		}
+		if value == "" || !isSubagentSessionKey(key) {
+			return false
+		}
+	}
+	return true
+}
+
+// isSubagentSessionKey reports whether a persisted session belongs to a helper member.
+func isSubagentSessionKey(key string) bool {
+	_, role, ok := strings.Cut(key, ":")
+	return ok && strings.HasPrefix(role, "subagent:")
+}
+
+// subagentDAGNodeChangesAllowed limits state.json DAG progress deltas to configured subagent nodes.
+func subagentDAGNodeChangesAllowed(workflow WorkflowConfig, before, after map[string]DAGNodeState) bool {
+	for key, value := range before {
+		afterValue, ok := after[key]
+		if !ok {
+			return false
+		}
+		if afterValue != value && !workflowSubagentNodeID(workflow, key) {
+			return false
+		}
+	}
+	for key := range after {
+		if _, ok := before[key]; ok {
+			continue
+		}
+		if !workflowSubagentNodeID(workflow, key) {
+			return false
+		}
+	}
+	return true
+}
+
+// workflowSubagentNodeID reports whether a DAG node id belongs to a configured helper member.
+func workflowSubagentNodeID(workflow WorkflowConfig, id string) bool {
+	spec := BuildWorkflowSpec("", workflow)
+	for _, node := range spec.Nodes {
+		if node.ID == id && node.Type == "subagent" {
+			return true
+		}
+	}
+	return false
 }
 
 // changedRunArtifactPaths returns files whose content appeared, disappeared, or changed.

@@ -19,6 +19,7 @@ type statusView struct {
 	Rows           []statusViewRow   `json:"rows"`
 	Artifacts      map[string]string `json:"artifacts"`
 	RunArtifactDir string            `json:"-"`
+	WallMinutes    *float64          `json:"-"`
 }
 
 type statusViewRow struct {
@@ -62,6 +63,7 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 		Engine:         statusViewEngine(state),
 		RunArtifactDir: runDir(repo, state.RunID),
 		Artifacts:      statusRootArtifacts(repo, state),
+		WallMinutes:    statusWorkflowWallDuration(state, time.Now().UTC()),
 	}
 	for _, spec := range compactStageSpecs {
 		stages := matchingStatusStages(state, spec)
@@ -88,6 +90,7 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 		Engine:         statusViewEngine(state),
 		RunArtifactDir: runDir(repo, state.RunID),
 		Artifacts:      statusRootArtifacts(repo, state),
+		WallMinutes:    statusWorkflowWallDuration(state, time.Now().UTC()),
 	}
 	for _, spec := range compactStageSpecs {
 		stages := matchingStatusStages(state, spec)
@@ -661,27 +664,12 @@ func compactHumanSubagentName(fullName, fallback string) string {
 	return fallback
 }
 
-// statusHeaderText renders the proposal line with overall marker and summed visible duration.
+// statusHeaderText renders the proposal line with overall marker and workflow wall time.
 func statusHeaderText(changeName string, view statusView) string {
-	total, ok := compactTotalDuration(view.Rows)
-	if !ok {
+	if view.WallMinutes == nil {
 		return fmt.Sprintf("- %s %s -", changeName, compactOverallMarker(view))
 	}
-	return fmt.Sprintf("- %s %s %.2f 分钟", changeName, compactOverallMarker(view), total)
-}
-
-// compactTotalDuration sums durations from visible rows only.
-func compactTotalDuration(rows []statusViewRow) (float64, bool) {
-	total := 0.0
-	found := false
-	for _, row := range compactVisibleRows(rows) {
-		if row.DurationMinutes == nil {
-			continue
-		}
-		total += *row.DurationMinutes
-		found = true
-	}
-	return total, found
+	return fmt.Sprintf("- %s %s %.2f 分钟", changeName, compactOverallMarker(view), *view.WallMinutes)
 }
 
 // compactOverallMarker reports a one-cell status indicator for the proposal header.
@@ -729,6 +717,89 @@ func compactOverallMarker(view statusView) string {
 	default:
 		return "-"
 	}
+}
+
+// statusWorkflowWallDuration measures elapsed workflow wall time from run creation to latest known activity.
+func statusWorkflowWallDuration(state State, now time.Time) *float64 {
+	startedAt, ok := statusWorkflowStartedAt(state)
+	if !ok {
+		return nil
+	}
+	finishedAt := now
+	if state.Status != statusRunning {
+		latest, found := statusLatestWorkflowActivity(state)
+		if !found {
+			return nil
+		}
+		finishedAt = latest
+	}
+	if finishedAt.Before(startedAt) {
+		return nil
+	}
+	minutes := finishedAt.Sub(startedAt).Minutes()
+	return &minutes
+}
+
+// statusWorkflowStartedAt finds the durable run start, preferring the sortable run id timestamp.
+func statusWorkflowStartedAt(state State) (time.Time, bool) {
+	if startedAt, err := time.Parse("20060102T150405.000000000Z", state.RunID); err == nil {
+		return startedAt, true
+	}
+	return statusEarliestWorkflowActivity(state)
+}
+
+// statusEarliestWorkflowActivity returns the first persisted stage or DAG node timestamp.
+func statusEarliestWorkflowActivity(state State) (time.Time, bool) {
+	var earliest time.Time
+	found := false
+	visit := func(value string) {
+		if value == "" {
+			return
+		}
+		timestamp, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return
+		}
+		if !found || timestamp.Before(earliest) {
+			earliest = timestamp
+			found = true
+		}
+	}
+	for _, timing := range state.StageTimings {
+		visit(timing.StartedAt)
+	}
+	for _, node := range state.DAGNodes {
+		visit(node.StartedAt)
+	}
+	return earliest, found
+}
+
+// statusLatestWorkflowActivity returns the last persisted stage or DAG node timestamp.
+func statusLatestWorkflowActivity(state State) (time.Time, bool) {
+	var latest time.Time
+	found := false
+	visit := func(value string) {
+		if value == "" {
+			return
+		}
+		timestamp, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return
+		}
+		if !found || timestamp.After(latest) {
+			latest = timestamp
+			found = true
+		}
+	}
+	for _, timing := range state.StageTimings {
+		visit(timing.FinishedAt)
+		visit(timing.StartedAt)
+	}
+	for _, node := range state.DAGNodes {
+		visit(node.FinishedAt)
+		visit(node.StartedAt)
+	}
+	return latest, found
 }
 
 // humanDisplayState marks unowned running runs as stale without mutating durable state.

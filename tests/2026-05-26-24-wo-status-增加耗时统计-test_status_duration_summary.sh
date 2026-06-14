@@ -201,7 +201,7 @@ grep -qE -- "执行 +executor-thread +✓ +100.00" status-w1.txt
 grep -qE -- "审核 +reviewer-thread +✓ +120.00" status-w1.txt
 grep -qE -- "归档 +archiver-thread +✓ +80.00" status-w1.txt
 ! grep -qF -- "耗时" status-w1.txt
-head -1 status-w1.txt | grep -qF -- "- 1-演示统计 ✓ 300.00 分钟"
+head -1 status-w1.txt | grep -qF -- "- 1-演示统计 ✓ 60.00 分钟"
 
 python3 - <<'PY'
 from pathlib import Path
