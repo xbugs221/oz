@@ -1,0 +1,34 @@
+{
+  "summary": "验收 wo 命令分发、交互流程和规划入口已从 app.go 拆出且命令面保持稳定",
+  "coverage": [
+    {
+      "spec": "需求：wo 命令分发拆分 / 场景：wo 命令分发从 app.go 拆出且命令面稳定",
+      "tests": ["wo-command-dispatch-boundary-contract"],
+      "evidence": ["wo-command-dispatch-boundary-log"],
+      "risk": "不逐个运行所有 shell 端到端场景；执行阶段可按影响面补跑相关 specs 脚本"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "wo-command-dispatch-boundary-contract",
+      "source": "change_contract",
+      "path": "docs/changes/28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh",
+      "command": "bash docs/changes/28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh",
+      "purpose": "证明 wo repo 命令分发、交互流程和规划入口已拆成独立边界，并通过真实命令回归",
+      "assertions": [
+        "检查 command_dispatch.go、interactive.go 和 planning.go 存在",
+        "检查 app.go 不再直接包含 run/resume/batch/restart/status 等 repo 命令 case",
+        "运行 internal/app 和 cmd/oz Go 单测，覆盖真实命令面"
+      ],
+      "expected_initial_failure": "重构未实现时应失败于边界文件缺失或 app.go 仍直接包含 repo 命令 case"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "wo-command-dispatch-boundary-log",
+      "kind": "runtime_log",
+      "path": "test-results/refactor-command-dispatch/wo-command-dispatch-boundary-contract.log",
+      "purpose": "记录命令边界检查和 Go 命令回归输出；该文件是本地运行产物，不进入 git"
+    }
+  ]
+}
