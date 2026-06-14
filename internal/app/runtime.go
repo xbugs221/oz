@@ -106,7 +106,7 @@ func batchesRoot(repo string) (string, error) {
 func runDir(repo, runID string) string {
 	root, err := runsRoot(repo)
 	if err != nil {
-		return filepath.Join(repo, ".wo", "runs", runID)
+		panic(fmt.Errorf("解析 wo 运行时 run 路径失败：%w", err))
 	}
 	return filepath.Join(root, runID)
 }
@@ -120,7 +120,7 @@ func acceptancePath(repo, changeName string) string {
 func batchDir(repo, batchID string) string {
 	root, err := batchesRoot(repo)
 	if err != nil {
-		return filepath.Join(repo, ".wo", "batches", batchID)
+		panic(fmt.Errorf("解析 wo 运行时 batch 路径失败：%w", err))
 	}
 	return filepath.Join(root, batchID)
 }
