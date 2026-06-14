@@ -876,16 +876,17 @@ func compactStatusLines(view statusView) []string {
 			padStatusColumn(name, widths.name-row.Indent),
 			padStatusColumn(statusText(row.SessionID), widths.session),
 			padStatusColumn(statusText(row.Marker), widths.marker),
-			statusDurationText(row.DurationMinutes),
+			padStatusColumn(statusDurationText(row.DurationMinutes), widths.duration),
 		))
 	}
 	return lines
 }
 
 type compactColumnWidth struct {
-	name    int
-	session int
-	marker  int
+	name     int
+	session  int
+	marker   int
+	duration int
 }
 
 // compactVisibleRows removes rows that add no signal to the human compact view.
@@ -908,6 +909,7 @@ func compactColumnWidths(rows []statusViewRow) compactColumnWidth {
 		widths.name = max(widths.name, row.Indent+statusDisplayWidth(name))
 		widths.session = max(widths.session, statusDisplayWidth(statusText(row.SessionID)))
 		widths.marker = max(widths.marker, statusDisplayWidth(statusText(row.Marker)))
+		widths.duration = max(widths.duration, statusDisplayWidth(statusDurationText(row.DurationMinutes)))
 	}
 	return widths
 }

@@ -83,6 +83,35 @@ func TestCompactStatusLinesSkipsEmptyPlanningPlaceholder(t *testing.T) {
 	}
 }
 
+// TestCompactStatusLinesAlignsLongDurationColumn verifies multi-digit minutes keep a stable duration column.
+func TestCompactStatusLinesAlignsLongDurationColumn(t *testing.T) {
+	shortMinutes := 9.5
+	longMinutes := 1234.56
+	view := statusView{
+		Rows: []statusViewRow{
+			{Name: "执行阶段", Kind: "stage", SessionID: "s1", Marker: "✓", DurationMinutes: &longMinutes},
+			{Name: "审核阶段", Kind: "stage", SessionID: "s2", Marker: "✓", DurationMinutes: &shortMinutes},
+			{Name: "测试阶段", Kind: "stage", SessionID: "s3", Marker: "✓", DurationMinutes: nil},
+		},
+	}
+
+	lines := compactStatusLines(view)
+	durationColumn, ok := statusValueColumn(lines[0], "1234.56")
+	if !ok {
+		t.Fatalf("long duration missing from status lines: %#v", lines)
+	}
+	for _, want := range []string{"9.50", "-"} {
+		line := statusLineEndingWith(t, lines, want)
+		got, ok := statusValueColumn(line, want)
+		if !ok {
+			t.Fatalf("duration %q missing from line %q", want, line)
+		}
+		if got != durationColumn {
+			t.Fatalf("duration %q column = %d, want %d\nlines:\n%s", want, got, durationColumn, strings.Join(lines, "\n"))
+		}
+	}
+}
+
 // TestHumanStatusMarksUnownedRunningRunStale verifies stale locks are not shown as live work.
 func TestHumanStatusMarksUnownedRunningRunStale(t *testing.T) {
 	repo := t.TempDir()
@@ -317,6 +346,27 @@ func statusViewImplementationContextState() State {
 func statusViewSubagentMarker(t *testing.T, view statusView, fullName string) string {
 	t.Helper()
 	return statusViewSubagentRow(t, view, fullName).Marker
+}
+
+// statusLineEndingWith returns the first compact line whose final visible column matches value.
+func statusLineEndingWith(t *testing.T, lines []string, value string) string {
+	t.Helper()
+	for _, line := range lines {
+		if strings.HasSuffix(strings.TrimRight(line, " "), value) {
+			return line
+		}
+	}
+	t.Fatalf("line ending with %q not found in %#v", value, lines)
+	return ""
+}
+
+// statusValueColumn returns the terminal display column for the last occurrence of value.
+func statusValueColumn(line, value string) (int, bool) {
+	index := strings.LastIndex(line, value)
+	if index < 0 {
+		return 0, false
+	}
+	return statusDisplayWidth(line[:index]), true
 }
 
 // statusViewSubagentRow finds one subagent row by full configured member name.
