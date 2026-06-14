@@ -1,0 +1,34 @@
+{
+  "summary": "验收工作流配置 schema、profile、parallel 和 validation 解析已拆分且配置业务行为不变",
+  "coverage": [
+    {
+      "spec": "需求：工作流配置解析边界拆分 / 场景：配置解析边界拆分且用户配置行为不变",
+      "tests": ["workflow-config-boundary-contract"],
+      "evidence": ["workflow-config-boundary-log"],
+      "risk": "不覆盖未来新增配置字段；新增字段时仍需补充专门场景"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "workflow-config-boundary-contract",
+      "source": "change_contract",
+      "path": "docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh",
+      "command": "bash docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh",
+      "purpose": "证明配置解析职责已拆到 schema/profile/parallel/validation 边界，并通过真实配置业务合同",
+      "assertions": [
+        "检查 config_schema.go、config_profiles.go、config_parallel.go 和 config_validation.go 存在",
+        "检查 config.go 不再直接定义 schema input、parallel 展开、profile 渲染和 validation 解析 helper",
+        "运行默认 tree config、legacy config rejection、profile discovery、MADA profile 和 parallel config 业务合同"
+      ],
+      "expected_initial_failure": "重构未实现时应失败于边界文件缺失或 config.go 仍直接承载拆分职责"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "workflow-config-boundary-log",
+      "kind": "runtime_log",
+      "path": "test-results/refactor-workflow-config/workflow-config-boundary-contract.log",
+      "purpose": "记录配置边界检查和配置业务合同输出；该文件是本地运行产物，不进入 git"
+    }
+  ]
+}
