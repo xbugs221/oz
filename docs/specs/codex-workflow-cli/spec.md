@@ -2401,7 +2401,7 @@
 
 ### 需求：业务回归测试约束
 
-// Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同
+// Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同, 35-迁移动态gotest合同
 
 系统新增测试必须围绕 workflow 使用场景，而不是只为了覆盖私有函数。
 
@@ -2409,11 +2409,13 @@
 
 - **当** 扫描 `tests/app/` 目录
 - **则** 不存在 `*.gotest` 迁移测试输入
+- **且** `tests/specs`、`tests/app` 和 `internal/app` 不得引用 `.gotest`、`OZ_MIGRATED_APP_RUN` 或 `migrated_app_suite`
+- **且** `tests/app/migrated_app_suite_test.go` 必须删除
 - **且** 根目录 `tests/` 下存在可运行的业务测试入口
 - **且** `go test ./...` 必须通过
 - **且** 现有真实包测试必须继续运行
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
-- **关键断言**：`tests/app` 不再用 `.gotest` 隐藏迁移层，根目录 Go 门禁稳定
+- **关键断言**：`tests/app` 不再用 `.gotest` 隐藏迁移层，动态 runner 关键词清零，根目录 Go 门禁稳定
 
 #### 场景：主规格和发布门禁使用 Go 测试门禁
 

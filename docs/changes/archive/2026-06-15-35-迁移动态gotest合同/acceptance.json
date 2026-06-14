@@ -1,0 +1,34 @@
+{
+  "summary": "验证历史动态 .gotest 合同已经迁移为长期可发现测试入口，并且完整 Go 测试通过。",
+  "coverage": [
+    {
+      "spec": "需求：动态 gotest 合同迁移 / 场景：仓库不再依赖临时 .gotest runner",
+      "tests": ["gotest-migration"],
+      "evidence": ["gotest-migration-log"],
+      "risk": "该证据证明动态机制消失和 Go 测试通过，旧断言迁移映射需在执行总结中人工复核。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "gotest-migration",
+      "source": "change_contract",
+      "path": "docs/changes/35-迁移动态gotest合同/tests/gotest_migration_test.sh",
+      "command": "bash docs/changes/35-迁移动态gotest合同/tests/gotest_migration_test.sh",
+      "purpose": "通过 gotest-migration-log 证明动态 .gotest runner 已删除，相关引用清零，并且 go test ./... 通过。",
+      "assertions": [
+        "tests/specs 和 tests/app 中不再出现 .gotest 或 OZ_MIGRATED_APP_RUN",
+        "tests/app/migrated_app_suite_test.go 已删除，动态 runner 不再参与测试门禁",
+        "go test ./... 通过并写入 test-results/35-gotest-migration/contract.log"
+      ],
+      "expected_initial_failure": "当前仓库仍有 shell 合同生成 .gotest 且保留 migrated_app_suite_test.go，应失败于动态机制扫描。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "gotest-migration-log",
+      "kind": "runtime_log",
+      "path": "test-results/35-gotest-migration/contract.log",
+      "purpose": "记录动态 gotest 扫描和完整 Go 测试输出；该文件是本地运行产物，不进入 git。"
+    }
+  ]
+}

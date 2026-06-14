@@ -1,4 +1,0 @@
-// Sources: 1-简化-oz-命令组
-// This Go test source is mirrored in ../../command_surface_test.go.
-// It is stored with a non-.go extension here because Go import paths cannot
-// contain the Chinese archived proposal directory name when running go test ./...

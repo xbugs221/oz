@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证迁移测试层已收敛，根测试门禁代表当前真实业务合同。
-# Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同
+# Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同, 35-迁移动态gotest合同
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -21,13 +21,28 @@ fail() {
 
 note "检查根目录 tests 存在业务测试入口"
 [[ -d "$ROOT/tests" ]] || fail "缺少根目录 tests 目录"
-root_test_count="$(cd "$ROOT" && find tests -type f \( -name '*_test.go' -o -name '*.gotest' -o -name '*.sh' \) | wc -l | tr -d ' ')"
+root_test_count="$(cd "$ROOT" && { fd -e go -e sh . tests 2>/dev/null || true; } | wc -l | tr -d ' ')"
 [[ "$root_test_count" -gt 0 ]] || fail "根目录 tests 下没有可运行测试入口"
 
-note "检查 tests/app 不再保留 .gotest 迁移输入"
-if app_gotests="$(cd "$ROOT" && find tests/app -type f -name '*.gotest' | sort)" && [[ -n "$app_gotests" ]]; then
-  printf '%s\n' "$app_gotests" | tee -a "$LOG"
-  fail "tests/app 仍存在 .gotest 迁移测试输入"
+note "检查 tests/app 不再保留迁移输入目录"
+if [[ -d "$ROOT/tests/app" ]] && app_inputs="$(cd "$ROOT" && { fd -t f . tests/app 2>/dev/null || true; } | sort)" && [[ -n "$app_inputs" ]]; then
+  printf '%s\n' "$app_inputs" | tee -a "$LOG"
+  fail "tests/app 仍存在迁移测试输入"
+fi
+
+note "检查动态 gotest runner 入口已清除"
+migrated_runner_path="$ROOT/tests/app/migrated_app_""suite_test.go"
+if [[ -f "$migrated_runner_path" ]]; then
+  fail "tests/app/migrated_app_""suite_test.go 仍存在，动态 runner 尚未删除"
+fi
+dynamic_runner_pattern='\.go''test|OZ_MIGRATED_APP_''RUN|migrated_app_''suite'
+if matches="$(cd "$ROOT" && rg -n "$dynamic_runner_pattern" tests/specs tests/app internal/app 2>/dev/null || true)" && [[ -n "$matches" ]]; then
+  printf '%s\n' "$matches" | tee -a "$LOG"
+  fail "仍存在动态 gotest 或 migrated runner 引用"
+fi
+if gotests="$(cd "$ROOT" && fd -e gotest . tests internal/app 2>/dev/null || true)" && [[ -n "$gotests" ]]; then
+  printf '%s\n' "$gotests" | tee -a "$LOG"
+  fail "仓库可运行测试路径仍存在 gotest 文件"
 fi
 
 note "检查 tests/app 或 tests/specs 至少存在一个分组"
