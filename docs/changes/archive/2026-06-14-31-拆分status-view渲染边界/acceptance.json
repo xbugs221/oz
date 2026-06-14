@@ -1,0 +1,34 @@
+{
+  "summary": "验证 status view 重构只拆分职责边界，不改变 status/watch 的既有行为合同。",
+  "coverage": [
+    {
+      "spec": "需求：Status view 拆分 / 场景：视图、耗时、渲染和 stale 判断被分离",
+      "tests": ["status-view-boundary"],
+      "evidence": ["status-view-boundary-log"],
+      "risk": "该证据覆盖结构边界和 Go 回归，不逐字截图所有终端输出。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "status-view-boundary",
+      "source": "change_contract",
+      "path": "docs/changes/31-拆分status-view渲染边界/tests/status_view_boundary_test.sh",
+      "command": "bash docs/changes/31-拆分status-view渲染边界/tests/status_view_boundary_test.sh",
+      "purpose": "通过 status-view-boundary-log 证明 status view 的模型、耗时、渲染和 stale 判断已经拆分，并且相关 Go 回归通过。",
+      "assertions": [
+        "status view 模型构建、耗时计算、紧凑渲染和 stale 判断分别位于独立 Go 文件",
+        "原 status_view.go 不再是 1000 行级别职责集合",
+        "go test ./internal/app 的 status/watch 相关回归测试通过并写入 test-results/31-status-view-boundary/contract.log"
+      ],
+      "expected_initial_failure": "当前 status_view.go 尚未拆分时，应失败于缺少目标文件或关键函数仍在旧文件。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "status-view-boundary-log",
+      "kind": "runtime_log",
+      "path": "test-results/31-status-view-boundary/contract.log",
+      "purpose": "记录结构检查和 Go 回归命令输出；该文件是本地运行产物，不进入 git。"
+    }
+  ]
+}

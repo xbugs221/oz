@@ -1511,6 +1511,18 @@
 - **关键断言**：状态展示职责离开 `app.go`，并通过相关 status/watch/runner Go 回归测试
 - **剩余风险**：静态检查不比较每一行中文文本的完整快照，也不约束 renderer 的最终私有函数命名
 
+#### 场景：status view 内部职责边界清晰
+
+- **当** 检查 `internal/app` 状态展示实现
+- **则** status view 的模型构建必须位于 `status_view_model.go`
+- **且** 阶段耗时和 workflow wall time 计算必须位于 `status_duration.go`
+- **且** compact 终端渲染、列宽和显示宽度 helper 必须位于 `status_render_compact.go`
+- **且** stale running run 的显示判断必须位于 `status_stale.go`
+- **且** `status_view.go` 不得重新成为 1000 行级别职责集合
+- **测试**：`tests/specs/codex-workflow-cli/test_status_view_render_contract.sh`
+- **关键断言**：模型、耗时、紧凑渲染和 stale 判断各自落在独立文件，现有 status/watch Go 回归仍通过
+- **剩余风险**：该静态边界测试不逐字证明所有 status 输出文案完全不变
+
 #### 场景：用户可见状态输出保持稳定
 
 - **当** 执行状态展示规格测试
