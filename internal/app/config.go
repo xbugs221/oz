@@ -61,6 +61,7 @@ type ParallelMemberConfig struct {
 	Purpose  string `json:"purpose" yaml:"purpose"`
 	Stage    string `json:"stage,omitempty" yaml:"stage,omitempty"`
 	Tool     string `json:"tool,omitempty" yaml:"tool,omitempty"`
+	Model    string `json:"model,omitempty" yaml:"model,omitempty"`
 	Subagent string `json:"subagent,omitempty" yaml:"subagent,omitempty"`
 	Required bool   `json:"required,omitempty" yaml:"required,omitempty"`
 }
@@ -95,11 +96,32 @@ type workflowConfigInput struct {
 	Parallel            parallelConfigInput          `yaml:"parallel"`
 	Subagents           parallelConfigInput          `yaml:"subagents"`
 	Validation          validationConfigInput        `yaml:"validation"`
+	Prompts             map[string]string            `yaml:"prompts"`
 }
 
 type parallelConfigInput struct {
 	Enabled *bool                               `yaml:"enabled"`
 	Groups  map[string]parallelGroupConfigInput `yaml:"groups"`
+}
+
+// UnmarshalYAML accepts the new KISS `parallel: true|false` scalar while keeping
+// the old object shape available only so it can be rejected with a field name.
+func (input *parallelConfigInput) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		var enabled bool
+		if err := value.Decode(&enabled); err != nil {
+			return err
+		}
+		input.Enabled = &enabled
+		return nil
+	}
+	type raw parallelConfigInput
+	var decoded raw
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*input = parallelConfigInput(decoded)
+	return nil
 }
 
 type parallelGroupConfigInput struct {
@@ -113,6 +135,8 @@ type parallelMemberConfigInput struct {
 	Stage    string `yaml:"stage"`
 	CLI      string `yaml:"cli"`
 	Tool     string `yaml:"tool"`
+	Agent    string `yaml:"agent"`
+	Model    string `yaml:"model"`
 	Subagent string `yaml:"subagent"`
 	Required bool   `yaml:"required"`
 }
@@ -120,15 +144,18 @@ type parallelMemberConfigInput struct {
 type validationConfigInput struct {
 	Commands            []ValidationCommand `yaml:"commands"`
 	MaxAttemptsPerStage *int                `yaml:"max_attempts_per_stage"`
+	Limit               *int                `yaml:"limit"`
 }
 
 type stageOptionsInput struct {
-	CLI         *string `yaml:"cli"`
-	Tool        *string `yaml:"tool"`
-	Model       *string `yaml:"model"`
-	Reasoning   *string `yaml:"reasoning"`
-	Fast        *bool   `yaml:"fast"`
-	Permissions *string `yaml:"permissions"`
+	CLI         *string                     `yaml:"cli"`
+	Tool        *string                     `yaml:"tool"`
+	Agent       *string                     `yaml:"agent"`
+	Model       *string                     `yaml:"model"`
+	Reasoning   *string                     `yaml:"reasoning"`
+	Fast        *bool                       `yaml:"fast"`
+	Permissions *string                     `yaml:"permissions"`
+	Before      []parallelMemberConfigInput `yaml:"before"`
 }
 
 // WorkflowProfile describes one built-in profile visible from `wo config`.
@@ -139,7 +166,7 @@ type WorkflowProfile struct {
 }
 
 func (input stageOptionsInput) hasValues() bool {
-	return input.CLI != nil || input.Tool != nil || input.Model != nil || input.Reasoning != nil || input.Fast != nil || input.Permissions != nil
+	return input.CLI != nil || input.Tool != nil || input.Agent != nil || input.Model != nil || input.Reasoning != nil || input.Fast != nil || input.Permissions != nil || input.Before != nil
 }
 
 // DefaultWorkflowConfigYAML is kept for tests that compare the generated config text.
@@ -301,21 +328,29 @@ func workflowConfigFromProfile(profile string) (WorkflowConfig, error) {
 }
 
 func workflowConfigFromYAML(data []byte, source string, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
-	var file woConfigFile
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&file); err != nil {
+	hasOldRoot, err := hasLegacyWorkflowRoot(data)
+	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("解析 %s 失败：%w", source, err)
 	}
-	next, err := workflowConfigFromInput(file.MC.Workflow, baseConfig)
+	if hasOldRoot {
+		return WorkflowConfig{}, fmt.Errorf("%s 无效：旧字段 wo/workflow 已删除，请使用根节点 stages 配置", source)
+	}
+
+	var input workflowConfigInput
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&input); err != nil {
+		return WorkflowConfig{}, fmt.Errorf("解析 %s 失败：%w", source, err)
+	}
+	next, err := workflowConfigFromInput(input, baseConfig)
 	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("%s 无效：%w", source, err)
 	}
-	if file.MC.Prompts != nil {
+	if input.Prompts != nil {
 		if next.Prompts == nil {
 			next.Prompts = map[string]string{}
 		}
-		for key, body := range file.MC.Prompts {
+		for key, body := range input.Prompts {
 			if !slices.Contains(rolePromptKeys(), key) {
 				return WorkflowConfig{}, fmt.Errorf("%s 无效：未知 prompt %q", source, key)
 			}
@@ -326,7 +361,56 @@ func workflowConfigFromYAML(data []byte, source string, baseConfig *WorkflowConf
 	return next, nil
 }
 
+func hasLegacyWorkflowRoot(data []byte) (bool, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return false, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return false, nil
+	}
+	for i := 0; i+1 < len(root.Content[0].Content); i += 2 {
+		key := root.Content[0].Content[i].Value
+		value := root.Content[0].Content[i+1]
+		if key == "workflow" {
+			return true, nil
+		}
+		if key == "wo" && mappingHasKey(value, "workflow") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func mappingHasKey(node *yaml.Node, key string) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (input workflowConfigInput) hasValues() bool {
+	return input.Engine != "" || input.MaxReviewIterations != nil || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
+}
+
 func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
+	if input.Defaults.hasValues() {
+		return WorkflowConfig{}, fmt.Errorf("defaults 是旧字段，已删除")
+	}
+	if input.Iterations != nil {
+		return WorkflowConfig{}, fmt.Errorf("iterations 是旧字段，已删除")
+	}
+	if input.Subagents.Enabled != nil || input.Subagents.Groups != nil {
+		return WorkflowConfig{}, fmt.Errorf("subagents 是旧字段，已删除")
+	}
+	if input.Parallel.Groups != nil {
+		return WorkflowConfig{}, fmt.Errorf("parallel.groups 是旧字段，已删除；请使用 stages.<stage>.before")
+	}
 	maxIterations := defaultMaxReviewIterations
 	engine := "go-dag"
 	var basePrompts map[string]string
@@ -365,10 +449,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		maxIterations = *input.MaxReviewIterations
 	}
 	if strings.TrimSpace(input.Engine) != "" {
-		if input.Engine != "go-dag" {
-			return WorkflowConfig{}, fmt.Errorf("workflow.engine 只支持 go-dag")
-		}
-		engine = input.Engine
+		return WorkflowConfig{}, fmt.Errorf("engine 是旧字段，已删除")
 	}
 	for _, kind := range stageKinds {
 		base := byKind[kind]
@@ -403,6 +484,10 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		return WorkflowConfig{}, err
 	}
 	parallel, err = parallelConfigFromInput(input.Subagents, parallel)
+	if err != nil {
+		return WorkflowConfig{}, err
+	}
+	parallel, err = parallelConfigFromStages(input.Stages, parallel)
 	if err != nil {
 		return WorkflowConfig{}, err
 	}
@@ -460,6 +545,9 @@ func parallelGroupConfigFromInput(input parallelGroupConfigInput) (ParallelGroup
 			tool = member.CLI
 		}
 		if tool == "" {
+			tool = member.Agent
+		}
+		if tool == "" {
 			tool = "pi"
 		}
 		if strings.TrimSpace(member.Name) == "" {
@@ -476,11 +564,71 @@ func parallelGroupConfigFromInput(input parallelGroupConfigInput) (ParallelGroup
 			Purpose:  member.Purpose,
 			Stage:    member.Stage,
 			Tool:     tool,
+			Model:    member.Model,
 			Subagent: member.Subagent,
 			Required: member.Required,
 		})
 	}
 	return group, nil
+}
+
+func rejectStageBeforeLegacyMemberFields(member parallelMemberConfigInput, index int) error {
+	// stages.<stage>.before[] is the new tree-shaped config surface and must not
+	// retain legacy aliases or scheduler anchors from parallel.groups.
+	if member.CLI != "" {
+		return fmt.Errorf("members[%d].cli 是旧字段，已删除；请使用 agent", index)
+	}
+	if member.Tool != "" {
+		return fmt.Errorf("members[%d].tool 是旧字段，已删除；请使用 agent", index)
+	}
+	if member.Stage != "" {
+		return fmt.Errorf("members[%d].stage 是旧字段，已删除；stage 由 stages.<stage>.before 自动决定", index)
+	}
+	return nil
+}
+
+func parallelConfigFromStages(stages map[string]stageOptionsInput, base ParallelConfig) (ParallelConfig, error) {
+	config := cloneParallelConfig(base)
+	if stages == nil {
+		return config, validateParallelConfig(config)
+	}
+	stageToGroup := map[string]string{"planning": "planning_context", "execution": "implementation_context", "review": "review", "qa": "qa"}
+	stageToAnchor := map[string]string{"planning": "planning", "execution": "before_execution", "review": "before_review", "qa": "before_qa"}
+	for stage, input := range stages {
+		if len(input.Before) == 0 {
+			continue
+		}
+		groupName, ok := stageToGroup[stage]
+		if !ok {
+			return ParallelConfig{}, fmt.Errorf("stages.%s.before 不支持", stage)
+		}
+		members := make([]parallelMemberConfigInput, 0, len(input.Before))
+		for i, member := range input.Before {
+			if err := rejectStageBeforeLegacyMemberFields(member, i); err != nil {
+				return ParallelConfig{}, fmt.Errorf("stages.%s.before: %w", stage, err)
+			}
+			member.Stage = stageToAnchor[stage]
+			members = append(members, member)
+		}
+		group, err := parallelGroupConfigFromInput(parallelGroupConfigInput{Mode: stageMode(stage), Members: members})
+		if err != nil {
+			return ParallelConfig{}, fmt.Errorf("stages.%s.before: %w", stage, err)
+		}
+		if config.Groups == nil {
+			config.Groups = map[string]ParallelGroupConfig{}
+		}
+		config.Groups[groupName] = group
+	}
+	return config, validateParallelConfig(config)
+}
+
+func stageMode(stage string) string {
+	switch stage {
+	case "planning", "execution":
+		return "advisory"
+	default:
+		return "gate_input"
+	}
 }
 
 func validateParallelConfig(config ParallelConfig) error {
@@ -538,10 +686,13 @@ func validationConfigFromInput(input validationConfigInput, base ValidationConfi
 		}
 	}
 	if input.MaxAttemptsPerStage != nil {
-		if *input.MaxAttemptsPerStage < 1 {
-			return ValidationConfig{}, fmt.Errorf("validation.max_attempts_per_stage 必须是正数")
+		return ValidationConfig{}, fmt.Errorf("validation.max_attempts_per_stage 是旧字段，已删除；请使用 validation.limit")
+	}
+	if input.Limit != nil {
+		if *input.Limit < 1 {
+			return ValidationConfig{}, fmt.Errorf("validation.limit 必须是正数")
 		}
-		config.MaxAttemptsPerStage = *input.MaxAttemptsPerStage
+		config.MaxAttemptsPerStage = *input.Limit
 	}
 	normalizeValidationConfig(&config)
 	return config, nil
@@ -591,7 +742,16 @@ func normalizeValidationConfig(config *ValidationConfig) {
 
 func mergeStageOptions(base *StageOptions, override stageOptionsInput) error {
 	if override.CLI != nil {
-		override.Tool = override.CLI
+		return fmt.Errorf("cli 是旧字段，已删除；请使用 agent")
+	}
+	if override.Tool != nil {
+		return fmt.Errorf("tool 是旧字段，已删除；请使用 agent")
+	}
+	if override.Permissions != nil {
+		return fmt.Errorf("permissions 是旧字段，已删除")
+	}
+	if override.Agent != nil {
+		override.Tool = override.Agent
 	}
 	if override.Tool != nil {
 		if !validAgentTool(*override.Tool) {

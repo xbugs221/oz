@@ -215,6 +215,9 @@ func (e *Engine) subagentOptions(state State, stage string, member ParallelMembe
 	if member.Tool != "" {
 		options.Tool = member.Tool
 	}
+	if member.Model != "" {
+		options.Model = member.Model
+	}
 	if options.Tool == "pi" {
 		options.Permissions = "sandbox"
 	}
@@ -275,6 +278,7 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 		"SUBAGENT_PURPOSE=" + member.Purpose,
 		"",
 		"判断范围：",
+		"- 先判断当前提案是否与你的职责相关；无关时立即输出 relevant:false、irrelevant_reason、status:\"skipped\"、findings:[]，不要继续探索。",
 		"- 当前提案违反 spec/acceptance 的可复现问题，写入 findings。",
 		"- 历史债务、无关问题、扩展建议，写 scope=0，不得阻断。",
 		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
@@ -535,6 +539,7 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"SUBAGENT_PURPOSE=" + member.Purpose,
 		"",
 		"判断范围：",
+		"- 先判断当前提案是否与你的职责相关；无关时立即输出 relevant:false、irrelevant_reason、status:\"skipped\"、findings:[]，不要继续探索。",
 		"- 当前提案违反 spec/acceptance 的可复现问题，写入 findings。",
 		"- 历史债务、无关问题、扩展建议，写 scope=0，不得阻断。",
 		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
@@ -546,8 +551,8 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
-		`{"name":"` + "{{SUBAGENT_NAME}}" + `","change_name":"` + "{{CURRENT_CHANGE}}" + `","purpose":"` + "{{SUBAGENT_PURPOSE}}" + `","status":0|1|"success"|"failed","summary":"string","evidence":["string"],"findings":[{"title":"string","severity":1|2|3,"scope":1|2|0,"evidence":"string","recommendation":"string"}]}`,
-		"只允许这些顶层字段；evidence 每一项必须是字符串，不能是对象或数组；change_name 必须等于 CURRENT_CHANGE。",
+		`{"name":"` + "{{SUBAGENT_NAME}}" + `","change_name":"` + "{{CURRENT_CHANGE}}" + `","purpose":"` + "{{SUBAGENT_PURPOSE}}" + `","status":0|1|"success"|"failed"|"skipped","relevant":true|false,"irrelevant_reason":"string","summary":"string","evidence":["string"],"findings":[{"title":"string","severity":1|2|3,"scope":1|2|0,"evidence":"string","recommendation":"string"}]}`,
+		"只允许这些顶层字段；evidence 每一项必须是字符串，不能是对象或数组；change_name 必须等于 CURRENT_CHANGE；relevant:false 必须提供 irrelevant_reason 且 findings 必须为空。",
 	}, "\n")
 }
 

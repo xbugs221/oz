@@ -23,27 +23,31 @@ type ParallelArtifact struct {
 
 // ParallelMemberResult stores one helper member's summary and evidence.
 type ParallelMemberResult struct {
-	Name       string    `json:"name"`
-	ChangeName string    `json:"change_name,omitempty"`
-	Purpose    string    `json:"purpose"`
-	Status     string    `json:"status"`
-	Summary    string    `json:"summary"`
-	Evidence   []string  `json:"evidence,omitempty"`
-	Findings   []Finding `json:"findings,omitempty"`
-	Required   bool      `json:"required,omitempty"`
+	Name             string    `json:"name"`
+	ChangeName       string    `json:"change_name,omitempty"`
+	Purpose          string    `json:"purpose"`
+	Status           string    `json:"status"`
+	Summary          string    `json:"summary"`
+	Evidence         []string  `json:"evidence,omitempty"`
+	Findings         []Finding `json:"findings,omitempty"`
+	Required         bool      `json:"required,omitempty"`
+	Relevant         *bool     `json:"relevant,omitempty"`
+	IrrelevantReason string    `json:"irrelevant_reason,omitempty"`
 }
 
 // UnmarshalJSON accepts KISS numeric status codes while storing canonical words.
 func (m *ParallelMemberResult) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Name       string      `json:"name"`
-		ChangeName string      `json:"change_name,omitempty"`
-		Purpose    string      `json:"purpose"`
-		Status     interface{} `json:"status"`
-		Summary    string      `json:"summary"`
-		Evidence   []string    `json:"evidence,omitempty"`
-		Findings   []Finding   `json:"findings,omitempty"`
-		Required   bool        `json:"required,omitempty"`
+		Name             string      `json:"name"`
+		ChangeName       string      `json:"change_name,omitempty"`
+		Purpose          string      `json:"purpose"`
+		Status           interface{} `json:"status"`
+		Summary          string      `json:"summary"`
+		Evidence         []string    `json:"evidence,omitempty"`
+		Findings         []Finding   `json:"findings,omitempty"`
+		Required         bool        `json:"required,omitempty"`
+		Relevant         *bool       `json:"relevant,omitempty"`
+		IrrelevantReason string      `json:"irrelevant_reason,omitempty"`
 	}
 	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
 		return err
@@ -56,6 +60,8 @@ func (m *ParallelMemberResult) UnmarshalJSON(data []byte) error {
 	m.Evidence = raw.Evidence
 	m.Findings = raw.Findings
 	m.Required = raw.Required
+	m.Relevant = raw.Relevant
+	m.IrrelevantReason = raw.IrrelevantReason
 	return nil
 }
 
@@ -96,6 +102,14 @@ func ValidateParallelArtifact(artifact ParallelArtifact) error {
 	for i, member := range artifact.Members {
 		if strings.TrimSpace(member.Name) == "" || strings.TrimSpace(member.Status) == "" || strings.TrimSpace(member.Summary) == "" {
 			return fmt.Errorf("parallel artifact member %d 不完整", i)
+		}
+		if member.Relevant != nil && !*member.Relevant {
+			if strings.TrimSpace(member.IrrelevantReason) == "" {
+				return fmt.Errorf("parallel artifact member %d relevant=false 必须包含 irrelevant_reason", i)
+			}
+			if len(member.Findings) > 0 {
+				return fmt.Errorf("parallel artifact member %d relevant=false 不得包含 findings", i)
+			}
 		}
 		for j, finding := range member.Findings {
 			if finding.Title == "" || finding.Evidence == "" || finding.Recommendation == "" {
@@ -285,6 +299,9 @@ func isNoActionBlockingFinding(finding Finding) bool {
 
 func artifactHasRequiredFailure(artifact ParallelArtifact) bool {
 	for _, member := range artifact.Members {
+		if member.Required && member.Relevant != nil && !*member.Relevant {
+			continue
+		}
 		if member.Required && !memberStatusSucceeded(member.Status) {
 			return true
 		}

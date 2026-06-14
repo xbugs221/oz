@@ -22,6 +22,7 @@
 - `required_evidence` 只要求可复核，不要求进入 git。不要把 `test-results/`、截图、trace 或 runtime log 当作应提交产物；如果合同强制这些运行产物被 git 跟踪，QA 应判定合同错误。
 {{if .HasParallelQA}}
 - 读或生成 `{{.ParallelQAPath}}`；缺少 required evidence 或有 severity=1/2 finding 时，最终 `decision` 不得为 0。
+- 成员 artifact 若为 `relevant:false` 且 `findings=[]`，表示该职责与当前提案无关，不得按失败处理；可在 `evidence` 中记录其 `irrelevant_reason`。
 {{end}}
 
 写入：

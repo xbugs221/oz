@@ -21,6 +21,7 @@
 - `required_evidence` 表示可复核运行证据，不表示产物必须版本化。不要要求 `test-results/`、截图、trace 或 runtime log 被 git 跟踪；若合同或测试用 `git ls-files --error-unmatch` 强制跟踪 `test-results`，应作为当前提案合同设计错误报告。
 {{if .HasParallelReview}}
 - 读或生成 `{{.ParallelReviewPath}}`；先把 gate_input 成员结论归一化：正向确认、无操作项、其它提案内容和历史债务不得进入 `findings`。
+- 成员 artifact 若为 `relevant:false` 且 `findings=[]`，表示该职责与当前提案无关，不得按失败处理；可在 `evidence` 中记录其 `irrelevant_reason`。
 - 只有你复核后确认属于当前提案 acceptance/spec 的可复现 blocker/major 行为失败，才写入最终 `findings` 并令 `decision=1`；更深覆盖建议、可维护性建议或未承诺扩展写入 `non_blocking_findings` 或 `evidence`。
 {{end}}
 

@@ -469,6 +469,7 @@ func (t goDAGContextNamedTool) NewRunner() AgentRunner { return t.runner }
 // goDAGContextRepo creates a committed git repo for manual-intervention guards.
 func goDAGContextRepo(t *testing.T) string {
 	t.Helper()
+	t.Setenv("HOME", t.TempDir())
 	repo := t.TempDir()
 	runGitForGoDAGContext(t, repo, "init")
 	runGitForGoDAGContext(t, repo, "config", "user.email", "test@example.com")

@@ -1,88 +1,76 @@
-wo:
-  workflow:
-    engine: go-dag
-    max_review_iterations: 5
-    stages:
-      planning:
-        cli: codex
-        reasoning: xhigh
-        permissions: default
-      execution:
-        cli: codex
-        reasoning: high
-        permissions: default
-      fix:
-        cli: codex
-        reasoning: high
-        permissions: default
-      review:
-        cli: codex
-        reasoning: high
-        permissions: default
-      qa:
-        cli: codex
-        reasoning: high
-        permissions: default
-      archive:
-        cli: pi
-        reasoning: low
-        permissions: default
-    parallel:
-      enabled: true
-      groups:
-        implementation_context:
-          mode: advisory
-          members:
-            - name: 一手资料研究员
-              purpose: 汇总 execution 所需的一手资料、发布时间和引用路径
-              stage: before_execution
-              tool: pi
-              subagent: librarian
-            - name: 交叉验证研究员
-              purpose: 寻找独立来源对关键事实进行交叉验证
-              stage: before_execution
-              tool: pi
-              subagent: librarian
-        review:
-          mode: gate_input
-          members:
-            - name: 证据链评审员
-              purpose: 检查结论是否能追溯到可靠证据
-              tool: pi
-            - name: 反例评审员
-              purpose: 查找与结论冲突的资料和边界条件
-              tool: pi
-            - name: 时效性评审员
-              purpose: 检查信息日期、版本和近期变化风险
-              tool: pi
-            - name: 引用合规评审员
-              purpose: 检查引用、摘录长度和来源标注是否合规
-              tool: pi
-        qa:
-          mode: gate_input
-          members:
-            - name: 证据审计员
-              purpose: 核对关键事实、来源链接和证据等级
-              tool: pi
-            - name: 结论复算员
-              purpose: 复核数据推导、口径转换和结论一致性
-              tool: pi
-            - name: 缺口测试员
-              purpose: 标记未覆盖来源、未验证假设和待确认风险
-              tool: pi
-    validation:
-      max_attempts_per_stage: 3
-      commands: []
-  prompts:
-    planning: |
+parallel: true
+max_review_iterations: 5
+stages:
+  planning:
+    agent: codex
+    reasoning: xhigh
+  execution:
+    agent: codex
+    reasoning: low
+    before:
+      - name: 代码库侦察员
+        purpose: 汇总 execution 需要读取的文件和测试模式
+        agent: pi
+        subagent: explore
+      - name: 外部资料研究员
+        purpose: 查询 execution 依赖的外部库文档和开源实现
+        agent: pi
+        subagent: librarian
+  fix:
+    agent: codex
+    reasoning: low
+  review:
+    agent: codex
+    reasoning: high
+    before:
+      - name: 目标核对审核员
+        purpose: 核对 proposal/spec/task 是否满足
+        agent: pi
+        required: true
+      - name: 测试有效性审核员
+        purpose: 判断测试是否真实覆盖场景
+        agent: pi
+        required: true
+      - name: 安全风险审核员
+        purpose: 检查权限、输入、泄漏和破坏性操作
+        agent: pi
+        required: true
+      - name: 上下文一致性审核员
+        purpose: 检查是否违背现有架构约定
+        agent: pi
+        required: true
+  qa:
+    agent: codex
+    reasoning: high
+    before:
+      - name: CLI/API 测试员
+        purpose: 执行命令行或接口真实路径
+        agent: pi
+        required: true
+      - name: 浏览器路径测试员
+        purpose: 执行页面真实用户路径
+        agent: pi
+        required: true
+      - name: 回归场景测试员
+        purpose: 覆盖邻近功能回归
+        agent: pi
+        required: true
+  archive:
+    agent: codex
+    reasoning: low
+validation:
+  limit: 3
+  commands: []
+prompts:
+  planning: |
 {{ prompt "planning" }}
-    execution: |
+  execution: |
 {{ prompt "execution" }}
-    review: |
+  review: |
 {{ prompt "review" }}
-    qa: |
+  qa: |
 {{ prompt "qa" }}
-    fix: |
+  fix: |
 {{ prompt "fix" }}
-    archive: |
+  archive: |
 {{ prompt "archive" }}

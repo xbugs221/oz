@@ -265,23 +265,28 @@
 
 ### 需求：仓库级工作流配置
 
-系统必须支持从内置默认、`~/wo.yaml`、仓库 `wo.yaml` 或 `wo.yml` 读取工作流配置，并在缺失配置时使用内置默认值。
+// Sources: 24-树状简化wo配置
+
+系统必须支持从内置默认、`~/wo.yaml`、仓库 `wo.yaml` 或 `wo.yml` 读取根节点树状工作流配置，并在缺失配置时使用内置默认值。系统必须拒绝旧配置格式和旧字段，避免用户误以为旧配置仍然生效。
 
 #### 场景：初始化默认配置
 
 - **当** 用户在仓库根目录调用 `wo config`
 - **且** 仓库根目录不存在 `wo.yaml` 或 `wo.yml`
 - **则** 系统创建默认 `wo.yaml`
+- **且** 默认配置根节点包含 `parallel`、`max_review_iterations`、`stages`、`validation` 和 `prompts`
 - **且** 默认配置包含 `max_review_iterations: 5`
-- **且** 默认配置包含 `workflow.stages.planning/execution/review/qa/fix/archive`
-- **且** 每类会话配置包含 `cli` 和 `reasoning`
+- **且** 默认配置包含 `stages.planning/execution/review/qa/fix/archive`
+- **且** 每类会话配置包含 `agent` 和 `reasoning`
 - **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`qa.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
-- **且** 默认配置写入每类会话的 `permissions: default`
-- **且** 默认配置写入 `validation.max_attempts_per_stage: 3`
+- **且** 默认配置写入 `validation.limit`
 - **且** 默认配置写入空的 `validation.commands: []`
 - **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
+- **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:`、`mode:` 或默认 `model:`
+- **且** `stages.execution.before`、`stages.review.before` 和 `stages.qa.before` 包含默认子代理
 - **且** 不创建 `.wo/`
-- **且** 后续规划或 sealed run 能读取其中的 `wo.workflow` 配置
+- **且** 后续规划、graph 或 sealed run 能读取其中的根节点配置
+- **测试**：`tests/specs/codex-workflow-cli/test_tree_config_contract.sh`
 
 #### 场景：初始化全局默认配置
 
@@ -313,10 +318,28 @@
 
 - **当** 仓库根目录存在 `wo.yaml`
 - **且** 用户进入规划模式或启动 sealed run
-- **则** 系统读取 `wo.workflow` 配置
+- **则** 系统读取根节点工作流配置
 - **且** 校验 reasoning 只能是 `low`、`medium`、`high`、`xhigh`
 - **且** 校验 `max_review_iterations` 是非负整数
 - **且** 校验 `validation.commands` 中每个命令必须包含非空 `executable`
+- **且** `validation.limit` 是唯一的 validation 重试预算字段
+
+#### 场景：旧顶层和旧别名字段不能继续生效
+
+- **当** `wo.yaml` 或 `~/wo.yaml` 包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`parallel.groups` 或 `validation.max_attempts_per_stage`
+- **则** 配置读取失败
+- **且** 错误信息包含对应旧字段名
+- **且** 不创建新的运行态
+- **测试**：`tests/specs/codex-workflow-cli/test_legacy_config_rejection_contract.sh`
+
+#### 场景：顶层 parallel false 关闭阶段内子代理
+
+- **给定** `wo.yaml` 中保留 `stages.execution.before`
+- **且** 顶层配置 `parallel: false`
+- **当** 用户导出 workflow graph
+- **则** graph 不包含任何子代理节点
+- **且** 主阶段仍保留
+- **测试**：`tests/specs/codex-workflow-cli/test_tree_config_contract.sh`
 
 #### 场景：配置文件冲突
 
@@ -328,6 +351,31 @@
 
 - **当** 仓库根目录不存在 `wo.yaml` 或 `wo.yml`
 - **则** 系统使用内置默认配置
+
+#### 场景：主阶段和子代理会话只在显式配置 model 时传模型参数
+
+- **给定** 新格式 `wo.yaml`
+- **且** `stages.execution.model` 配置为 `codex-exec-model`
+- **且** `stages.qa.before[].model` 为浏览器路径测试员配置 `pi-browser-model`
+- **且** `validation.limit: 2`
+- **当** 用户运行 `wo run --change <change> --json`
+- **则** execution 主阶段调用 Codex 时包含 `-m codex-exec-model`
+- **且** 浏览器路径测试员调用 Pi 时包含 `--model pi-browser-model`
+- **且** 未配置模型的子代理调用不包含 `--model`
+- **且** 配置读取接受 `validation.limit`
+- **测试**：`tests/specs/codex-workflow-cli/test_subagent_relevance_contract.sh`
+
+#### 场景：默认子代理全部启动且无关职责不阻断主阶段
+
+- **给定** 一个只修改 CLI 配置解析的提案
+- **且** `stages.qa.before` 包含 `CLI/API 测试员`、`浏览器路径测试员` 和 `回归场景测试员`
+- **当** 用户运行 `wo run --change <change> --json`
+- **则** 这些子代理都会被调用
+- **且** 浏览器路径测试员收到 relevance check prompt 后返回 `relevant:false`
+- **且** 浏览器路径测试员不执行浏览器探索
+- **且** `required:true` 加 `relevant:false` 不阻断 QA 主阶段
+- **且** 最终 run 完成为 `done`
+- **测试**：`tests/specs/codex-workflow-cli/test_subagent_relevance_contract.sh`
 
 ### 需求：OMO 风格并行增强配置
 

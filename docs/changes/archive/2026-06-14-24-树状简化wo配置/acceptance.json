@@ -1,0 +1,114 @@
+{
+  "summary": "用树状根节点 wo.yaml 简化配置面，统一 agent/model 会话字段，删除旧字段，并让默认子代理通过 relevant:false 快速处理无关职责。",
+  "coverage": [
+    {
+      "spec": "需求：树状 KISS 配置 / 场景：默认 `wo.yaml` 使用根节点树状结构",
+      "tests": ["tree-config-contract"],
+      "evidence": ["tree-config-log", "tree-config-generated-yaml", "tree-config-graph-json"],
+      "risk": "不覆盖用户手写所有 prompt 组合。"
+    },
+    {
+      "spec": "需求：树状 KISS 配置 / 场景：顶层 `parallel: false` 关闭阶段内子代理",
+      "tests": ["tree-config-contract"],
+      "evidence": ["tree-config-log", "tree-config-graph-json"],
+      "risk": "只验证 graph，不验证所有运行态展示。"
+    },
+    {
+      "spec": "需求：旧字段硬拒绝 / 场景：旧顶层和旧别名字段不能继续生效",
+      "tests": ["legacy-config-rejection-contract"],
+      "evidence": ["legacy-config-rejection-log"],
+      "risk": "不提供自动迁移命令。"
+    },
+    {
+      "spec": "需求：会话模型和 validation limit / 场景：主阶段和子代理会话只在显式配置 `model` 时传模型参数，并接受 `validation.limit`",
+      "tests": ["subagent-relevance-contract"],
+      "evidence": ["subagent-relevance-log", "subagent-relevance-state"],
+      "risk": "模型名是否可用仍由对应 agent CLI 决定。"
+    },
+    {
+      "spec": "需求：子代理默认启动并快速判无关 / 场景：默认子代理全部启动；无关职责返回 `relevant:false` 后不阻断主阶段",
+      "tests": ["subagent-relevance-contract"],
+      "evidence": ["subagent-relevance-log", "subagent-relevance-state"],
+      "risk": "真实浏览器操作由后续 Web 项目业务测试覆盖，本场景只证明无关路径不浪费浏览器会话。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "tree-config-contract",
+      "source": "change_contract",
+      "path": "docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh",
+      "command": "bash docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh",
+      "purpose": "证明默认 wo.yaml 使用根节点树状 stages.before 配置，并显式生成 test-results/24-树状简化wo配置/tree-config.log、generated-wo.yaml 和 graph.json 作为证据。",
+      "assertions": [
+        "默认 wo.yaml 不包含 wo/workflow/engine/defaults/iterations/permissions/cli/tool/groups/mode/model 等旧字段或默认模型字段",
+        "默认 wo.yaml 在 stages.execution/review/qa.before 中包含默认子代理，且使用 agent 字段",
+        "parallel:true 的 graph 包含阶段前置子代理，parallel:false 的 graph 不包含子代理但保留主阶段"
+      ],
+      "expected_initial_failure": "当前默认模板仍使用 wo.workflow.parallel.groups、cli/tool/permissions 等旧字段，因此应失败于目标 YAML 结构缺失。"
+    },
+    {
+      "id": "legacy-config-rejection-contract",
+      "source": "change_contract",
+      "path": "docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh",
+      "command": "bash docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh",
+      "purpose": "证明旧字段被硬拒绝，并显式生成 test-results/24-树状简化wo配置/legacy-config-rejection.log 作为证据。",
+      "assertions": [
+        "包含 wo 或 workflow 顶层的旧格式 wo.yaml 被拒绝",
+        "包含 engine/defaults/iterations/permissions/cli/tool/parallel.groups/mode/validation.max_attempts_per_stage 的配置被拒绝",
+        "每个失败诊断都包含对应旧字段名，避免静默忽略"
+      ],
+      "expected_initial_failure": "当前实现仍接受 wo.workflow 旧格式，因此应失败于旧字段未被拒绝。"
+    },
+    {
+      "id": "subagent-relevance-contract",
+      "source": "change_contract",
+      "path": "docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh",
+      "command": "bash docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh",
+      "purpose": "证明阶段和子代理会话模型透传、validation.limit、默认子代理启动和 relevant:false 快速退出，并显式生成 test-results/24-树状简化wo配置/subagent-relevance.log 与 subagent-relevance-state.json。",
+      "assertions": [
+        "execution 主阶段收到 -m codex-exec-model，浏览器子代理收到 --model pi-browser-model，未配置模型的子代理不收到 --model",
+        "所有默认子代理都会被调用，浏览器路径测试员在纯 CLI 提案中输出 relevant:false 和 irrelevant_reason",
+        "required:true 加 relevant:false 不阻断 QA，最终 state.json status 和 stage 都为 done"
+      ],
+      "expected_initial_failure": "当前实现不支持根节点 stages.before 配置，也不支持 relevant:false member artifact，因此应失败于目标行为缺失。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "tree-config-log",
+      "kind": "runtime_log",
+      "path": "test-results/24-树状简化wo配置/tree-config.log",
+      "purpose": "记录默认配置生成、旧字段扫描和 graph 检查过程；该文件由 tree-config-contract 测试显式写出。"
+    },
+    {
+      "id": "tree-config-generated-yaml",
+      "kind": "other",
+      "path": "test-results/24-树状简化wo配置/generated-wo.yaml",
+      "purpose": "保存新项目 `wo config` 生成的默认 wo.yaml；该文件由 tree-config-contract 测试显式写出。"
+    },
+    {
+      "id": "tree-config-graph-json",
+      "kind": "other",
+      "path": "test-results/24-树状简化wo配置/graph.json",
+      "purpose": "保存 parallel:true 和 parallel:false graph 检查用的 graph JSON；该文件由 tree-config-contract 测试显式写出。"
+    },
+    {
+      "id": "legacy-config-rejection-log",
+      "kind": "runtime_log",
+      "path": "test-results/24-树状简化wo配置/legacy-config-rejection.log",
+      "purpose": "记录每个旧字段样例的拒绝诊断；该文件由 legacy-config-rejection-contract 测试显式写出。"
+    },
+    {
+      "id": "subagent-relevance-log",
+      "kind": "runtime_log",
+      "path": "test-results/24-树状简化wo配置/subagent-relevance.log",
+      "purpose": "记录 fake agent argv、子代理调用和 relevant:false artifact 检查；该文件由 subagent-relevance-contract 测试显式写出。"
+    },
+    {
+      "id": "subagent-relevance-state",
+      "kind": "state_snapshot",
+      "path": "test-results/24-树状简化wo配置/subagent-relevance-state.json",
+      "purpose": "保存完成后的 run state.json，证明 required:true + relevant:false 没有阻断 workflow；该文件由 subagent-relevance-contract 测试显式写出。"
+    }
+  ]
+}
