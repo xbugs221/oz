@@ -1,0 +1,34 @@
+{
+  "summary": "验收 sealed run 状态持久化、prompt 上下文和 git 守卫已从 state.go 拆出且核心运行行为不变",
+  "coverage": [
+    {
+      "spec": "需求：运行状态边界拆分 / 场景：运行状态边界已拆分且核心行为不变",
+      "tests": ["state-runtime-boundary-contract"],
+      "evidence": ["state-runtime-boundary-log"],
+      "risk": "覆盖关键回归入口，不穷尽所有历史 shell 合同；执行阶段仍需 code review 检查没有重复实现"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "state-runtime-boundary-contract",
+      "source": "change_contract",
+      "path": "docs/changes/26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh",
+      "command": "bash docs/changes/26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh",
+      "purpose": "证明 state.go 的运行状态职责已拆到独立边界，并通过真实 internal/app 状态机回归",
+      "assertions": [
+        "检查 state store、run lock、prompt context 和 git guard 边界文件存在",
+        "检查 state.go 不再直接定义迁出的核心 helper",
+        "运行 internal/app 状态机、Go DAG、人工干预和 acceptance preflight 相关 Go 回归"
+      ],
+      "expected_initial_failure": "重构未实现时应失败于目标边界文件缺失或 state.go 仍定义迁出 helper"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "state-runtime-boundary-log",
+      "kind": "runtime_log",
+      "path": "test-results/refactor-state-runtime-boundary/state-runtime-boundary-contract.log",
+      "purpose": "记录边界文件检查和 Go 回归测试输出；该文件是本地运行产物，不进入 git"
+    }
+  ]
+}
