@@ -67,15 +67,15 @@ head -1 status.txt | grep -qF "批量任务 b1 running 1/3"
 grep -qF -- "- 45-智能体文件写入保护" status.txt
 grep -qF -- "- 46-重构主从智能体文件树" status.txt
 grep -qF -- "- 47-智能体命令执行deny策略" status.txt
-grep -qF "  执行阶段 - ✓ -" status.txt
-grep -qF "  审核阶段 019e1a9c-973b-7a31-b787-f5268bc033c1 → -" status.txt
+grep -Eq "  执行 - +✓ -" status.txt
+grep -Eq "  审核 019e1a9c-973b-7a31-b787-f5268bc033c1 +→ -" status.txt
 ! grep -qF "20260512T051106.910247319Z" status.txt
 ! grep -qF "20260512T051106.925886354Z" status.txt
 ! grep -qF "工作流 w" status.txt
 ! grep -qF "未开始" status.txt
 
 "$WO" status -w1 > status-w1.txt
-grep -qF "执行阶段 - ✓ -" status-w1.txt
+grep -Eq "执行 - +✓ -" status-w1.txt
 ! grep -qF "批量任务" status-w1.txt
 
 "$WO" status --run-id 20260512T051106.925886354Z --json > status.json

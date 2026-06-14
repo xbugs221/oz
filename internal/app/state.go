@@ -1595,7 +1595,7 @@ func gitSnapshot(repo string) (string, string, error) {
 		}
 		return "", "", err
 	}
-	statusCmd := commandContext(context.Background(), gitPath, "status", "--porcelain")
+	statusCmd := commandContext(context.Background(), gitPath, "-c", "core.quotePath=false", "status", "--porcelain")
 	statusCmd.Dir = repo
 	status, err := statusCmd.CombinedOutput()
 	if err != nil {
@@ -1774,7 +1774,7 @@ func committedPaths(repo, beforeHead, afterHead string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := commandContext(context.Background(), gitPath, "diff", "--name-status", "--find-renames", beforeHead, afterHead)
+	cmd := commandContext(context.Background(), gitPath, "-c", "core.quotePath=false", "diff", "--name-status", "--find-renames", beforeHead, afterHead)
 	cmd.Dir = repo
 	out, err := cmd.CombinedOutput()
 	if err != nil {

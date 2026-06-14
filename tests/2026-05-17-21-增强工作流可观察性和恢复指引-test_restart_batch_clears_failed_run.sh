@@ -49,7 +49,7 @@ cat > docs/changes/1-重启变更/task.md <<'EOF'
 - [ ] task
 EOF
 cat > docs/changes/1-重启变更/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","command":"bash docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","purpose":"cover restart contract","assertions":["restart clears failed batch run association and creates a new run"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/restart.log","purpose":"prove restart runtime path"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["runtime-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","command":"bash docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh","purpose":"cover restart contract","assertions":["restart clears failed batch run association, creates a new run, and produces runtime-demo evidence"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/restart.log","purpose":"prove restart runtime path"}]}
 JSON
 mkdir -p docs/changes/1-重启变更/tests
 cat > docs/changes/1-重启变更/tests/restart_batch_creates_new_run_test.sh <<'EOF'

@@ -20,7 +20,7 @@ make_repo() {
 - [ ] implement demo
 TASK
   cat > "$work/docs/changes/demo/acceptance.json" <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["fixer sessions are saved per backend and shown in status"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["fixer sessions are saved per backend and shown in status and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
   git -C "$work" add .
   git -C "$work" commit -m init >/dev/null
@@ -108,7 +108,7 @@ esac
 
 if grep -q '^acceptance$' <<<"$prompt"; then
   path="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
-  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["fixer sessions are saved per backend and shown in status"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
+  printf '%s\n' '{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["fixer sessions are saved per backend and shown in status and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
 elif grep -q '^execution$' <<<"$prompt"; then
   printf -- '- [x] implement demo\n' > "$repo/docs/changes/demo/task.md"
 elif grep -q '^review_1$' <<<"$prompt"; then
@@ -151,46 +151,43 @@ run_backend_case() {
   install_fake_agent "$fakebin" pi
   ln -sf "$fakebin/pi" "$fakebin/agy"
   cat > "$work/wo.yaml" <<YAML
-wo:
-  workflow:
-    max_review_iterations: 3
-    parallel:
-      enabled: false
-    stages:
-      execution:
-        cli: $tool
-      review:
-        cli: $tool
-      qa:
-        cli: $tool
-      fix:
-        cli: $tool
-      archive:
-        cli: $tool
-  prompts:
-    execution: |
-      {{.Stage}}
-      {{.ReviewPath}}
-      {{.FixSummaryPath}}
-      {{.DeliverySummaryPath}}
-    review: |
-      {{.Stage}}
-      {{.ReviewPath}}
-      {{.FixSummaryPath}}
-      {{.DeliverySummaryPath}}
-    qa: |
-      {{.Stage}}
-      {{.QAPath}}
-    fix: |
-      {{.Stage}}
-      {{.ReviewPath}}
-      {{.FixSummaryPath}}
-      {{.DeliverySummaryPath}}
-    archive: |
-      {{.Stage}}
-      {{.ReviewPath}}
-      {{.FixSummaryPath}}
-      {{.DeliverySummaryPath}}
+max_review_iterations: 3
+parallel: false
+stages:
+  execution:
+    agent: $tool
+  review:
+    agent: $tool
+  qa:
+    agent: $tool
+  fix:
+    agent: $tool
+  archive:
+    agent: $tool
+prompts:
+  execution: |
+    {{.Stage}}
+    {{.ReviewPath}}
+    {{.FixSummaryPath}}
+    {{.DeliverySummaryPath}}
+  review: |
+    {{.Stage}}
+    {{.ReviewPath}}
+    {{.FixSummaryPath}}
+    {{.DeliverySummaryPath}}
+  qa: |
+    {{.Stage}}
+    {{.QAPath}}
+  fix: |
+    {{.Stage}}
+    {{.ReviewPath}}
+    {{.FixSummaryPath}}
+    {{.DeliverySummaryPath}}
+  archive: |
+    {{.Stage}}
+    {{.ReviewPath}}
+    {{.FixSummaryPath}}
+    {{.DeliverySummaryPath}}
 YAML
   cd "$work"
   PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" run --change demo --json > run.json
@@ -201,8 +198,8 @@ YAML
   ! grep -q "\"$tool:executor\": \"$tool-fixer\"" "$state"
   grep -q "^$tool-fixer$" "$work/$tool-resume.log"
   PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" status -w1 > status.txt
-  grep -q -- "修正阶段 $tool-fixer ✓✓" status.txt
-  ! grep -q -- "修正阶段 未知" status.txt
+  grep -Eq "修正 $tool-fixer +✓2" status.txt
+  ! grep -q -- "修正 未知" status.txt
 }
 
 run_legacy_case() {
@@ -248,8 +245,8 @@ run_legacy_case() {
 }
 JSON
   HOME="$home" XDG_STATE_HOME="$state_home" "$bin" status -w1 > legacy-status.txt
-  grep -q -- "修正阶段 - ✓" legacy-status.txt
-  ! grep -q -- "修正阶段 executor-thread" legacy-status.txt
+  grep -Eq "修正 - +✓" legacy-status.txt
+  ! grep -q -- "修正 executor-thread" legacy-status.txt
 }
 
 run_backend_case codex

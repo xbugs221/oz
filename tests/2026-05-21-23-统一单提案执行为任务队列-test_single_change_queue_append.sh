@@ -43,36 +43,33 @@ git config user.email "test@example.com"
 git config user.name "Test User"
 
 cat > wo.yaml <<'YAML'
-wo:
-  workflow:
-    max_review_iterations: 0
-    parallel:
-      enabled: false
-    stages:
-      planning:
-        cli: codex
-        reasoning: low
-      execution:
-        cli: codex
-        reasoning: low
-      fix:
-        cli: codex
-        reasoning: low
-      review:
-        cli: codex
-        reasoning: low
-      archive:
-        cli: codex
-        reasoning: low
-    validation:
-      max_attempts_per_stage: 1
-      commands: []
-  prompts:
-    planning: "planning"
-    execution: "{{.Stage}} {{.ChangeName}} {{.StatePath}} {{.DeliverySummaryPath}}"
-    review: "{{.Stage}} {{.ChangeName}} {{.StatePath}}"
-    fix: "{{.Stage}} {{.ChangeName}} {{.StatePath}}"
-    archive: "{{.Stage}} {{.ChangeName}} {{.StatePath}} {{.DeliverySummaryPath}}"
+max_review_iterations: 0
+parallel: false
+stages:
+  planning:
+    agent: codex
+    reasoning: low
+  execution:
+    agent: codex
+    reasoning: low
+  fix:
+    agent: codex
+    reasoning: low
+  review:
+    agent: codex
+    reasoning: low
+  archive:
+    agent: codex
+    reasoning: low
+validation:
+  limit: 1
+  commands: []
+prompts:
+  planning: "planning"
+  execution: "{{.Stage}} {{.ChangeName}} {{.StatePath}} {{.DeliverySummaryPath}}"
+  review: "{{.Stage}} {{.ChangeName}} {{.StatePath}}"
+  fix: "{{.Stage}} {{.ChangeName}} {{.StatePath}}"
+  archive: "{{.Stage}} {{.ChangeName}} {{.StatePath}} {{.DeliverySummaryPath}}"
 YAML
 
 mkdir -p docs/changes/1-a/tests docs/changes/2-b/tests
@@ -83,7 +80,7 @@ for change in 1-a 2-b; do
   printf -- '- [ ] implement %s\n' "$change" > "docs/changes/$change/task.md"
   printf '#!/usr/bin/env bash\nexit 0\n' > "docs/changes/$change/tests/smoke.sh"
   cat > "docs/changes/$change/acceptance.json" <<JSON
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$change/tests/smoke.sh","command":"bash docs/changes/$change/tests/smoke.sh","purpose":"cover selected change contract","assertions":["single change execution is represented by a one-item batch queue"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove queue runtime path"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["runtime-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$change/tests/smoke.sh","command":"bash docs/changes/$change/tests/smoke.sh","purpose":"cover selected change contract","assertions":["single change execution is represented by a one-item batch queue and produces runtime-demo evidence"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove queue runtime path"}]}
 JSON
 done
 

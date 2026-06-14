@@ -24,16 +24,13 @@ git config user.name "Test"
 
 # 2. Create wo.yaml with zero reviews
 cat > wo.yaml <<'EOF'
-wo:
-  workflow:
-    max_review_iterations: 0
-    parallel:
-      enabled: false
-  prompts:
-    planning: planning
-    execution: "{{.Stage}}"
-    review: "{{.Stage}}"
-    archive: "{{.Stage}} {{.DeliverySummaryPath}}"
+max_review_iterations: 0
+parallel: false
+prompts:
+  planning: planning
+  execution: "{{.Stage}}"
+  review: "{{.Stage}}"
+  archive: "{{.Stage}} {{.DeliverySummaryPath}}"
 EOF
 
 # 3. Create fake oz that reports tasks NOT done (so execution agent runs)
@@ -125,7 +122,7 @@ if stage == "acceptance":
         path = m.group(1)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as f:
-            f.write("{\"summary\":\"test acceptance\",\"required_tests\":[{\"id\":\"contract-demo\",\"source\":\"change_contract\",\"path\":\"docs\/changes\/demo\/tests\/demo.acceptance.test.ts\",\"command\":\"true\",\"purpose\":\"cover demo contract\",\"assertions\":[\"batch worker completes appended changes without skipping queue entries\"]}],\"required_evidence\":[{\"id\":\"screenshot-demo\",\"kind\":\"screenshot\",\"path\":\"test-results\/demo.png\",\"purpose\":\"prove demo runtime\"}]}\n")
+            f.write("{\"summary\":\"test acceptance\",\"coverage\":[{\"spec\":\"temporary workflow fixture\",\"tests\":[\"contract-demo\"],\"evidence\":[\"screenshot-demo\"],\"risk\":\"fixture uses fake runtime evidence\"}],\"required_tests\":[{\"id\":\"contract-demo\",\"source\":\"change_contract\",\"path\":\"docs\/changes\/demo\/tests\/demo.acceptance.test.ts\",\"command\":\"true\",\"purpose\":\"cover demo contract\",\"assertions\":[\"batch worker completes appended changes without skipping queue entries and produces screenshot-demo evidence\"]}],\"required_evidence\":[{\"id\":\"screenshot-demo\",\"kind\":\"screenshot\",\"path\":\"test-results\/demo.png\",\"purpose\":\"prove demo runtime\"}]}\n")
 
 if stage == "archive" and change_name:
     archive_dir = os.path.join(tmpdir, 'docs', 'changes', 'archive', f'2026-05-12-{change_name}')
@@ -153,7 +150,7 @@ for name in 1-a 2-b 3-c; do
   done
   echo "- [ ] task" > "docs/changes/$name/task.md"
   cat > "docs/changes/$name/acceptance.json" <<JSON
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$name/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch worker completes appended changes without skipping queue entries"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$name/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch worker completes appended changes without skipping queue entries and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 done
 

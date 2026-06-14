@@ -25,16 +25,14 @@ git -C "$REPO" add .
 git -C "$REPO" commit -q -m init
 
 cat >"$REPO/wo.yaml" <<'YAML'
-wo:
-  workflow:
-    max_review_iterations: 0
-  prompts:
-    execution: |
-      execution
-      state={{.StatePath}}
-    archive: |
-      archive
-      delivery={{.DeliverySummaryPath}}
+max_review_iterations: 0
+prompts:
+  execution: |
+    execution
+    state={{.StatePath}}
+  archive: |
+    archive
+    delivery={{.DeliverySummaryPath}}
 YAML
 
 mkdir -p "$TMP/bin"

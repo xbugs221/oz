@@ -78,9 +78,9 @@ grep -qF -- "- 2-b" status-default.txt
 grep -qF -- "- 3-c" status-default.txt
 
 line_run1=$(grep -nF -- "- 1-a" status-default.txt | cut -d: -f1)
-line_run1_stage=$(grep -nF "  执行阶段 exec-a ✓ -" status-default.txt | cut -d: -f1)
+line_run1_stage=$(grep -nE "  执行 exec-a +✓ -" status-default.txt | cut -d: -f1)
 line_run2=$(grep -nF -- "- 2-b" status-default.txt | cut -d: -f1)
-line_run2_stage=$(grep -nF "  审核阶段 review-b → -" status-default.txt | cut -d: -f1)
+line_run2_stage=$(grep -nE "  审核 review-b +→ -" status-default.txt | cut -d: -f1)
 line_unstarted=$(grep -nF -- "- 3-c" status-default.txt | cut -d: -f1)
 
 test "$line_run1" -lt "$line_run1_stage"
@@ -92,11 +92,11 @@ tail -n +"$line_unstarted" status-default.txt | grep -qF -- "- 3-c"
 ! tail -n +"$line_unstarted" status-default.txt | grep -qF "  - 审"
 ! tail -n +"$line_unstarted" status-default.txt | grep -qF "  - 存"
 ! tail -n +"$line_unstarted" status-default.txt | grep -qF "  - 规"
-! tail -n +"$line_unstarted" status-default.txt | grep -qF "  执行阶段"
-! tail -n +"$line_unstarted" status-default.txt | grep -qF "  审核阶段"
+! tail -n +"$line_unstarted" status-default.txt | grep -qF "  执行"
+! tail -n +"$line_unstarted" status-default.txt | grep -qF "  审核"
 
 "$WO" status -w1 > status-w1.txt
-grep -qF "执行阶段 exec-b ✓ -" status-w1.txt
+grep -Eq "执行 exec-b +✓ -" status-w1.txt
 ! grep -qF "最近一次批量工作流" status-w1.txt
 ! grep -qF "批量任务" status-w1.txt
 

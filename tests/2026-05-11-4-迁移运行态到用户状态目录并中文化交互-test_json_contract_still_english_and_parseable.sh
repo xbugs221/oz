@@ -26,7 +26,7 @@ cat > docs/changes/demo/task.md <<'EOF'
 - [ ] implement demo
 EOF
 cat > docs/changes/demo/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 
 cat > "$fakebin/oz" <<'EOF'
@@ -61,7 +61,7 @@ printf '{"type":"thread.started","thread_id":"fake-thread"}\n'
 if grep -q '^acceptance ' <<<"$prompt"; then
   path="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
   mkdir -p "$(dirname "$path")"
-  printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
+  printf '%s\n' '{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$path"
 elif grep -q '^execution$' <<<"$prompt"; then
   printf -- '- [x] implement demo\n' > "$repo/docs/changes/demo/task.md"
 elif grep -q '^archive ' <<<"$prompt"; then
@@ -76,14 +76,11 @@ ln -sf "$fakebin/codex" "$fakebin/pi"
 ln -sf "$fakebin/codex" "$fakebin/agy"
 
 cat > wo.yaml <<'EOF'
-wo:
-  workflow:
-    max_review_iterations: 0
-    parallel:
-      enabled: false
-  prompts:
-    execution: "{{.Stage}}\n"
-    archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
+max_review_iterations: 0
+parallel: false
+prompts:
+  execution: "{{.Stage}}\n"
+  archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
 EOF
 
 PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" run --change demo --json > run.json

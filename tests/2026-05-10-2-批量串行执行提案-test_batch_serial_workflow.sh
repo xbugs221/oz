@@ -20,14 +20,11 @@ make_repo() {
   git add README.md
   git commit -m init >/dev/null
 cat > wo.yaml <<'EOF'
-wo:
-  workflow:
-    max_review_iterations: 0
-    parallel:
-      enabled: false
-  prompts:
-    execution: "{{.Stage}}\n"
-    archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
+max_review_iterations: 0
+parallel: false
+prompts:
+  execution: "{{.Stage}}\n"
+  archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
 EOF
   cat > .wo/cmd/wo-start.md <<'EOF'
 {{.Stage}}
@@ -42,7 +39,7 @@ make_change() {
   mkdir -p "docs/changes/$name"
   printf -- '- [ ] task\n' > "docs/changes/$name/task.md"
   cat > "docs/changes/$name/acceptance.json" <<JSON
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$name/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch workflow processes selected changes serially and stops on failure"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/$name/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch workflow processes selected changes serially and stops on failure and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 }
 
@@ -110,7 +107,7 @@ fi
 case "$prompt" in
   acceptance*)
     acceptance="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
-    printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch workflow processes selected changes serially and stops on failure"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance"
+    printf '%s\n' '{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["batch workflow processes selected changes serially and stops on failure and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance"
     ;;
   execution*) printf -- '- [x] task\n' > "$repo/docs/changes/$change/task.md" ;;
   archive*)

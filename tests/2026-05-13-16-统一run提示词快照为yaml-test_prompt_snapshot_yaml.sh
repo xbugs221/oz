@@ -24,7 +24,7 @@ cat > docs/changes/demo/task.md <<'EOF'
 - [ ] task
 EOF
 cat > docs/changes/demo/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","coverage":[{"spec":"temporary workflow fixture","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["temporary workflow fixture exercises the script-specific business path and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 git add .
 git commit -m init >/dev/null
@@ -71,18 +71,15 @@ printf '{"type":"thread.started","thread_id":"fake-thread-%s"}\n' "$count"
 case "$prompt" in
   snapshot\ execution\ execution*)
     cat > "$repo/wo.yaml" <<'YAML'
-wo:
-  workflow:
-    max_review_iterations: 1
-    parallel:
-      enabled: false
-  prompts:
-    planning: changed planning
-    execution: "changed execution {{.Stage}}\n"
-    fix: "changed fix {{.Stage}}\n"
-    review: "changed review {{.Stage}}\n"
-    qa: "changed qa {{.Stage}}\n"
-    archive: "changed archive {{.Stage}}\n"
+max_review_iterations: 1
+parallel: false
+prompts:
+  planning: changed planning
+  execution: "changed execution {{.Stage}}\n"
+  fix: "changed fix {{.Stage}}\n"
+  review: "changed review {{.Stage}}\n"
+  qa: "changed qa {{.Stage}}\n"
+  archive: "changed archive {{.Stage}}\n"
 YAML
     printf -- '- [x] task\n' > "$repo/docs/changes/demo/task.md"
     ;;
@@ -126,18 +123,15 @@ ln -sf "$fakebin/codex" "$fakebin/pi"
 ln -sf "$fakebin/codex" "$fakebin/agy"
 
 cat > wo.yaml <<'EOF'
-wo:
-  workflow:
-    max_review_iterations: 1
-    parallel:
-      enabled: false
-  prompts:
-    planning: planning
-    execution: "snapshot execution {{.Stage}}\n"
-    fix: "snapshot fix {{.Stage}} {{.FixSummaryPath}}\n"
-    review: "review {{.Stage}} {{.ReviewPath}}\n"
-    qa: "qa {{.Stage}} {{.QAPath}}\n"
-    archive: "archive {{.Stage}} {{.DeliverySummaryPath}}\n"
+max_review_iterations: 1
+parallel: false
+prompts:
+  planning: planning
+  execution: "snapshot execution {{.Stage}}\n"
+  fix: "snapshot fix {{.Stage}} {{.FixSummaryPath}}\n"
+  review: "review {{.Stage}} {{.ReviewPath}}\n"
+  qa: "qa {{.Stage}} {{.QAPath}}\n"
+  archive: "archive {{.Stage}} {{.DeliverySummaryPath}}\n"
 EOF
 
 PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" run --change demo --json > run.json

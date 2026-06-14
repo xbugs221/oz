@@ -105,11 +105,11 @@ if echo "$OUTPUT" | grep -qF -- "→ b1 2/3"; then
 fi
 
 # Check every created run stage detail is indented
-if ! echo "$OUTPUT" | grep -q "  执行阶段 - ✓ -"; then
+if ! echo "$OUTPUT" | grep -q "  执行 - ✓ -"; then
     echo "FAIL: missing completed run stage detail"
     exit 1
 fi
-if ! echo "$OUTPUT" | grep -q "  执行阶段 exec-thread ✓ -"; then
+if ! echo "$OUTPUT" | grep -q "  执行 exec-thread ✓ -"; then
     echo "FAIL: missing indented stage detail"
     exit 1
 fi

@@ -24,7 +24,7 @@ cat > docs/changes/demo/task.md <<'EOF'
 - [ ] task
 EOF
 cat > docs/changes/demo/acceptance.json <<'JSON'
-{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["execution reruns after validation failure and completes after validation-ok exists"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
+{"summary":"test acceptance","coverage":[{"spec":"validation gate retry","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"validation fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["execution reruns after validation failure, completes after validation-ok exists, and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]}
 JSON
 git add .
 git commit -m init >/dev/null
@@ -72,7 +72,7 @@ printf '{"type":"thread.started","thread_id":"fake-thread-%s"}\n' "$count"
 case "$prompt" in
   acceptance*)
     acceptance="$(awk '{for (i=1; i<=NF; i++) if ($i ~ /acceptance\.json$/) print $i}' <<<"$prompt" | tail -n 1)"
-    printf '%s\n' '{"summary":"test acceptance","required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["execution reruns after validation failure and completes after validation-ok exists"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance"
+    printf '%s\n' '{"summary":"test acceptance","coverage":[{"spec":"validation gate retry","tests":["contract-demo"],"evidence":["screenshot-demo"],"risk":"validation fixture uses fake runtime evidence"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"true","purpose":"cover demo contract","assertions":["execution reruns after validation failure, completes after validation-ok exists, and produces screenshot-demo evidence"]}],"required_evidence":[{"id":"screenshot-demo","kind":"screenshot","path":"test-results/demo.png","purpose":"prove demo runtime"}]} ' > "$acceptance"
     ;;
   execution*)
     execution_count_file="$repo/.fake-execution-count"
@@ -99,19 +99,16 @@ ln -sf "$fakebin/codex" "$fakebin/pi"
 ln -sf "$fakebin/codex" "$fakebin/agy"
 
 cat > wo.yaml <<'EOF'
-wo:
-  workflow:
-    max_review_iterations: 0
-    parallel:
-      enabled: false
-    validation:
-      max_attempts_per_stage: 2
-      commands:
-        - executable: test
-          args: ["-f", "validation-ok"]
-  prompts:
-    execution: "{{.Stage}}\n"
-    archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
+max_review_iterations: 0
+parallel: false
+validation:
+  limit: 2
+  commands:
+    - executable: test
+      args: ["-f", "validation-ok"]
+prompts:
+  execution: "{{.Stage}}\n"
+  archive: "{{.Stage}} {{.DeliverySummaryPath}}\n"
 EOF
 
 PATH="$fakebin:/usr/bin:/bin" HOME="$home" XDG_STATE_HOME="$state_home" "$bin" run --change demo --json > run.json
