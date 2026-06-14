@@ -88,6 +88,14 @@
 - **并且** `internal/app/app.go` 不得重新直接包含 `run`、`resume`、`batch`、`restart`、`status`、`abort`、`clean`、`watch`、`--resume`、`--run` 这些 repo 命令的大 switch case
 - **并且** `internal/app` 与 `cmd/oz` 命令面回归必须通过，证明拆分不改变现有 CLI 行为
 
+### 场景：standalone oz CLI 命令边界保持清晰
+
+- **当** 维护者调整 standalone `oz` CLI 的入口、安装、提案查询、校验或归档命令
+- **则** `internal/ozcli/cli.go`、`internal/ozcli/cmd_install.go`、`internal/ozcli/cmd_change.go`、`internal/ozcli/cmd_validate.go` 和 `internal/ozcli/cmd_archive.go` 必须作为独立边界文件存在
+- **并且** `Main/run`、`installCmd/printInstallHelp`、`listCmd/createCmd/statusCmd`、`validateCmd/validateChange/validateAcceptanceFiles`、`archiveCmd/ensureTasksDone` 必须分别落在对应职责文件
+- **并且** `internal/ozcli/ozcli.go` 不得重新成为 700 行以上的混合职责文件
+- **并且** `internal/ozcli` Go 回归必须通过，证明拆分不改变现有 CLI 行为
+
 ### 场景：工作流配置解析边界保持清晰
 
 - **当** 维护者调整 `oz-flow.yaml` schema、profile 模板、parallel 展开或 validation 配置解析

@@ -1,0 +1,34 @@
+{
+  "summary": "验证 standalone oz CLI 按命令职责拆分，同时保持现有命令和校验回归稳定。",
+  "coverage": [
+    {
+      "spec": "需求：ozcli 命令边界拆分 / 场景：入口、install、change、validate、archive 命令被分离",
+      "tests": ["ozcli-boundary"],
+      "evidence": ["ozcli-boundary-log"],
+      "risk": "该证据覆盖 ozcli 单元回归，不覆盖 release 打包流程。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "ozcli-boundary",
+      "source": "change_contract",
+      "path": "docs/changes/34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh",
+      "command": "bash docs/changes/34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh",
+      "purpose": "通过 ozcli-boundary-log 证明 ozcli 入口、install、change、validate、archive 命令已拆分，并且 ozcli Go 回归通过。",
+      "assertions": [
+        "ozcli 的入口、install、change、validate 和 archive 命令分别位于独立 Go 文件",
+        "ozcli.go 不再是 700 行以上混合职责文件",
+        "go test ./internal/ozcli 全部通过并写入 test-results/34-ozcli-boundary/contract.log"
+      ],
+      "expected_initial_failure": "当前 ozcli.go 尚未拆分时，应失败于缺少目标文件或关键函数仍在旧文件。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "ozcli-boundary-log",
+      "kind": "runtime_log",
+      "path": "test-results/34-ozcli-boundary/contract.log",
+      "purpose": "记录 ozcli 结构检查和 Go 回归命令输出；该文件是本地运行产物，不进入 git。"
+    }
+  ]
+}
