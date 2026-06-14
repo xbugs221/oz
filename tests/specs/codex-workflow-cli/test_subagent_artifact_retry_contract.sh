@@ -275,12 +275,16 @@ grep -Eq 'evidence|字符串数组|string' "$RESULT_DIR/pi-prompts.log" || fail 
 if grep -q 'SUBAGENT_OUTPUT=' "$RESULT_DIR/pi-prompts.log"; then
   fail "subagent prompt must not expose artifact output path"
 fi
-grep -q '最终只输出' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must require final JSON output"
+grep -q 'ARTIFACT_PATH=' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must provide ARTIFACT_PATH"
+grep -q 'wo validate-member-artifact' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must provide member artifact validation command"
+if grep -q '最终只输出' "$RESULT_DIR/pi-prompts.log"; then
+  fail "retry prompt must not rely on final bare JSON output"
+fi
 
 state="$(find "$TMP/state/wo/repos" -name state.json -type f -print | sort | tail -n 1)"
 test -n "$state" || fail "missing state.json"
 run_dir="$(dirname "$state")"
-member_artifact="$(find "$run_dir/parallel-members/planning_context" -name '*.json' -type f -print | head -n 1)"
+member_artifact="$(find "$run_dir/parallel-members/planning_context" -path '*.artifact/member.json' -type f -print | head -n 1)"
 test -n "$member_artifact" || fail "missing planning_context member artifact"
 python3 - "$member_artifact" <<'PY' || exit 1
 import json

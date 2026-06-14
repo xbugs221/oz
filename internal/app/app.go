@@ -28,6 +28,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return nil
 		case "validate-review":
 			return runValidateReviewArtifact(args[1:], stdout)
+		case "validate-member-artifact":
+			return runValidateMemberArtifact(args[1:], stdout)
 		case "update":
 			if len(args) != 1 {
 				return fmt.Errorf("用法：wo update")

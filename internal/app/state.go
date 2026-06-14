@@ -1662,6 +1662,11 @@ func (guard gitSnapshotGuard) Detail() string {
 
 // classifyGitSnapshotChange separates new unrelated demand proposal edits from current-run writes.
 func classifyGitSnapshotChange(repo, changeName, beforeHead, beforeDiff, afterHead, afterDiff string) (gitSnapshotGuard, error) {
+	return classifyGitSnapshotChangeWithAllowed(repo, changeName, beforeHead, beforeDiff, afterHead, afterDiff, nil)
+}
+
+// classifyGitSnapshotChangeWithAllowed allows scoped runtime artifact writes in addition to unrelated proposals.
+func classifyGitSnapshotChangeWithAllowed(repo, changeName, beforeHead, beforeDiff, afterHead, afterDiff string, allowedDirs []string) (gitSnapshotGuard, error) {
 	paths := changedStatusPaths(beforeDiff, afterDiff)
 	if beforeHead != afterHead {
 		commitPaths, err := committedPaths(repo, beforeHead, afterHead)
@@ -1672,14 +1677,46 @@ func classifyGitSnapshotChange(repo, changeName, beforeHead, beforeDiff, afterHe
 	}
 	var blocked []string
 	var allowed []string
+	allowedPrefixes := gitRelativeAllowedPrefixes(repo, allowedDirs)
 	for _, path := range uniqueSortedPaths(paths) {
-		if isUnrelatedChangePath(path, changeName) {
+		if isUnrelatedChangePath(path, changeName) || isAllowedGitPath(path, allowedPrefixes) {
 			allowed = append(allowed, path)
 			continue
 		}
 		blocked = append(blocked, path)
 	}
 	return gitSnapshotGuard{Blocked: len(blocked) > 0, Paths: blocked, Allowed: allowed}, nil
+}
+
+// gitRelativeAllowedPrefixes converts absolute artifact directories to git status path prefixes.
+func gitRelativeAllowedPrefixes(repo string, dirs []string) []string {
+	var prefixes []string
+	for _, dir := range dirs {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		rel, err := filepath.Rel(repo, dir)
+		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			continue
+		}
+		prefix := strings.TrimPrefix(filepath.ToSlash(rel), "./")
+		if prefix != "" && prefix != "." {
+			prefixes = append(prefixes, strings.TrimSuffix(prefix, "/")+"/")
+		}
+	}
+	return prefixes
+}
+
+// isAllowedGitPath checks whether a changed file is inside the current member artifact directory.
+func isAllowedGitPath(path string, allowedPrefixes []string) bool {
+	path = strings.TrimPrefix(filepath.ToSlash(path), "./")
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // changedStatusPaths returns paths whose porcelain status changed since the saved baseline.

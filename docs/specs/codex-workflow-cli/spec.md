@@ -423,13 +423,15 @@
 
 - **给定** go-dag 在进程内调度 `before_review` 的 subagent 节点，参数包含 run id、member name、stage 和 iteration
 - **当** subagent 正常退出但写出的 member artifact 中 `evidence` 为对象数组而非字符串数组
-- **则** 系统必须 resume 同一 subagent session 要求只重写 `SUBAGENT_OUTPUT`
-- **且** 修正 prompt 必须包含字段名、期望类型和 artifact 路径
-- **且** 最多重试 3 次，仍失败才将 run 标记为 `failed`
+- **则** 系统必须 resume 同一 subagent session 要求只重写 `ARTIFACT_PATH`
+- **且** 修正 prompt 必须包含字段名、期望类型、`ARTIFACT_DIR` 和 artifact 路径
+- **且** 最多重试 3 次，仍失败时必须写出 `status=failed` 的 member artifact 作为证据输入，不得仅因 helper artifact 交付失败将 run 标记为 `failed`
 - **且** 修正通过后 fan-in 才能继续读取该成员产物
-- **则** `wo` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE` 和 `SUBAGENT_OUTPUT`
+- **则** `wo` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE`、`ARTIFACT_DIR` 和 `ARTIFACT_PATH`
 - **且** prompt 必须要求 subagent 先读取当前 run 的 `state.json`、当前 `docs/changes/<change>` 和当前 `acceptance.json`，不得自行把其它活动提案作为当前目标
-- **且** subagent 必须写出单成员 JSON artifact，不能修改源码或 worktree
+- **且** member artifact 路径必须是 `parallel-members/<group>/<iteration>/<member-slug>.artifact/member.json`；非迭代 group 可省略 `<iteration>` 层
+- **且** subagent 必须只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact，不能修改源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact
+- **且** prompt 必须提供 `wo validate-member-artifact --artifact "$ARTIFACT_PATH" --group <group> --member <member> --change <change-name>` 自校验命令
 - **且** 单成员 JSON 顶层只允许 `name`、`change_name`、`purpose`、`status`、`summary`、`evidence`、`findings`、`required`
 - **且** `change_name` 必须等于当前 run 的 `state.change_name`，否则必须按 artifact 格式错误重试或失败
 - **且** `evidence` 必须是字符串数组
@@ -442,8 +444,13 @@
 - **则** `wo` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
 - **当** go-dag 在进程内执行 gate 节点
 - **则** review clean 必须由主审核归一化 gate_input subagent 结论后决定，原始 subagent finding 或成员失败不得直接覆盖主 review artifact
-- **且** QA clean 不得忽略 gate_input subagent 的 blocker/major finding、成员失败或 required evidence 缺失
+- **且** QA clean 不得忽略已有 gate_input subagent artifact 中当前提案 blocker/major finding
+- **且** helper artifact 缺失、格式错误、成员失败或 required helper 未产出证据只作为主阶段证据完整性输入，不得直接覆盖主 QA/Review 决策
+- **且** implementation context 只作为 execution 前上下文输入，不得因 required helper 自身失败阻断 execution
 - **且** clean review/QA 必须跳过未激活 fix 分支，needs_fix 必须激活下一轮 fix/review/QA 分支
+- **测试**：`tests/specs/codex-workflow-cli/test_subagent_artifact_directory_contract.sh`
+- **真实数据来源**：脚本临时写入 `internal/app` 包级测试，调用真实 `memberArtifactPath`、`subagentPrompt`、`wo validate-member-artifact` 分发入口和 `nodeRunSubagent`
+- **关键断言**：member artifact 固定为 `*.artifact/member.json`；prompt 提供 `ARTIFACT_PATH` 和校验命令；格式坏的 required QA helper 产出 failed member artifact 但不把 run 置为 failed；sibling artifact 写入仍阻断
 
 #### 场景：并行层开启时主阶段不变
 

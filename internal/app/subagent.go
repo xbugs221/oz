@@ -107,6 +107,14 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		if err != nil {
 			return err
 		}
+		attemptRunFiles, err := runArtifactFileSnapshot(runDir(e.Repo, state.RunID))
+		if err != nil {
+			return e.failNodeState(state, err)
+		}
+		attemptState, err := loadState(e.Repo, state.RunID)
+		if err != nil {
+			return e.failNodeState(state, err)
+		}
 		runner := tool.NewRunner()
 		if runner, ok := runner.(progressSetter); ok {
 			runner.SetProgress(&subagentProgressWriter{engine: e, state: &state, sessionKey: sessionKey})
@@ -126,25 +134,34 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 			err = fmt.Errorf("%w: subagent %s 第 %d 次执行超过 %s，可由 go-dag 重试", errGoDAGRetryableNode, member.Name, attempt, subagentAttemptTimeout)
 		}
 		cancelAttempt()
-		if boundaryErr := e.checkSubagentReadOnlyBoundary(state, member, attempt, artifactPath, attemptHead, attemptDiff); boundaryErr != nil {
+		if boundaryErr := e.checkSubagentReadOnlyBoundary(state, member, attempt, artifactPath, attemptHead, attemptDiff, attemptRunFiles, attemptState, sessionKey); boundaryErr != nil {
 			return boundaryErr
 		}
 		if err != nil {
 			return e.failNodeState(state, fmt.Errorf("%w: subagent %s 第 %d 次执行失败，可由 go-dag 重试：%v", errGoDAGRetryableNode, member.Name, attempt, err))
 		}
-		if err := materializeCapturedMemberArtifact(artifactPath, capture, member, state.ChangeName); err != nil {
-			schemaErr = err
-			if attempt == 3 {
-				return e.failNodeState(state, fmt.Errorf("subagent %s artifact 格式校验失败（%s）：%w", member.Name, artifactPath, schemaErr))
+		if fileExists(artifactPath) {
+			result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
+			if schemaErr == nil {
+				break
 			}
-			continue
-		}
-		result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
-		if schemaErr == nil {
-			break
+		} else {
+			if err := materializeCapturedMemberArtifact(artifactPath, capture, member, state.ChangeName); err != nil {
+				schemaErr = err
+				if attempt == 3 {
+					result = subagentArtifactFailureResult(member, state.ChangeName, artifactPath, schemaErr)
+					break
+				}
+				continue
+			}
+			result, schemaErr = readNormalizeValidateMemberArtifact(artifactPath, configName, member, state.ChangeName)
+			if schemaErr == nil {
+				break
+			}
 		}
 		if attempt == 3 {
-			return e.failNodeState(state, fmt.Errorf("subagent %s artifact 格式校验失败（%s）：%w", member.Name, artifactPath, schemaErr))
+			result = subagentArtifactFailureResult(member, state.ChangeName, artifactPath, schemaErr)
+			break
 		}
 	}
 
@@ -156,7 +173,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		return err
 	}
 	if beforeHead != afterHead || beforeDiff != afterDiff {
-		guard, err := classifyGitSnapshotChange(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff)
+		guard, err := classifyGitSnapshotChangeWithAllowed(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff, []string{filepath.Dir(artifactPath)})
 		if err != nil {
 			return e.failNodeState(state, err)
 		}
@@ -179,6 +196,24 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage, Group: groupName, Member: memberName, Artifact: artifactPath})
 }
 
+// subagentArtifactFailureResult records helper delivery failure as stage input instead of a workflow blocker.
+func subagentArtifactFailureResult(member ParallelMemberConfig, changeName, artifactPath string, err error) ParallelMemberResult {
+	summary := "helper artifact delivery failed; main stage should proceed with remaining context"
+	evidence := []string{"artifact delivery failed: " + artifactPath}
+	if err != nil {
+		evidence = append(evidence, "error: "+err.Error())
+	}
+	return ParallelMemberResult{
+		Name:       member.Name,
+		ChangeName: changeName,
+		Purpose:    member.Purpose,
+		Status:     "failed",
+		Summary:    summary,
+		Evidence:   evidence,
+		Required:   member.Required,
+	}
+}
+
 // subagentAttemptContext bounds one helper invocation while preserving parent cancellation.
 func subagentAttemptContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if subagentAttemptTimeout <= 0 {
@@ -188,22 +223,224 @@ func subagentAttemptContext(parent context.Context) (context.Context, context.Ca
 }
 
 // checkSubagentReadOnlyBoundary enforces the read-only contract after every subagent tool attempt.
-func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff string) error {
+func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff string, beforeRunFiles map[string]string, beforeState State, sessionKey string) error {
 	afterHead, afterDiff, err := gitSnapshot(e.Repo)
 	if err != nil {
 		return err
 	}
-	if beforeHead == afterHead && beforeDiff == afterDiff {
-		return nil
-	}
-	guard, err := classifyGitSnapshotChange(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff)
+	runGuard, err := classifyRunArtifactChanges(runDir(e.Repo, state.RunID), beforeRunFiles, filepath.Dir(artifactPath), beforeState, sessionKey)
 	if err != nil {
 		return e.failNodeState(state, err)
 	}
-	if guard.Blocked {
-		return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到当前 run 相关路径或源码变化（%s），artifact=%s", member.Name, attempt, guard.Detail(), artifactPath))
+	if beforeHead == afterHead && beforeDiff == afterDiff && !runGuard.Blocked {
+		return nil
+	}
+	guard, err := classifyGitSnapshotChangeWithAllowed(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff, []string{filepath.Dir(artifactPath)})
+	if err != nil {
+		return e.failNodeState(state, err)
+	}
+	if guard.Blocked || runGuard.Blocked {
+		detail := guard.Detail()
+		if runGuard.Blocked {
+			detail = runGuard.Detail()
+			if guard.Blocked {
+				detail = guard.Detail() + "; " + runGuard.Detail()
+			}
+		}
+		return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到当前 run 相关路径或源码变化（%s），artifact=%s", member.Name, attempt, detail, artifactPath))
 	}
 	return nil
+}
+
+type runArtifactGuard struct {
+	Blocked bool
+	Paths   []string
+}
+
+// Detail formats run artifact paths that explain a filesystem boundary decision.
+func (guard runArtifactGuard) Detail() string {
+	if len(guard.Paths) == 0 {
+		return "run artifact 变化"
+	}
+	limit := len(guard.Paths)
+	if limit > 5 {
+		limit = 5
+	}
+	detail := strings.Join(guard.Paths[:limit], ", ")
+	if len(guard.Paths) > limit {
+		detail += fmt.Sprintf(" 等 %d 个路径", len(guard.Paths))
+	}
+	return detail
+}
+
+// runArtifactFileSnapshot records current run files so repo-external artifacts stay guarded.
+func runArtifactFileSnapshot(root string) (map[string]string, error) {
+	files := map[string]string{}
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		return files, nil
+	} else if err != nil {
+		return nil, err
+	}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(rel)] = fmt.Sprintf("%d:%x", info.Size(), sha1.Sum(data))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// classifyRunArtifactChanges blocks run-local writes outside the active member artifact directory.
+func classifyRunArtifactChanges(root string, before map[string]string, allowedDir string, beforeState State, sessionKey string) (runArtifactGuard, error) {
+	after, err := runArtifactFileSnapshot(root)
+	if err != nil {
+		return runArtifactGuard{}, err
+	}
+	allowedRel, err := filepath.Rel(root, allowedDir)
+	if err != nil {
+		allowedRel = ""
+	}
+	allowedRel = strings.TrimSuffix(filepath.ToSlash(allowedRel), "/")
+	var blocked []string
+	for _, path := range changedRunArtifactPaths(before, after) {
+		if allowedRel != "" && allowedRel != "." && (path == allowedRel || strings.HasPrefix(path, allowedRel+"/")) {
+			continue
+		}
+		if path == "state.json" {
+			ok, err := stateJSONOnlySessionChange(root, beforeState, sessionKey)
+			if err != nil {
+				return runArtifactGuard{}, err
+			}
+			if ok {
+				continue
+			}
+		}
+		blocked = append(blocked, path)
+	}
+	return runArtifactGuard{Blocked: len(blocked) > 0, Paths: blocked}, nil
+}
+
+// stateJSONOnlySessionChange allows framework-owned subagent session progress persistence.
+func stateJSONOnlySessionChange(root string, before State, sessionKey string) (bool, error) {
+	if strings.TrimSpace(sessionKey) == "" {
+		return false, nil
+	}
+	data, err := os.ReadFile(filepath.Join(root, "state.json"))
+	if err != nil {
+		return false, err
+	}
+	var after State
+	if err := json.Unmarshal(data, &after); err != nil {
+		return false, err
+	}
+	if after.Sessions == nil {
+		return false, nil
+	}
+	sessionID, ok := after.Sessions[sessionKey]
+	if !ok || sessionID == "" {
+		return false, nil
+	}
+	for key, value := range after.Sessions {
+		if key == sessionKey {
+			continue
+		}
+		if before.Sessions == nil || before.Sessions[key] != value {
+			return false, nil
+		}
+	}
+	for key, value := range before.Sessions {
+		if key == sessionKey {
+			continue
+		}
+		if after.Sessions[key] != value {
+			return false, nil
+		}
+	}
+	normalized := after
+	normalized.Sessions = copyStringMap(before.Sessions)
+	if !processSessionOnlyAllowed(before.Processes, after.Processes, sessionKey, sessionID) {
+		return false, nil
+	}
+	normalized.Processes = append([]ProcessState(nil), before.Processes...)
+	beforeData, err := json.Marshal(before)
+	if err != nil {
+		return false, err
+	}
+	normalizedData, err := json.Marshal(normalized)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(beforeData, normalizedData), nil
+}
+
+// processSessionOnlyAllowed checks the process view only gained the same subagent session id.
+func processSessionOnlyAllowed(before, after []ProcessState, sessionKey, sessionID string) bool {
+	_, role, ok := strings.Cut(sessionKey, ":")
+	if !ok || role == "" {
+		return false
+	}
+	if len(before) != len(after) {
+		return false
+	}
+	for i := range before {
+		expected := before[i]
+		if expected.Role == role {
+			expected.SessionID = sessionID
+		}
+		if expected != after[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// copyStringMap duplicates state maps before normalizing allowed deltas.
+func copyStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	copied := make(map[string]string, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
+}
+
+// changedRunArtifactPaths returns files whose content appeared, disappeared, or changed.
+func changedRunArtifactPaths(before, after map[string]string) []string {
+	seen := map[string]bool{}
+	var changed []string
+	for path, beforeSig := range before {
+		seen[path] = true
+		if after[path] != beforeSig {
+			changed = append(changed, path)
+		}
+	}
+	for path := range after {
+		if !seen[path] {
+			changed = append(changed, path)
+		}
+	}
+	return uniqueSortedPaths(changed)
 }
 
 // subagentOptions resolves member-specific backend settings.
@@ -263,8 +500,7 @@ func subagentPromptContext(repo string, state State) (subagentContext, error) {
 }
 
 func subagentPrompt(groupName string, member ParallelMemberConfig, output string, context subagentContext) string {
-	_ = groupName
-	_ = output
+	artifactDir := filepath.Dir(output)
 	return strings.Join([]string{
 		"你是 " + member.Name + "，职责：" + member.Purpose + "。",
 		"",
@@ -276,6 +512,8 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 		"ACCEPTANCE_PATH=" + context.AcceptancePath,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
+		"ARTIFACT_DIR=" + artifactDir,
+		"ARTIFACT_PATH=" + output,
 		"",
 		"判断范围：",
 		"- 先判断当前提案是否与你的职责相关；无关时立即输出 relevant:false、irrelevant_reason、status:\"skipped\"、findings:[]，不要继续探索。",
@@ -284,7 +522,11 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
 		"- blocker/major 只用于当前提案范围内的明确失败。",
 		"",
-		"最终只输出一个 JSON object，不要输出 Markdown、解释或额外文本。字段必须严格为：",
+		"交付合同：",
+		"- 只在 ARTIFACT_DIR 内写入结果文件，目标固定为 ARTIFACT_PATH。",
+		"- 写入后必须运行：wo validate-member-artifact --artifact \"$ARTIFACT_PATH\" --group " + groupName + " --member " + member.Name + " --change " + context.ChangeName,
+		"- 最终回复只简短说明已写入和校验结果；不要把 JSON 作为最终回复传输。",
+		"ARTIFACT_PATH 文件字段必须严格为：",
 		memberArtifactSchemaPrompt(),
 	}, "\n") + "\n"
 }
@@ -301,11 +543,11 @@ func nodeIteration(args []string, stage string) (int, error) {
 }
 
 func memberArtifactPath(repo, runID, group string, iteration int, member string) string {
-	slugName := memberArtifactFileName(member)
+	dirName := memberArtifactFileName(member) + ".artifact"
 	if iteration > 0 {
-		return filepath.Join(runDir(repo, runID), "parallel-members", group, strconv.Itoa(iteration), slugName+".json")
+		return filepath.Join(runDir(repo, runID), "parallel-members", group, strconv.Itoa(iteration), dirName, "member.json")
 	}
-	return filepath.Join(runDir(repo, runID), "parallel-members", group, slugName+".json")
+	return filepath.Join(runDir(repo, runID), "parallel-members", group, dirName, "member.json")
 }
 
 func memberArtifactFileName(member string) string {
@@ -345,6 +587,9 @@ func readNormalizeValidateMemberArtifact(path string, group string, member Paral
 	result.Purpose = nonEmpty(result.Purpose, member.Purpose)
 	result.Status = normalizeMemberStatus(result.Status)
 	result.Required = member.Required
+	if strings.TrimSpace(result.Summary) == "" && result.Relevant != nil && !*result.Relevant {
+		result.Summary = result.IrrelevantReason
+	}
 	if strings.TrimSpace(result.Name) == "" {
 		return ParallelMemberResult{}, fmt.Errorf("group=%s member=%s field=name artifact=%s: name 不能为空", group, member.Name, path)
 	}
@@ -520,15 +765,14 @@ func normalizeCapturedMemberRawJSON(raw map[string]interface{}) ([]byte, error) 
 	return json.Marshal(raw)
 }
 
-// artifactRetryPrompt builds a prompt that resumes the same subagent session to return corrected JSON.
+// artifactRetryPrompt builds a prompt that resumes the same subagent session to repair the artifact file.
 func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifactPath string, schemaErr error, context subagentContext) string {
-	_ = groupName
-	_ = artifactPath
+	artifactDir := filepath.Dir(artifactPath)
 	return strings.Join([]string{
 		"你是 " + member.Name + "，职责：" + member.Purpose + "。",
 		"",
-		"上次最终 JSON 格式错误：" + schemaErr.Error(),
-		"请基于当前提案重新输出一个合法 JSON object。",
+		"上次 artifact 文件格式错误：" + schemaErr.Error(),
+		"请基于当前提案修正 ARTIFACT_PATH 指向的 JSON 文件。",
 		"只处理当前提案：" + context.ChangeName + "。",
 		"",
 		"CURRENT_CHANGE=" + context.ChangeName,
@@ -537,6 +781,8 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"ACCEPTANCE_PATH=" + context.AcceptancePath,
 		"SUBAGENT_NAME=" + member.Name,
 		"SUBAGENT_PURPOSE=" + member.Purpose,
+		"ARTIFACT_DIR=" + artifactDir,
+		"ARTIFACT_PATH=" + artifactPath,
 		"",
 		"判断范围：",
 		"- 先判断当前提案是否与你的职责相关；无关时立即输出 relevant:false、irrelevant_reason、status:\"skipped\"、findings:[]，不要继续探索。",
@@ -544,7 +790,9 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"- 历史债务、无关问题、扩展建议，写 scope=0，不得阻断。",
 		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
 		"- blocker/major 只用于当前提案范围内的明确失败。",
-		"最终只输出裸 JSON object，不要使用 markdown 代码块，不要输出解释文字。",
+		"只在 ARTIFACT_DIR 内写入结果文件，目标固定为 ARTIFACT_PATH。",
+		"写入后必须运行：wo validate-member-artifact --artifact \"$ARTIFACT_PATH\" --group " + groupName + " --member " + member.Name + " --change " + context.ChangeName,
+		"最终回复只简短说明已写入和校验结果；不要把 JSON 作为最终回复传输。",
 		memberArtifactSchemaPrompt(),
 	}, "\n") + "\n"
 }

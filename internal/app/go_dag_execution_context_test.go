@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -31,8 +32,13 @@ func (goDAGContextFakeTool) PlanningCommand(context.Context, string, string, io.
 func (t goDAGContextFakeTool) NewRunner() AgentRunner { return t.runner }
 
 type goDAGContextFakeRunner struct {
-	mainCalls int
-	capture   *artifactCapture
+	mainCalls           int
+	capture             *artifactCapture
+	progress            io.Writer
+	emitSessionProgress bool
+	writeOwnMember      bool
+	writeSiblingMember  bool
+	captureMalformed    bool
 }
 
 // TestGoDAGRetryableHelperErrorRestoresRunningState verifies transient helper failures stay retryable.
@@ -146,6 +152,10 @@ func (r *goDAGContextFakeRunner) SetArtifactCapture(capture *artifactCapture) {
 	r.capture = capture
 }
 
+func (r *goDAGContextFakeRunner) SetProgress(progress io.Writer) {
+	r.progress = progress
+}
+
 // Run writes either a subagent artifact or the execution task completion marker.
 func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID string, _ StageOptions) (string, error) {
 	// SUBAGENT_NAME marks helper prompts; main execution prompts update task.md.
@@ -153,14 +163,168 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 		purpose := goDAGContextPromptValue(prompt, "SUBAGENT_PURPOSE")
 		changeName := goDAGContextPromptValue(prompt, "CURRENT_CHANGE")
 		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"context ready","evidence":["unit-test"]}` + "\n"
-		if r.capture != nil {
+		if r.emitSessionProgress && r.progress != nil {
+			if _, err := fmt.Fprintln(r.progress, "agent session started: tool=codex session=session-from-progress"); err != nil {
+				return "", err
+			}
+		}
+		if r.writeOwnMember {
+			artifactPath := goDAGContextPromptValue(prompt, "ARTIFACT_PATH")
+			if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(artifactPath, []byte(body), 0o644); err != nil {
+				return "", err
+			}
+		}
+		if r.writeSiblingMember {
+			artifactPath := goDAGContextPromptValue(prompt, "ARTIFACT_PATH")
+			sibling := filepath.Join(filepath.Dir(filepath.Dir(artifactPath)), "sibling.artifact", "probe.txt")
+			if err := os.MkdirAll(filepath.Dir(sibling), 0o755); err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(sibling, []byte("unexpected sibling write\n"), 0o644); err != nil {
+				return "", err
+			}
+		}
+		if r.capture != nil && r.captureMalformed {
+			r.capture.Append("not a member artifact\n")
+		} else if r.capture != nil {
 			r.capture.Append(body)
+		}
+		if r.emitSessionProgress {
+			return "session-from-progress", nil
 		}
 		return "subagent-" + name, nil
 	}
 	r.mainCalls++
 	task := filepath.Join(repo, "docs", "changes", "demo", "task.md")
 	return "executor-thread", os.WriteFile(task, []byte("- [x] task\n"), 0o644)
+}
+
+// TestSubagentMalformedArtifactBecomesAdvisoryInput keeps helper delivery failures from blocking QA.
+func TestSubagentMalformedArtifactBecomesAdvisoryInput(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "malformed-helper-artifact-run"
+	state := goDAGContextQAState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{captureMalformed: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	var stdout bytes.Buffer
+	err := engine.nodeRunSubagent(context.Background(), state, []string{
+		"--group", "before_qa",
+		"--stage", "qa_1",
+		"--iteration", "1",
+		"--member", "浏览器路径测试员",
+	}, &stdout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result nodeResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "completed" {
+		t.Fatalf("node status = %q, want completed", result.Status)
+	}
+	member, err := readMemberArtifact(memberArtifactPath(repo, runID, "qa", 1, "浏览器路径测试员"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if member.Status != "failed" || member.Summary == "" || len(member.Evidence) == 0 {
+		t.Fatalf("synthetic helper artifact = %#v, want failed advisory evidence", member)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Status != statusRunning || persisted.Error != "" {
+		t.Fatalf("state status/error = %q/%q, want running without workflow failure", persisted.Status, persisted.Error)
+	}
+}
+
+// TestSubagentBoundaryBlocksSiblingRunArtifact proves repo-external run writes are guarded.
+func TestSubagentBoundaryBlocksSiblingRunArtifact(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "sibling-runtime-artifact-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeSiblingMember: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	err := engine.runGoDAGNode(context.Background(), runID, node)
+	if err == nil {
+		t.Fatal("sibling run artifact write was not blocked")
+	}
+	if !strings.Contains(err.Error(), "只读边界") || !strings.Contains(err.Error(), "sibling.artifact/probe.txt") {
+		t.Fatalf("error = %v, want read-only boundary failure mentioning sibling artifact", err)
+	}
+}
+
+// TestSubagentBoundaryAllowsSessionProgressStateWrite keeps resumable helper sessions legal.
+func TestSubagentBoundaryAllowsSessionProgressStateWrite(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "session-progress-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{emitSessionProgress: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := sessionStateKey("codex", "subagent:implementation_context:代码库侦察员:0")
+	if persisted.Sessions[key] != "session-from-progress" {
+		t.Fatalf("persisted session %q = %q, want session-from-progress", key, persisted.Sessions[key])
+	}
+}
+
+// TestGoDAGSubagentsWritingOwnArtifactsDoNotConflict keeps parallel helper outputs legitimate.
+func TestGoDAGSubagentsWritingOwnArtifactsDoNotConflict(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "own-runtime-artifact-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeOwnMember: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	if err := engine.runGoDAGLocked(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	for _, member := range state.Workflow.Parallel.Groups["implementation_context"].Members {
+		artifact := memberArtifactPath(repo, runID, "implementation_context", 0, member.Name)
+		if !fileExists(artifact) {
+			t.Fatalf("member artifact %s was not written", artifact)
+		}
+	}
 }
 
 // goDAGContextPromptValue reads key=value metadata from generated prompts.
@@ -432,6 +596,29 @@ func goDAGContextState(t *testing.T, repo string, runID string) State {
 		ChangeName:   "demo",
 		Status:       statusRunning,
 		Stage:        "execution",
+		BaselineHead: head,
+		BaselineDiff: diff,
+		Sessions:     map[string]string{},
+		Stages:       map[string]string{},
+		Workflow:     workflow,
+	}
+}
+
+// goDAGContextQAState builds a running QA state with the default QA helper group.
+func goDAGContextQAState(t *testing.T, repo string, runID string) State {
+	t.Helper()
+	head, diff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := DefaultWorkflowConfig()
+	workflow.Engine = "go-dag"
+	workflow.Validation = ValidationConfig{MaxAttemptsPerStage: 3}
+	return State{
+		RunID:        runID,
+		ChangeName:   "demo",
+		Status:       statusRunning,
+		Stage:        "qa_1",
 		BaselineHead: head,
 		BaselineDiff: diff,
 		Sessions:     map[string]string{},

@@ -129,21 +129,16 @@ func ValidateParallelArtifact(artifact ParallelArtifact) error {
 	return nil
 }
 
-// ValidateParallelReviewGate validates review helper artifacts without letting raw helper noise
-// override the main reviewer's normalized decision.
+// ValidateParallelReviewGate leaves the hard review decision to the main reviewer.
 func ValidateParallelReviewGate(runPath string, workflow WorkflowConfig, iteration int, review Review) error {
-	_, ok, err := readEnabledParallelArtifact(runPath, workflow, "review", iteration)
-	if err != nil || !ok {
-		return err
-	}
 	return nil
 }
 
-// ValidateParallelQAGate blocks clean QA only when helper output reports hard current-change findings.
+// ValidateParallelQAGate blocks clean QA only when available helper output reports hard current-change findings.
 func ValidateParallelQAGate(runPath string, workflow WorkflowConfig, iteration int, qa QA) error {
 	artifact, ok, err := readEnabledParallelArtifact(runPath, workflow, "qa", iteration)
 	if err != nil || !ok {
-		return err
+		return nil
 	}
 	if qa.Decision == "clean" && artifactHasSevereFinding(artifact) {
 		return fmt.Errorf("clean qa 不得忽略 parallel-qa-%d.json 中的 gate_input finding", iteration)
@@ -151,17 +146,8 @@ func ValidateParallelQAGate(runPath string, workflow WorkflowConfig, iteration i
 	return nil
 }
 
-// ValidateParallelContextGate blocks execution when required implementation context failed.
+// ValidateParallelContextGate leaves execution gating to the main stage and deterministic validation.
 func ValidateParallelContextGate(runPath string, workflow WorkflowConfig) error {
-	for _, group := range []string{"planning_context", "implementation_context"} {
-		artifact, ok, err := readEnabledParallelArtifact(runPath, workflow, group, 0)
-		if err != nil || !ok {
-			return err
-		}
-		if artifactHasRequiredFailure(artifact) {
-			return fmt.Errorf("%s 中 required 成员失败", filepath.Base(parallelArtifactPath(runPath, group, 0)))
-		}
-	}
 	return nil
 }
 

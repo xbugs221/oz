@@ -21,6 +21,7 @@ package app
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -87,10 +88,10 @@ func TestHumanStatusHidesParallelFanInSummary(t *testing.T) {
 	got := stdout.String()
 	statusSaveResult(t, "status-single.txt", got)
 	for _, want := range []string{
-		"  执行阶段 writer-session ✓",
-		"  审核阶段 reviewer-session →",
-		"    目标核对 target-session ✓",
-		"    风险检查 risk-session x",
+		"执行   writer-session   ✓",
+		"审核   reviewer-session →",
+		"目标 target-session   ✓",
+		"风险 risk-session     x",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("status output missing %q:\n%s", want, got)
@@ -103,13 +104,13 @@ func TestHumanStatusHidesParallelFanInSummary(t *testing.T) {
 	}
 }
 
-// TestParallelReviewGateRejectsMissingOrInvalidArtifact 验证缺失或非法 fan-in artifact 仍通过机器 gate 暴露为非成功。
-func TestParallelReviewGateRejectsMissingOrInvalidArtifact(t *testing.T) {
+// TestParallelReviewGateAllowsMissingOrInvalidArtifact 验证 helper artifact 交付问题不覆盖主审核决策。
+func TestParallelReviewGateAllowsMissingOrInvalidArtifact(t *testing.T) {
 	repo := gitRepo(t)
 	workflow := statusParallelWorkflowForTest()
 	runPath := runDir(repo, "parallel-status-missing")
-	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err == nil || !strings.Contains(err.Error(), "parallel-review-1.json") {
-		t.Fatalf("missing artifact should block clean review with path, got %v", err)
+	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err != nil {
+		t.Fatalf("missing helper artifact must not block clean review: %v", err)
 	}
 
 	artifactPath := filepath.Join(runPath, "parallel-review-1.json")
@@ -119,13 +120,13 @@ func TestParallelReviewGateRejectsMissingOrInvalidArtifact(t *testing.T) {
 	if err := os.WriteFile(artifactPath, []byte("{not-json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err == nil || !strings.Contains(err.Error(), "parseError") {
-		t.Fatalf("invalid artifact should block clean review as parse error, got %v", err)
+	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err != nil {
+		t.Fatalf("invalid helper artifact must not block clean review: %v", err)
 	}
 }
 
-// TestParallelReviewGateRejectsUnconfiguredParallelMembers 验证 artifact 成员集合必须等于配置成员集合，不能信任未配置成员。
-func TestParallelReviewGateRejectsUnconfiguredParallelMembers(t *testing.T) {
+// TestParallelReviewGateAllowsUnconfiguredParallelMembers 验证未配置 helper 噪声不覆盖主审核决策。
+func TestParallelReviewGateAllowsUnconfiguredParallelMembers(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		status string
@@ -147,8 +148,8 @@ func TestParallelReviewGateRejectsUnconfiguredParallelMembers(t *testing.T) {
 					{Name: "未配置审核员", Purpose: "should not be visible", Status: tc.status, Summary: "poisoned member"},
 				},
 			})
-			if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err == nil || !strings.Contains(err.Error(), "未配置成员") {
-				t.Fatalf("unconfigured member should make artifact invalid, got %v", err)
+			if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err != nil {
+				t.Fatalf("unconfigured helper member must not block clean review: %v", err)
 			}
 		})
 	}
@@ -200,7 +201,7 @@ func TestBatchHumanStatusHidesParallelSummaryUnderChange(t *testing.T) {
 	for _, want := range []string{
 		"批量任务 b1 running 1/1",
 		"- 1-demo",
-		"  执行阶段 writer-session →",
+		"执行 writer-session →",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("batch status output missing %q:\n%s", want, got)
@@ -273,8 +274,35 @@ func statusSaveResult(t *testing.T, name string, text string) {
 		t.Fatal(err)
 	}
 }
+
+func gitRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test User"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "."}, {"commit", "-q", "-m", "initial"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+	return repo
+}
 GO
 
 WO_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR" \
-  OZ_MIGRATED_APP_RUN='TestHumanStatusHidesParallelFanInSummary|TestParallelReviewGateRejectsMissingOrInvalidArtifact|TestParallelReviewGateRejectsUnconfiguredParallelMembers|TestBatchHumanStatusHidesParallelSummaryUnderChange' \
+  OZ_MIGRATED_APP_RUN='TestHumanStatusHidesParallelFanInSummary|TestParallelReviewGateAllowsMissingOrInvalidArtifact|TestParallelReviewGateAllowsUnconfiguredParallelMembers|TestBatchHumanStatusHidesParallelSummaryUnderChange' \
   go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1 -v | tee "$RESULT_DIR/contract.log"

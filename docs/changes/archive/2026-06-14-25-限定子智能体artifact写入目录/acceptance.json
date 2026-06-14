@@ -1,0 +1,70 @@
+{
+  "summary": "验证 parallel subagent 不再依赖最终回复裸 JSON 交付 member artifact，而是获得独立 artifact 目录、固定 member.json 文件和可自校验的 CLI；同时保留对其它文件的写边界。",
+  "coverage": [
+    {
+      "spec": "需求：独立 artifact 目录 / 场景：member artifact 路径固定到专属目录的 member.json",
+      "tests": ["contract-subagent-artifact-directory"],
+      "evidence": ["subagent-artifact-directory-log"],
+      "risk": "不验证 OS 级 sandbox，只验证 wo 分配的目标路径和持久化边界合同。"
+    },
+    {
+      "spec": "需求：prompt 文件交付合同 / 场景：subagent prompt 要求写文件并运行校验命令",
+      "tests": ["contract-subagent-artifact-directory"],
+      "evidence": ["subagent-artifact-directory-log"],
+      "risk": "prompt 不能强制 agent 遵守，执行阶段仍需 schema gate 和 fallback。"
+    },
+    {
+      "spec": "需求：member artifact CLI 校验 / 场景：合法 artifact 可由 CLI 校验通过，非法字段给出可修正错误",
+      "tests": ["contract-subagent-artifact-directory"],
+      "evidence": ["subagent-artifact-directory-log"],
+      "risk": "只覆盖代表性字段错误，不枚举所有 schema 字段组合。"
+    },
+    {
+      "spec": "需求：helper 作为证据输入 / 场景：artifact 交付失败不直接阻断主流程",
+      "tests": ["regression-helper-advisory-input"],
+      "evidence": ["go-test-subagent-advisory-log"],
+      "risk": "helper delivery failure 会降低证据完整性，主 QA/Review 仍需在自身 artifact 中说明证据充分性。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "contract-subagent-artifact-directory",
+      "source": "change_contract",
+      "path": "docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh",
+      "command": "bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh",
+      "purpose": "证明 subagent member artifact 交付改为独立目录 member.json、prompt 提供写文件与校验命令、CLI 能校验合法与非法 artifact；生成 subagent-artifact-directory-log 到 test-results/25-subagent-artifact-directory/subagent-artifact-directory.log",
+      "assertions": [
+        "memberArtifactPath 返回的 basename 是 member.json，父目录以 .artifact 结尾，不同 member 不共用目录",
+        "subagentPrompt 包含 ARTIFACT_DIR、ARTIFACT_PATH、目标路径和 wo validate-member-artifact 命令，且不再以最终裸 JSON 作为主要交付方式",
+        "wo validate-member-artifact 能让合法 member artifact 通过，并对 evidence 对象错误输出 field=evidence、expected=array<string> 和修复建议"
+      ],
+      "expected_initial_failure": "功能未实现时应失败于现有 member artifact 仍是单 JSON 文件、prompt 仍要求最终裸 JSON、或 CLI 缺少 validate-member-artifact。"
+    },
+    {
+      "id": "regression-helper-advisory-input",
+      "source": "new_regression",
+      "path": "internal/app/go_dag_execution_context_test.go",
+      "command": "bash -o pipefail -c 'test -f internal/app/go_dag_execution_context_test.go && mkdir -p test-results/25-subagent-artifact-directory && go test ./internal/app -run \"TestSubagentMalformedArtifactBecomesAdvisoryInput|TestSubagentBoundaryBlocksSiblingRunArtifact|TestSubagentBoundaryAllowsSessionProgressStateWrite\" -count=1 2>&1 | tee test-results/25-subagent-artifact-directory/subagent-advisory-go-test.log'",
+      "purpose": "证明 QA required helper 连续输出不可捕获内容时不会阻断主流程，但 sibling artifact 写入仍会被只读边界阻断，合法 session progress 写 state.json 仍放行。",
+      "assertions": [
+        "TestSubagentMalformedArtifactBecomesAdvisoryInput 写出 status=failed 的 member artifact，节点返回 completed，run state 不进入 failed",
+        "TestSubagentBoundaryBlocksSiblingRunArtifact 继续阻断 sibling artifact 写入",
+        "TestSubagentBoundaryAllowsSessionProgressStateWrite 继续允许框架自有 session progress 写 state.json"
+      ]
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "subagent-artifact-directory-log",
+      "kind": "runtime_log",
+      "path": "test-results/25-subagent-artifact-directory/subagent-artifact-directory.log",
+      "purpose": "记录契约测试执行、初始失败点和最终通过断言；该文件由 contract-subagent-artifact-directory 命令显式生成，不进入 git。"
+    },
+    {
+      "id": "go-test-subagent-advisory-log",
+      "kind": "runtime_log",
+      "path": "test-results/25-subagent-artifact-directory/subagent-advisory-go-test.log",
+      "purpose": "记录 helper advisory gate 回归测试输出；该文件由 go test 命令 tee 生成，不进入 git。"
+    }
+  ]
+}
