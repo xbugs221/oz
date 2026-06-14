@@ -12,7 +12,7 @@ import (
 // runValidateMemberArtifact checks one subagent member.json against the shared schema.
 func runValidateMemberArtifact(args []string, stdout io.Writer) error {
 	if !hasFlag(args, "--artifact") {
-		return fmt.Errorf("用法：wo validate-member-artifact --artifact <path> --group <group> --member <member> --change <change-name>")
+		return fmt.Errorf("用法：oz flow validate-member-artifact --artifact <path> --group <group> --member <member> --change <change-name>")
 	}
 	path, err := requireFlagValue(args, "--artifact")
 	if err != nil {

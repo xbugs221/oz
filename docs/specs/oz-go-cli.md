@@ -4,7 +4,7 @@
 
 ## 需求：命令组最小化且保留自动化接口
 
-系统必须把 `list` 和 `install` 作为用户日常命令，同时保留 `create`、`status`、`validate`、`archive` 作为下游 `wo` 工具和内置 skill 使用的自动化接口。
+系统必须把 `list` 和 `install` 作为用户日常命令，同时保留 `create`、`status`、`validate`、`archive` 作为下游 `oz flow` 工具和内置 skill 使用的自动化接口。
 
 ### 场景：顶层帮助区分日常命令和自动化接口
 
@@ -34,7 +34,7 @@
 
 ### 场景：下游校验接口要求验收硬合同
 
-- **给定** 一个活动提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `wo` 允许的 `acceptance.json`
+- **给定** 一个活动提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `oz flow` 允许的 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令成功并在 artifacts 中返回 `brief.md` 和 `acceptance.json`
 - **并且** `acceptance.json` 支持 `coverage`、`required_tests[].assertions` 和 `required_tests[].expected_initial_failure`
@@ -42,7 +42,7 @@
 - **并且** `coverage[].tests` 必须引用真实存在的 `required_tests[].id`
 - **并且** `coverage[].evidence` 必须引用真实存在的 `required_evidence[].id`
 - **并且** `required_evidence[]` 必须能追溯到 `coverage` 绑定的 `required_tests` producer
-- **并且** producer 追溯规则必须由 `internal/acceptance` 统一实现，`oz validate` 和 `wo` 预检复用同一规则
+- **并且** producer 追溯规则必须由 `internal/acceptance` 统一实现，`oz validate` 和 `oz flow` 预检复用同一规则
 
 ### 场景：下游校验接口拒绝弱验收合同
 
@@ -73,16 +73,16 @@
 - **并且** 命令不得机械移动、改写或合并提案测试文件
 - **并且** 归档后的提案测试留在 `docs/changes/archive/<date>-1-需求/tests/` 作为后续规格测试合并来源
 
-### 场景：wo 继续通过 oz JSON 协议选择和校验 change
+### 场景：oz flow 继续通过 oz JSON 协议选择和校验 change
 
-- **给定** `wo` 代码已经合入当前仓库
+- **给定** `oz flow` 代码已经合入当前仓库
 - **当** 执行器需要发现、校验或归档 change
-- **则** `wo` 必须仍保留对 `oz list/status/validate/archive` 命令协议的调用能力
+- **则** `oz flow` 必须仍保留对 `oz list/status/validate/archive` 命令协议的调用能力
 - **并且** 合并不得要求执行器测试改成直接 import `cmd/oz`
 
-### 场景：wo 命令分发边界保持清晰
+### 场景：oz flow 命令分发边界保持清晰
 
-- **给定** `wo` CLI 代码已经合入当前仓库
+- **给定** `oz flow` CLI 代码已经合入当前仓库
 - **当** 维护者调整 repo 命令分发、无参数交互流程或 planning 入口
 - **则** `internal/app/command_dispatch.go`、`internal/app/interactive.go` 和 `internal/app/planning.go` 必须作为独立边界文件存在
 - **并且** `internal/app/app.go` 不得重新直接包含 `run`、`resume`、`batch`、`restart`、`status`、`abort`、`clean`、`watch`、`--resume`、`--run` 这些 repo 命令的大 switch case
@@ -90,7 +90,7 @@
 
 ### 场景：工作流配置解析边界保持清晰
 
-- **当** 维护者调整 `wo.yaml` schema、profile 模板、parallel 展开或 validation 配置解析
+- **当** 维护者调整 `oz-flow.yaml` schema、profile 模板、parallel 展开或 validation 配置解析
 - **则** `internal/app/config_schema.go`、`internal/app/config_profiles.go`、`internal/app/config_parallel.go` 和 `internal/app/config_validation.go` 必须作为独立边界文件存在
 - **并且** `internal/app/config.go` 不得重新直接定义 schema input、profile 渲染、parallel 展开或 validation 解析 helper
 - **并且** 默认 tree config、legacy 字段拒绝、profile 发现、MADA profile 生成和 parallel 配置合同必须继续通过，证明用户可见配置行为不变

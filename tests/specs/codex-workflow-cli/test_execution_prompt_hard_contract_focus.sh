@@ -24,7 +24,7 @@ import (
 // renderChangeEightPrompt renders a bundled prompt with realistic state fields.
 func renderChangeEightPrompt(t *testing.T) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", "wo-start.md"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", "oz-flow-start.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func renderChangeEightPrompt(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := renderPromptTemplate("wo-start", string(data), context)
+	got, err := renderPromptTemplate("oz-flow-start", string(data), context)
 	if err != nil {
 		t.Fatal(err)
 	}

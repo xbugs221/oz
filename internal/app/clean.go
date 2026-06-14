@@ -1,4 +1,4 @@
-// Package app implements wo clean, which removes failed and abnormal runtime state.
+// Package app implements oz flow clean, which removes failed and abnormal runtime state.
 package app
 
 import (
@@ -21,12 +21,12 @@ type CleanResult struct {
 	CleanedAgentRecords int
 }
 
-// CleanOptions controls optional cleanup scopes outside the current wo state tree.
+// CleanOptions controls optional cleanup scopes outside the current oz flow state tree.
 type CleanOptions struct {
 	CleanAgentSessions bool
 }
 
-// cleanableRunStatuses defines run statuses that wo clean considers garbage.
+// cleanableRunStatuses defines run statuses that oz flow clean considers garbage.
 var cleanableRunStatuses = map[string]bool{
 	statusFailed:                    true,
 	statusInterrupted:               true,
@@ -37,7 +37,7 @@ var cleanableRunStatuses = map[string]bool{
 	"aborted":                       true,
 }
 
-// cleanableBatchStatuses defines batch statuses that wo clean considers garbage.
+// cleanableBatchStatuses defines batch statuses that oz flow clean considers garbage.
 var cleanableBatchStatuses = map[string]bool{
 	batchStatusFailed:  true,
 	batchStatusAborted: true,
@@ -243,7 +243,7 @@ func collectAgentSessions(state State, sessions map[string]bool) {
 }
 
 // cleanAgentSessionRecords removes external Codex/Pi records for sessions only
-// referenced by runs that wo clean is deleting.
+// referenced by runs that oz flow clean is deleting.
 func cleanAgentSessionRecords(cleanableSessions, protectedSessions map[string]bool) int {
 	targets := map[string]bool{}
 	for sessionID := range cleanableSessions {
@@ -261,7 +261,7 @@ func cleanAgentSessionRecords(cleanableSessions, protectedSessions map[string]bo
 	return cleaned
 }
 
-// codexSessionsRoot returns the only Codex directory wo clean scans.
+// codexSessionsRoot returns the only Codex directory oz flow clean scans.
 func codexSessionsRoot() string {
 	if home := os.Getenv("CODEX_HOME"); home != "" {
 		return filepath.Join(home, "sessions")
@@ -525,18 +525,18 @@ func batchReferencedRunIDs(batch BatchState) []string {
 	return ids
 }
 
-// formatCleanResult builds human-readable Chinese output for wo clean.
+// formatCleanResult builds human-readable Chinese output for oz flow clean.
 func formatCleanResult(result CleanResult, repo string) string {
 	if result.CleanedBatches == 0 && result.CleanedRuns == 0 {
 		var lines []string
 		if result.SkippedRunning > 0 {
 			lines = append(lines, fmt.Sprintf("已跳过 %d 个仍在运行的任务", result.SkippedRunning))
 			lines = append(lines, fmt.Sprintf("范围: 当前项目 %s", repo))
-			lines = append(lines, "该操作仅删除 wo 历史记录，不回滚代码改动")
+			lines = append(lines, "该操作仅删除 oz flow 历史记录，不回滚代码改动")
 			return fmt.Sprintf("%s\n", joinLines(lines))
 		}
 		lines = append(lines, "没有需要清理的失败或异常运行态")
-		lines = append(lines, "该操作仅检查当前项目 wo 历史记录，不回滚代码改动")
+		lines = append(lines, "该操作仅检查当前项目 oz flow 历史记录，不回滚代码改动")
 		return fmt.Sprintf("%s\n", joinLines(lines))
 	}
 	var lines []string
@@ -545,7 +545,7 @@ func formatCleanResult(result CleanResult, repo string) string {
 		lines = append(lines, fmt.Sprintf("已跳过 %d 个仍在运行的任务", result.SkippedRunning))
 	}
 	lines = append(lines, fmt.Sprintf("范围: 当前项目 %s", repo))
-	lines = append(lines, "该操作仅删除 wo 历史记录，不回滚代码改动")
+	lines = append(lines, "该操作仅删除 oz flow 历史记录，不回滚代码改动")
 	return fmt.Sprintf("%s\n", joinLines(lines))
 }
 
@@ -560,7 +560,7 @@ func joinLines(lines []string) string {
 	return result
 }
 
-// parseCleanOptions validates wo clean flags and returns the requested cleanup scope.
+// parseCleanOptions validates oz flow clean flags and returns the requested cleanup scope.
 func parseCleanOptions(args []string) (CleanOptions, error) {
 	var options CleanOptions
 	for _, arg := range args {
@@ -568,13 +568,13 @@ func parseCleanOptions(args []string) (CleanOptions, error) {
 		case "--agent-sessions":
 			options.CleanAgentSessions = true
 		default:
-			return CleanOptions{}, fmt.Errorf("用法：wo clean [--agent-sessions]")
+			return CleanOptions{}, fmt.Errorf("用法：oz flow clean [--agent-sessions]")
 		}
 	}
 	return options, nil
 }
 
-// runClean executes the wo clean command and writes human-readable output.
+// runClean executes the oz flow clean command and writes human-readable output.
 func runClean(stdout io.Writer, repo string, args ...string) error {
 	options, err := parseCleanOptions(args)
 	if err != nil {

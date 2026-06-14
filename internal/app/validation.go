@@ -19,7 +19,7 @@ const (
 	validationStatusFailed = "failed"
 	validationKindCommands = "commands"
 	validationKindArtifact = "artifact"
-	artifactGateCommand    = "wo artifact gate"
+	artifactGateCommand    = "oz flow artifact gate"
 )
 
 // StageValidationState is persisted in state.json so failed validation reruns the same stage.

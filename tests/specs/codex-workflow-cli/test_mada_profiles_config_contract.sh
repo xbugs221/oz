@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sources: 11-新增-MADA-工作流profiles
-# Purpose: 验证 wo config 的 MADA profiles 能生成标准 wo.yaml，并可被 wo graph 真实读取。
+# Purpose: 验证 oz flow config 的 MADA profiles 能生成标准 oz-flow.yaml，并可被 oz flow graph 真实读取。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -57,14 +57,14 @@ assert_profile_config() {
   assert_contains "$template" "stages:"
   assert_contains "$template" "parallel:"
 
-  note "运行 wo config --profile $profile"
+  note "运行 oz flow config --profile $profile"
   (
     cd "$repo"
     "$wo_bin" config --profile "$profile"
   ) 2>&1 | tee -a "$log"
 
-  local yaml="$repo/wo.yaml"
-  [[ -f "$yaml" ]] || fail "$profile 未生成 wo.yaml"
+  local yaml="$repo/oz-flow.yaml"
+  [[ -f "$yaml" ]] || fail "$profile 未生成 oz-flow.yaml"
   assert_contains "$yaml" "parallel: true"
   assert_contains "$yaml" "stages:"
   assert_contains "$yaml" "execution:"
@@ -76,13 +76,13 @@ assert_profile_config() {
   local pi_agent_count
   member_count="$(grep -c '^      - name:' "$yaml" || true)"
   pi_agent_count="$(grep -c '^        agent: pi$' "$yaml" || true)"
-  [[ "$member_count" -gt 0 ]] || fail "$profile wo.yaml 缺少 subagent members"
-  [[ "$pi_agent_count" -eq "$member_count" ]] || fail "$profile wo.yaml 必须为每个 subagent member 显式写 agent: pi，当前 $pi_agent_count/$member_count"
+  [[ "$member_count" -gt 0 ]] || fail "$profile oz-flow.yaml 缺少 subagent members"
+  [[ "$pi_agent_count" -eq "$member_count" ]] || fail "$profile oz-flow.yaml 必须为每个 subagent member 显式写 agent: pi，当前 $pi_agent_count/$member_count"
   if grep -Eq '^[[:space:]]+agent: legacy-agent$' "$yaml"; then
-    fail "$profile wo.yaml 不应包含 legacy-agent subagent"
+    fail "$profile oz-flow.yaml 不应包含 legacy-agent subagent"
   fi
 
-  note "运行 wo graph 验证 $profile 可加载"
+  note "运行 oz flow graph 验证 $profile 可加载"
   (
     cd "$repo"
     "$wo_bin" graph --change "11-${profile}-演示" --format json
@@ -94,15 +94,15 @@ assert_profile_config() {
 }
 
 wo_bin="$tmpdir/wo"
-note "构建真实 wo 二进制: $wo_bin"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/wo 2>&1 | tee -a "$log"
+note "构建真实 oz flow 二进制: $wo_bin"
+go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 for profile in mada-code mada-decision mada-research; do
   assert_profile_config "$wo_bin" "$profile"
 done
 
 decision_repo="$tmpdir/mada-decision"
-decision_yaml="$decision_repo/wo.yaml"
+decision_yaml="$decision_repo/oz-flow.yaml"
 decision_graph="$decision_repo/graph.json"
 
 note "校验 mada-decision 包含当前内置 MADA 角色"

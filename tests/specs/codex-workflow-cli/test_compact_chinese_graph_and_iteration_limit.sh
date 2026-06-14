@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证默认最大审核迭代数为 5，且 wo graph 输出紧凑中文 Mermaid 图。
+# 文件功能目的：验证默认最大审核迭代数为 5，且 oz flow graph 输出紧凑中文 Mermaid 图。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -24,8 +24,8 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/test.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT"
@@ -39,17 +39,17 @@ mkdir -p "$PROJECT"
   git commit -qm init
 )
 
-note "generate default wo.yaml and verify iteration budget"
+note "generate default oz-flow.yaml and verify iteration budget"
 (
   cd "$PROJECT"
   "$WO_BIN" config
 ) >"$RESULT_DIR/config.out" 2>"$RESULT_DIR/config.err"
-cp "$PROJECT/wo.yaml" "$RESULT_DIR/wo.yaml"
-grep -q 'max_review_iterations: 5' "$PROJECT/wo.yaml" || fail "default max_review_iterations should be 5"
-if grep -q 'max_review_iterations: 30' "$PROJECT/wo.yaml"; then
+cp "$PROJECT/oz-flow.yaml" "$RESULT_DIR/oz-flow.yaml"
+grep -q 'max_review_iterations: 5' "$PROJECT/oz-flow.yaml" || fail "default max_review_iterations should be 5"
+if grep -q 'max_review_iterations: 30' "$PROJECT/oz-flow.yaml"; then
   fail "default max_review_iterations should no longer be 30"
 fi
-grep -q 'engine: go-dag' "$PROJECT/wo.yaml" || fail "default engine should remain go-dag"
+grep -q 'engine: go-dag' "$PROJECT/oz-flow.yaml" || fail "default engine should remain go-dag"
 
 note "render mermaid graph and verify it is compact"
 (

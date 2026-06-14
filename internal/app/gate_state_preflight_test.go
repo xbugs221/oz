@@ -1,4 +1,4 @@
-// Package app tests wo gate-state separation and acceptance preflight blocking.
+// Package app tests oz flow gate-state separation and acceptance preflight blocking.
 package app
 
 import (

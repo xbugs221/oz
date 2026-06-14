@@ -2,7 +2,7 @@
 
 ## 目的
 
-定义 `wo` CLI 的工作流行为，包括 oz change 选择与批量执行、sealed run 的自动推进与断点恢复、agent tool 驱动、审核修正循环的提示词历史范围、配置管理与快照兼容，以及 runner contract 和状态查询接口。
+定义 `oz flow` CLI 的工作流行为，包括 oz change 选择与批量执行、sealed run 的自动推进与断点恢复、agent tool 驱动、审核修正循环的提示词历史范围、配置管理与快照兼容，以及 runner contract 和状态查询接口。
 
 ## 需求
 
@@ -66,7 +66,7 @@
 #### 场景：恢复和中止未完成 batch
 
 - **当** 用户状态目录中的 `batches/<batch-id>/state.json` 存在且状态未完成，例如 `running` 或 `failed`
-- **则** 无参数启动 `wo` 时必须优先提示未完成 batch
+- **则** 无参数启动 `oz flow` 时必须优先提示未完成 batch
 - **且** 用户可以选择恢复 batch、中止 batch 或开始新的 run
 - **当** 用户恢复 batch
 - **则** 系统跳过已完成 run，继续当前未完成 run 或创建下一个 run
@@ -92,7 +92,7 @@
 #### 场景：人类快捷命令创建单项队列
 
 - **给定** active change 包含 `1-a`
-- **当** 用户运行 `wo --run 1-a`
+- **当** 用户运行 `oz flow --run 1-a`
 - **则** 系统创建 用户状态目录中的 `batches/<batch-id>/state.json`
 - **且** `changes` 为 `["1-a"]`
 - **且** 不得创建脱离队列的普通新 run 作为人类默认执行对象
@@ -282,13 +282,13 @@
 
 // Sources: 24-树状简化wo配置
 
-系统必须支持从内置默认、`~/wo.yaml`、仓库 `wo.yaml` 或 `wo.yml` 读取根节点树状工作流配置，并在缺失配置时使用内置默认值。系统必须拒绝旧配置格式和旧字段，避免用户误以为旧配置仍然生效。
+系统必须支持从内置默认、`~/oz-flow.yaml`、仓库 `oz-flow.yaml` 或 `oz-flow.yml` 读取根节点树状工作流配置，并在缺失配置时使用内置默认值。系统必须拒绝旧配置格式和旧字段，避免用户误以为旧配置仍然生效。
 
 #### 场景：初始化默认配置
 
-- **当** 用户在仓库根目录调用 `wo config`
-- **且** 仓库根目录不存在 `wo.yaml` 或 `wo.yml`
-- **则** 系统创建默认 `wo.yaml`
+- **当** 用户在仓库根目录调用 `oz flow config`
+- **且** 仓库根目录不存在 `oz-flow.yaml` 或 `oz-flow.yml`
+- **则** 系统创建默认 `oz-flow.yaml`
 - **且** 默认配置根节点包含 `parallel`、`max_review_iterations`、`stages`、`validation` 和 `prompts`
 - **且** 默认配置包含 `max_review_iterations: 5`
 - **且** 默认配置包含 `stages.planning/execution/review/qa/fix/archive`
@@ -305,33 +305,33 @@
 
 #### 场景：初始化全局默认配置
 
-- **当** 用户调用 `wo config --global`
-- **且** `~/wo.yaml` 不存在
-- **则** 系统创建 `~/wo.yaml`
+- **当** 用户调用 `oz flow config --global`
+- **且** `~/oz-flow.yaml` 不存在
+- **则** 系统创建 `~/oz-flow.yaml`
 - **且** 不创建 `~/.wo/`
 
 #### 场景：避免覆盖配置
 
-- **当** 仓库根目录已经存在 `wo.yaml` 或 `wo.yml`
-- **且** 用户调用 `wo config`
+- **当** 仓库根目录已经存在 `oz-flow.yaml` 或 `oz-flow.yml`
+- **且** 用户调用 `oz flow config`
 - **则** 系统报错
 - **且** 不覆盖已有配置
 
 #### 场景：旧 init 不兼容
 
-- **当** 用户调用 `wo init`
+- **当** 用户调用 `oz flow init`
 - **则** 系统返回非零退出
-- **且** 错误信息提示改用 `wo config`
+- **且** 错误信息提示改用 `oz flow config`
 
 #### 场景：旧 install 不兼容
 
-- **当** 用户调用 `wo install`
+- **当** 用户调用 `oz flow install`
 - **则** 系统返回非零退出
-- **且** 错误信息提示 prompt 已内嵌在 `wo.yaml` 中
+- **且** 错误信息提示 prompt 已内嵌在 `oz-flow.yaml` 中
 
 #### 场景：读取 YAML 配置
 
-- **当** 仓库根目录存在 `wo.yaml`
+- **当** 仓库根目录存在 `oz-flow.yaml`
 - **且** 用户进入规划模式或启动 sealed run
 - **则** 系统读取根节点工作流配置
 - **且** 校验 reasoning 只能是 `low`、`medium`、`high`、`xhigh`
@@ -341,7 +341,7 @@
 
 #### 场景：旧顶层和旧别名字段不能继续生效
 
-- **当** `wo.yaml` 或 `~/wo.yaml` 包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`parallel.groups` 或 `validation.max_attempts_per_stage`
+- **当** `oz-flow.yaml` 或 `~/oz-flow.yaml` 包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`parallel.groups` 或 `validation.max_attempts_per_stage`
 - **则** 配置读取失败
 - **且** 错误信息包含对应旧字段名
 - **且** 不创建新的运行态
@@ -349,7 +349,7 @@
 
 #### 场景：顶层 parallel false 关闭阶段内子代理
 
-- **给定** `wo.yaml` 中保留 `stages.execution.before`
+- **给定** `oz-flow.yaml` 中保留 `stages.execution.before`
 - **且** 顶层配置 `parallel: false`
 - **当** 用户导出 workflow graph
 - **则** graph 不包含任何子代理节点
@@ -358,22 +358,22 @@
 
 #### 场景：配置文件冲突
 
-- **当** 仓库根目录同时存在 `wo.yaml` 和 `wo.yml`
+- **当** 仓库根目录同时存在 `oz-flow.yaml` 和 `oz-flow.yml`
 - **则** 系统启动前报错
 - **且** 不创建 sealed run
 
 #### 场景：无配置文件
 
-- **当** 仓库根目录不存在 `wo.yaml` 或 `wo.yml`
+- **当** 仓库根目录不存在 `oz-flow.yaml` 或 `oz-flow.yml`
 - **则** 系统使用内置默认配置
 
 #### 场景：主阶段和子代理会话只在显式配置 model 时传模型参数
 
-- **给定** 新格式 `wo.yaml`
+- **给定** 新格式 `oz-flow.yaml`
 - **且** `stages.execution.model` 配置为 `codex-exec-model`
 - **且** `stages.qa.before[].model` 为浏览器路径测试员配置 `pi-browser-model`
 - **且** `validation.limit: 2`
-- **当** 用户运行 `wo run --change <change> --json`
+- **当** 用户运行 `oz flow run --change <change> --json`
 - **则** execution 主阶段调用 Codex 时包含 `-m codex-exec-model`
 - **且** 浏览器路径测试员调用 Pi 时包含 `--model pi-browser-model`
 - **且** 未配置模型的子代理调用不包含 `--model`
@@ -384,7 +384,7 @@
 
 - **给定** 一个只修改 CLI 配置解析的提案
 - **且** `stages.qa.before` 包含 `CLI/API 测试员`、`浏览器路径测试员` 和 `回归场景测试员`
-- **当** 用户运行 `wo run --change <change> --json`
+- **当** 用户运行 `oz flow run --change <change> --json`
 - **则** 这些子代理都会被调用
 - **且** 浏览器路径测试员收到 relevance check prompt 后返回 `relevant:false`
 - **且** 浏览器路径测试员不执行浏览器探索
@@ -398,8 +398,8 @@
 
 #### 场景：默认配置包含并行能力骨架
 
-- **当** 用户运行 `wo config`
-- **则** 生成的 `wo.yaml` 包含 `wo.workflow.parallel`
+- **当** 用户运行 `oz flow config`
+- **则** 生成的 `oz-flow.yaml` 包含顶层 `parallel`
 - **且** `enabled` 默认为 `true`
 - **且** 包含 `implementation_context`、`review`、`qa` 三类默认 groups
 - **且** 默认成员名称包含“代码库侦察员”“外部资料研究员”“目标核对审核员”“CLI/API 测试员”等直观职责名
@@ -407,7 +407,7 @@
 
 #### 场景：并行层关闭时行为兼容
 
-- **给定** 默认生成的 `wo.yaml`
+- **给定** 默认生成的 `oz-flow.yaml`
 - **当** 用户没有显式启用 `workflow.parallel.enabled`
 - **则** sealed run 仍按现有串行阶段推进
 - **且** review、QA、fix 和 archive 的 artifact gate 规则不变
@@ -416,10 +416,10 @@
 
 - **给定** `workflow.parallel.enabled` 或 `workflow.subagents.enabled` 为 `true`
 - **且** 配置了 `before_execution`、`before_review` 或 `before_qa` 并行组
-- **当** 用户运行 `wo graph --change demo --format json`
+- **当** 用户运行 `oz flow graph --change demo --format json`
 - **则** 输出必须是合法 WorkflowSpec JSON
 - **且** 包含 `main_stage`、`subagent`、`fanin` 和 `gate` 节点
-- **当** 用户运行 `wo graph --change demo --format mermaid`
+- **当** 用户运行 `oz flow graph --change demo --format mermaid`
 - **则** 输出必须显示 fan-out/fan-in、review clean/needs_fix、QA clean/needs_fix 和 archive gate
 - **且** 可选 graph format 只有 `json` 和 `mermaid`
 - **且** 图只描述 workflow spec，不暴露内部调度命令
@@ -429,9 +429,9 @@
 #### 场景：workflow engine 只支持 go-dag
 
 - **给定** 当前仓库存在 active change 和合法 `acceptance.json`
-- **当** 用户运行 `wo run --change demo --json`
+- **当** 用户运行 `oz flow run --change demo --json`
 - **则** 默认 engine 必须是内嵌 `go-dag`
-- **且** `wo run --change demo --engine unknown --json` 必须被拒绝，并引导用户使用 `go-dag`
+- **且** `oz flow run --change demo --engine unknown --json` 必须被拒绝，并引导用户使用 `go-dag`
 - **且** `workflow.engine` 只允许为空或 `go-dag`
 
 #### 场景：go-dag subagent artifact schema retry
@@ -442,11 +442,11 @@
 - **且** 修正 prompt 必须包含字段名、期望类型、`ARTIFACT_DIR` 和 artifact 路径
 - **且** 最多重试 3 次，仍失败时必须写出 `status=failed` 的 member artifact 作为证据输入，不得仅因 helper artifact 交付失败将 run 标记为 `failed`
 - **且** 修正通过后 fan-in 才能继续读取该成员产物
-- **则** `wo` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE`、`ARTIFACT_DIR` 和 `ARTIFACT_PATH`
+- **则** `oz flow` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE`、`ARTIFACT_DIR` 和 `ARTIFACT_PATH`
 - **且** prompt 必须要求 subagent 先读取当前 run 的 `state.json`、当前 `docs/changes/<change>` 和当前 `acceptance.json`，不得自行把其它活动提案作为当前目标
 - **且** member artifact 路径必须是 `parallel-members/<group>/<iteration>/<member-slug>.artifact/member.json`；非迭代 group 可省略 `<iteration>` 层
 - **且** subagent 必须只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact，不能修改源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact
-- **且** prompt 必须提供 `wo validate-member-artifact --artifact "$ARTIFACT_PATH" --group <group> --member <member> --change <change-name>` 自校验命令
+- **且** prompt 必须提供 `oz flow validate-member-artifact --artifact "$ARTIFACT_PATH" --group <group> --member <member> --change <change-name>` 自校验命令
 - **且** 单成员 JSON 顶层只允许 `name`、`change_name`、`purpose`、`status`、`summary`、`evidence`、`findings`、`required`
 - **且** `change_name` 必须等于当前 run 的 `state.change_name`，否则必须按 artifact 格式错误重试或失败
 - **且** `evidence` 必须是字符串数组
@@ -456,7 +456,7 @@
 - **且** `findings[].severity` 最终只允许 `blocker`、`major`、`minor`
 - **且** `critical/blocker` 归一为 `blocker`，`high/medium/major` 归一为 `major`，`low/nit/minor/info/informational/note/warning` 归一为 `minor`
 - **当** go-dag 在进程内执行 fan-in 节点
-- **则** `wo` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
+- **则** `oz flow` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
 - **当** go-dag 在进程内执行 gate 节点
 - **则** review clean 必须由主审核归一化 gate_input subagent 结论后决定，原始 subagent finding 或成员失败不得直接覆盖主 review artifact
 - **且** QA clean 不得忽略已有 gate_input subagent artifact 中当前提案 blocker/major finding
@@ -464,7 +464,7 @@
 - **且** implementation context 只作为 execution 前上下文输入，不得因 required helper 自身失败阻断 execution
 - **且** clean review/QA 必须跳过未激活 fix 分支，needs_fix 必须激活下一轮 fix/review/QA 分支
 - **测试**：`tests/specs/codex-workflow-cli/test_subagent_artifact_directory_contract.sh`
-- **真实数据来源**：脚本临时写入 `internal/app` 包级测试，调用真实 `memberArtifactPath`、`subagentPrompt`、`wo validate-member-artifact` 分发入口和 `nodeRunSubagent`
+- **真实数据来源**：脚本临时写入 `internal/app` 包级测试，调用真实 `memberArtifactPath`、`subagentPrompt`、`oz flow validate-member-artifact` 分发入口和 `nodeRunSubagent`
 - **关键断言**：member artifact 固定为 `*.artifact/member.json`；prompt 提供 `ARTIFACT_PATH` 和校验命令；格式坏的 required QA helper 产出 failed member artifact 但不把 run 置为 failed；sibling artifact 写入仍阻断
 
 #### 场景：并行层开启时主阶段不变
@@ -490,26 +490,26 @@
 #### 场景：task 全部完成时不启动 execution 前上下文 subagents
 
 - **给定** active change 的 `task.md` 已全部勾选
-- **且** `wo.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
-- **当** 用户运行 `wo run --change <change> --json`
+- **且** `oz-flow.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
+- **当** 用户运行 `oz flow run --change <change> --json`
 - **则** workflow 不得调用这些 execution 前 subagents
 - **且** 不得生成 execution context member artifact 或 subagent session
 - **且** workflow 仍可继续进入 archive 并完成
 - **测试**：`tests/specs/codex-workflow-cli/test_skip_execution_context_when_tasks_done.sh`
-- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `wo.yaml` 并运行当前仓库构建出的 `wo` 和 `oz`
+- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `oz-flow.yaml` 并运行当前仓库构建出的 `oz flow` 和 `oz`
 - **关键断言**：fake subagent 一旦收到 `SUBAGENT_OUTPUT` 就让测试失败；最终 state 必须为 `done` 且无 subagent session/artifact
 - **剩余风险**：该测试只覆盖 execution 前 advisory groups，不覆盖 review/QA gate input subagents
 
 #### 场景：task 未完成时仍启动 execution 前上下文 subagents
 
 - **给定** active change 的 `task.md` 尚未勾选
-- **且** `wo.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
-- **当** 用户运行 `wo run --change <change> --json`
+- **且** `oz-flow.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
+- **当** 用户运行 `oz flow run --change <change> --json`
 - **则** workflow 必须先调用这些 execution 前 subagents 并生成 fan-in artifact
 - **且** execution 主 agent 可以继续勾选 task
 - **且** workflow 可进入 archive 并完成
 - **测试**：`tests/specs/codex-workflow-cli/test_run_execution_context_when_tasks_pending.sh`
-- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `wo.yaml`，fake subagents 写入真实 member artifact
+- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `oz-flow.yaml`，fake subagents 写入真实 member artifact
 - **关键断言**：两个 configured subagents 都被调用；`parallel-implementation-context.json` 包含两个成员；最终 state 为 `done`
 - **剩余风险**：fake execution 只勾选 task，不代表真实 agent 修改业务代码；真实修改质量仍由具体提案测试和 QA 负责
 
@@ -607,7 +607,7 @@
 
 ### 需求：status 展示完成 subagent 的真实 session
 
-系统必须让 `wo status/watch` 的 subagent 行反映 durable state 中已经记录的 session ID。已完成 member artifact 对应的行不应因为并发保存覆盖而随机显示 `-`。
+系统必须让 `oz flow status/watch` 的 subagent 行反映 durable state 中已经记录的 session ID。已完成 member artifact 对应的行不应因为并发保存覆盖而随机显示 `-`。
 
 #### 场景：已完成 member artifact 对应的 status 行显示 session ID
 
@@ -638,12 +638,12 @@
 
 ### 需求：默认配置经过审计并保持一致
 
-系统必须审计默认 `wo.yaml` 相关配置，并保证所有默认来源一致。
+系统必须审计默认 `oz-flow.yaml` 相关配置，并保证所有默认来源一致。
 
 #### 场景：生成默认配置
 
-- **当** 用户运行 `wo config`
-- **则** 生成的 `wo.yaml` 必须使用审计后的默认工作流值
+- **当** 用户运行 `oz flow config`
+- **则** 生成的 `oz-flow.yaml` 必须使用审计后的默认工作流值
 - **且** 生成的 prompt 必须使用精简后的默认模板
 - **且** 生成的默认值必须与内置 `DefaultWorkflowConfig` 一致
 
@@ -651,7 +651,7 @@
 
 - **给定** 实现阶段调整了 `max_review_iterations`、阶段 reasoning、fast 或 validation 默认值
 - **当** 用户查看 README 或规格文档
-- **则** 文档中的默认值必须与 `wo config` 生成结果一致
+- **则** 文档中的默认值必须与 `oz flow config` 生成结果一致
 - **且** 测试必须覆盖该默认值变化带来的用户可见行为
 
 #### 场景：默认值保持不变
@@ -751,7 +751,7 @@
 
 - **给定** Pi 进程返回非零 exit code
 - **且** stderr 输出错误信息
-- **当** `wo` 返回阶段失败
+- **当** `oz flow` 返回阶段失败
 - **则** 错误信息包含 bounded stderr 诊断
 - **且** run state 持久化为 failed
 
@@ -805,7 +805,7 @@
 
 ### 需求：命名 prompt 模板
 
-系统必须从 YAML 的 `wo.prompts.planning/execution/review/qa/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `.wo/cmd` 或 `~/.wo/cmd`。未知 prompt 键必须在配置读取阶段被拒绝。
+系统必须从 YAML 的 `prompts.planning/execution/review/qa/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `.wo/cmd` 或 `~/.wo/cmd`。未知 prompt 键必须在配置读取阶段被拒绝。
 
 // Sources: 18-修复GitHub-CI并更新仓库文档
 
@@ -907,7 +907,7 @@
 - **且** 新 run 不创建 `runs/<run-id>/prompts/` 目录
 - **当** 用户恢复该 run
 - **则** 系统优先使用 `prompt-snapshot.yaml` 中的 run 快照
-- **且** 不重新读取当前 `wo.yaml`、`~/wo.yaml`、`.wo/cmd` 或 `~/.wo/cmd`
+- **且** 不重新读取当前 `oz-flow.yaml`、`~/oz-flow.yaml`、`.wo/cmd` 或 `~/.wo/cmd`
 - **且** 当 `prompt-snapshot.yaml` 缺失时，系统必须报错而不是回退当前配置或历史 prompt 文件
 
 #### 场景：历史 sealed run 旧写作阶段快照失败关闭
@@ -1057,10 +1057,10 @@
 #### 场景：恢复后配置文件已修改
 
 - **当** sealed run 已创建
-- **且** 用户修改仓库根目录 `wo.yaml`
+- **且** 用户修改仓库根目录 `oz-flow.yaml`
 - **且** 用户恢复未完成 run
 - **则** 系统使用 `state.json` 中的 workflow config 快照
-- **且** 不使用修改后的 `wo.yaml`
+- **且** 不使用修改后的 `oz-flow.yaml`
 
 ### 需求：已有配置和 run 快照兼容
 
@@ -1068,7 +1068,7 @@
 
 #### 场景：已有用户自定义 prompt
 
-- **给定** 仓库 `wo.yaml` 已配置自定义 `prompts.review`
+- **给定** 仓库 `oz-flow.yaml` 已配置自定义 `prompts.review`
 - **当** 用户启动新的 run
 - **则** 系统继续使用用户自定义 review prompt
 - **且** 不自动用新的内置模板覆盖用户配置
@@ -1087,14 +1087,14 @@
 
 #### 场景：查询版本
 
-- **当** 调用 `wo --version`
+- **当** 调用 `oz flow --version`
 - **则** 命令 exit code 为 0
 - **且** stdout 包含发布构建注入的 `v*` git tag 版本字符串
 - **且** 本地源码构建未注入版本时，stdout 使用源码仓库的 `git describe --tags --always --dirty` 结果
 
 #### 场景：查询 JSON contract
 
-- **当** 调用 `wo contract --json`
+- **当** 调用 `oz flow contract --json`
 - **则** 命令 exit code 为 0
 - **且** stdout 是合法 JSON 对象
 - **且** `json` 字段为 `true`
@@ -1107,7 +1107,7 @@
 
 #### 场景：列出 active changes
 
-- **当** 调用 `wo list-changes --json`
+- **当** 调用 `oz flow list-changes --json`
 - **则** 命令 exit code 为 0
 - **且** stdout 是合法 JSON 对象
 - **且** `changes` 是数组
@@ -1120,7 +1120,7 @@
 
 #### 场景：启动 run
 
-- **当** 调用 `wo run --change <change-name> --json`
+- **当** 调用 `oz flow run --change <change-name> --json`
 - **且** `<change-name>` 是有效 active change
 - **则** 命令作为长进程继续推进 sealed run
 - **且** stdout 第一条以 `{` 开头的行是合法 JSON 对象
@@ -1133,7 +1133,7 @@
 
 #### 场景：JSON 模式不输出人类 checklist
 
-- **当** 使用 `wo run --change <change-name> --json`
+- **当** 使用 `oz flow run --change <change-name> --json`
 - **则** stdout 不得输出交互菜单或 checklist 文本
 - **且** 首行 JSON 后不得输出会破坏 JSONL 消费者的普通文本
 
@@ -1145,7 +1145,7 @@
 
 - **给定** 当前目录位于一个已经 `git init` 但没有任何 commit 的仓库
 - **且** 仓库中存在有效 active oz change
-- **当** 用户运行 `wo --run <change-name>`
+- **当** 用户运行 `oz flow --run <change-name>`
 - **则** 命令必须失败
 - **且** 错误信息必须明确说明需要先创建初始 git commit
 - **且** 不得启动 execution agent 会话
@@ -1155,7 +1155,7 @@
 
 - **给定** 当前目录位于一个已经 `git init` 但没有任何 commit 的仓库
 - **且** 仓库中存在有效 active oz change
-- **当** 调用 `wo run --change <change-name> --json`
+- **当** 调用 `oz flow run --change <change-name> --json`
 - **则** 命令必须失败
 - **且** 输出或错误必须包含可操作的无初始 commit 提示
 - **且** 不得输出已创建的 running run state
@@ -1164,7 +1164,7 @@
 
 - **给定** 当前目录位于至少有一个 commit 的 git 仓库
 - **且** 仓库中存在有效 active oz change
-- **当** 用户运行 `wo --run <change-name>`
+- **当** 用户运行 `oz flow --run <change-name>`
 - **则** 系统按现有流程创建 sealed run
 - **且** state 中记录 `baseline_head`
 - **且** execution stage 可以继续发起 agent 会话
@@ -1183,7 +1183,7 @@
 
 #### 场景：恢复指定 run
 
-- **当** 调用 `wo resume --run-id <run-id> --json`
+- **当** 调用 `oz flow resume --run-id <run-id> --json`
 - **且** 用户状态目录中的 `runs/<run-id>/state.json` 存在且可恢复
 - **则** 命令作为长进程继续推进 sealed run
 - **且** stdout 第一条以 `{` 开头的行是合法 JSON 对象
@@ -1197,7 +1197,7 @@
 
 #### 场景：查询状态
 
-- **当** 调用 `wo status --run-id <run-id> --json`
+- **当** 调用 `oz flow status --run-id <run-id> --json`
 - **且** 用户状态目录中的 `runs/<run-id>/state.json` 存在
 - **则** 命令 exit code 为 0
 - **且** stdout 是合法 JSON 对象
@@ -1207,12 +1207,12 @@
 
 ### 需求：统一 restart 命令
 
-系统必须提供一个顶层 `wo restart` 命令，用于重启可恢复的单 run 或 batch。
+系统必须提供一个顶层 `oz flow restart` 命令，用于重启可恢复的单 run 或 batch。
 
 #### 场景：默认重启最近可恢复任务
 
 - **给定** 当前仓库存在一个最近失败的 batch
-- **当** 用户运行 `wo restart`
+- **当** 用户运行 `oz flow restart`
 - **则** 系统必须选择该 batch 作为重启目标
 - **且** 启动 detached batch worker
 - **且** 输出必须说明已重启该批量任务
@@ -1221,7 +1221,7 @@
 
 - **给定** 当前仓库不存在可恢复 batch
 - **且** 存在一个最近失败的单 run
-- **当** 用户运行 `wo restart`
+- **当** 用户运行 `oz flow restart`
 - **则** 系统必须选择该 run 作为重启目标
 - **且** 启动 detached run worker
 - **且** 输出必须说明已重启该工作流
@@ -1229,7 +1229,7 @@
 #### 场景：没有可恢复任务
 
 - **给定** 当前仓库只有 `done`、blocked 或 aborted 任务
-- **当** 用户运行 `wo restart`
+- **当** 用户运行 `oz flow restart`
 - **则** 系统必须返回明确错误
 - **且** 不得创建 run
 - **且** 不得修改已有状态文件
@@ -1240,22 +1240,22 @@
 
 #### 场景：重启指定 batch
 
-- **给定** `wo status -b1` 能定位到一个 failed batch
-- **当** 用户运行 `wo restart -b1`
+- **给定** `oz flow status -b1` 能定位到一个 failed batch
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须重启该 batch
 - **且** 不得重启其他 batch 或单 run
 
 #### 场景：重启指定单 run
 
-- **给定** `wo status -w2` 能定位到一个 failed 单 run
-- **当** 用户运行 `wo restart -w2`
+- **给定** `oz flow status -w2` 能定位到一个 failed 单 run
+- **当** 用户运行 `oz flow restart -w2`
 - **则** 系统必须重启该 run
 - **且** 不得重启 batch
 
 #### 场景：短编号不存在
 
 - **给定** 当前仓库不存在 `b99`
-- **当** 用户运行 `wo restart -b99`
+- **当** 用户运行 `oz flow restart -b99`
 - **则** 系统必须返回明确错误
 - **且** 不得修改任何任务状态
 
@@ -1267,7 +1267,7 @@
 
 - **给定** 单 run 状态为 `failed`
 - **且** 当前 run 没有 active lock
-- **当** 用户运行 `wo restart -w1`
+- **当** 用户运行 `oz flow restart -w1`
 - **则** 该 run 的 `status` 必须恢复为 `running`
 - **且** `run_id` 必须保持不变
 - **且** `change_name`、`workflow_config`、prompt 快照和 `sessions` 必须保持不变
@@ -1276,7 +1276,7 @@
 #### 场景：interrupted run 重启
 
 - **给定** 单 run 状态为 `interrupted`
-- **当** 用户运行 `wo restart -w1`
+- **当** 用户运行 `oz flow restart -w1`
 - **则** 系统必须按原 stage 继续该 run
 - **且** 不得重新创建该 run
 
@@ -1284,7 +1284,7 @@
 
 - **给定** 单 run 状态仍为 `running`
 - **且** run lock 不存在或已经 stale
-- **当** 用户运行 `wo restart -w1`
+- **当** 用户运行 `oz flow restart -w1`
 - **则** 系统必须启动新的 detached run worker
 - **且** 不得改变已完成阶段 artifact
 
@@ -1297,7 +1297,7 @@
 - **给定** batch 状态为 `failed`
 - **且** `failed_run_id` 对应 run 状态为 `failed`
 - **且** 该 run 没有 active lock
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** batch 的 `status` 必须恢复为 `running`
 - **且** batch 必须清理 `failed_change`、`failed_run_id` 和 `error`
 - **且** batch 必须删除当前 change 在 `run_ids` 中的旧 run 关联
@@ -1309,7 +1309,7 @@
 
 - **给定** batch 状态为 `failed`
 - **且** 当前 failed run 存在 active lock
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须返回锁冲突错误
 - **且** 不得清理 batch 的 failed 字段
 - **且** 不得删除 `run_ids` 中的旧 run 关联
@@ -1319,7 +1319,7 @@
 
 - **给定** batch 状态为 `failed`
 - **且** 当前 `changes[current_index]` 没有对应 run id
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** batch 必须恢复为 `running`
 - **且** batch worker 必须为原当前 change 创建 run
 - **且** 不得跳过该 change
@@ -1329,7 +1329,7 @@
 - **给定** batch 状态为 `failed`
 - **且** `failed_run_id` 或当前 `run_ids` 中的 run id 非空
 - **且** 对应 run state 文件缺失或不可读
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须返回 "工作流记录缺失，无法自动确认恢复方式" 错误
 - **且** 不得清理 batch 的 failed 字段
 - **且** 不得删除 `run_ids` 中的旧 run 关联
@@ -1339,7 +1339,7 @@
 
 - **给定** batch 状态为 `running`
 - **且** 当前 run 没有 active lock
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须启动新的 detached batch worker
 - **且** 不得重排 `changes`
 - **且** 不得修改 `current_index`
@@ -1351,7 +1351,7 @@
 #### 场景：blocked run 拒绝重启
 
 - **给定** run 状态为 `blocked_review_limit` 或 `blocked_validation_limit`
-- **当** 用户运行 `wo restart -w1`
+- **当** 用户运行 `oz flow restart -w1`
 - **则** 系统必须返回明确错误
 - **且** 不得把 run 改回 `running`
 
@@ -1359,7 +1359,7 @@
 
 - **给定** batch 状态为 `failed`
 - **且** 当前 failed run 状态为 `blocked_review_limit` 或 `blocked_validation_limit`
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须返回明确错误
 - **且** 不得把 batch 改回 `running`
 
@@ -1367,7 +1367,7 @@
 
 - **给定** batch 状态为 `failed`
 - **且** 当前 failed run 状态为 `blocked_review_limit`、`blocked_validation_limit` 或 `aborted_manual_intervention`
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须返回明确错误
 - **且** 不得把 batch 改回 `running`
 - **且** 不得删除旧 run 关联
@@ -1375,7 +1375,7 @@
 #### 场景：已完成或手动中止任务拒绝重启
 
 - **给定** 任务状态为 `done`、`aborted_manual_intervention` 或 batch `aborted`
-- **当** 用户运行 `wo restart`
+- **当** 用户运行 `oz flow restart`
 - **则** 系统必须返回明确错误
 - **且** 不得启动 worker
 
@@ -1386,14 +1386,14 @@
 #### 场景：active lock 拒绝重启
 
 - **给定** 目标 run 存在 active lock
-- **当** 用户运行 `wo restart -w1`
+- **当** 用户运行 `oz flow restart -w1`
 - **则** 系统必须返回锁冲突错误
 - **且** 不得启动新的 detached worker
 
 #### 场景：batch 当前 run 被 active lock 锁定
 
 - **给定** 目标 batch 当前 run 存在 active lock
-- **当** 用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow restart -b1`
 - **则** 系统必须返回锁冲突错误
 - **且** 不得启动新的 batch worker
 
@@ -1403,31 +1403,31 @@
 
 #### 场景：JSON 重启单 run
 
-- **当** 调用 `wo restart --run-id <run-id> --json`
+- **当** 调用 `oz flow restart --run-id <run-id> --json`
 - **则** 系统必须只重启该 run
 - **且** stdout 必须保持 RunnerState JSON 结构
 - **且** 不得根据最近任务隐式选择其他目标
 
 #### 场景：JSON 重启 batch
 
-- **当** 调用 `wo restart --batch-id <batch-id> --json`
+- **当** 调用 `oz flow restart --batch-id <batch-id> --json`
 - **则** 系统必须只重启该 batch
 - **且** 不得根据最近任务隐式选择其他目标
 
 #### 场景：JSON 缺少明确 id
 
-- **当** 调用 `wo restart --json`
+- **当** 调用 `oz flow restart --json`
 - **则** 系统必须返回用法错误
 - **且** 不得修改任何任务状态
 
 ### 需求：watch 默认观察正在运行的任务
 
-系统必须提供 `wo watch` 命令持续刷新任务状态，并优先展示正在运行的 batch。
+系统必须提供 `oz flow watch` 命令持续刷新任务状态，并优先展示正在运行的 batch。
 
 #### 场景：running batch 优先于 single-run
 
 - **给定** 当前仓库同时存在 running batch 和 running single-run
-- **当** 用户运行 `wo watch`
+- **当** 用户运行 `oz flow watch`
 - **则** stdout 必须展示 running batch 的状态
 - **且** stdout 不得默认展示 single-run
 - **且** 命令必须持续刷新直到收到 Ctrl-C
@@ -1436,7 +1436,7 @@
 
 - **给定** 当前仓库不存在 running batch
 - **且** 当前仓库存在 running single-run
-- **当** 用户运行 `wo watch`
+- **当** 用户运行 `oz flow watch`
 - **则** stdout 必须展示该 single-run 的状态
 - **且** 命令必须持续刷新直到收到 Ctrl-C
 
@@ -1444,7 +1444,7 @@
 
 - **给定** 当前仓库没有 running batch
 - **且** 当前仓库没有 running single-run
-- **当** 用户运行 `wo watch`
+- **当** 用户运行 `oz flow watch`
 - **则** stdout 必须提示当前没有正在进行的批量任务或工作流
 - **且** 命令必须正常退出或在下一次刷新前不修改任何 state
 
@@ -1454,36 +1454,36 @@
 
 #### 场景：watch 指定 batch
 
-- **给定** `wo status -b1` 能定位一个 batch
-- **当** 用户运行 `wo watch -b1`
+- **给定** `oz flow status -b1` 能定位一个 batch
+- **当** 用户运行 `oz flow watch -b1`
 - **则** stdout 必须持续展示该 batch 的状态
 - **且** 不得因为存在更新的 single-run 而切换目标
 
 #### 场景：watch 指定 single-run
 
-- **给定** `wo status -w1` 能定位一个 single-run
-- **当** 用户运行 `wo watch -w1`
+- **给定** `oz flow status -w1` 能定位一个 single-run
+- **当** 用户运行 `oz flow watch -w1`
 - **则** stdout 必须持续展示该 workflow 的状态
 - **且** 不得因为存在 running batch 而切换目标
 
 #### 场景：running 阶段显示 spinner
 
 - **给定** watch 目标中存在当前 running 阶段
-- **当** 用户运行 `wo watch`
+- **当** 用户运行 `oz flow watch`
 - **则** 当前 running 阶段必须显示 `|`、`/`、`-`、`\` 中的某个 spinner 帧
 - **且** 后续刷新必须能切换 spinner 帧
-- **且** `wo status` 的普通输出仍可继续使用静态 running 标记
+- **且** `oz flow status` 的普通输出仍可继续使用静态 running 标记
 
 ### 需求：人类 run status 极简固定列视图
 
 // Sources: 23-统一状态展示视图模型, 27-统一状态展示视图入口
 
-系统必须支持用户通过 `wo status` 和 `wo watch` 查看同一套极简固定列进度视图，而不是内部 workflow stage 列表、标题摘要或 engine 诊断行。
+系统必须支持用户通过 `oz flow status` 和 `oz flow watch` 查看同一套极简固定列进度视图，而不是内部 workflow stage 列表、标题摘要或 engine 诊断行。
 
 #### 场景：查询人类状态
 
 - **给定** 当前 run 已完成 planning，正在 execution，且配置了 implementation context 子代理
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** stdout 第一行必须是提案列表项，例如 `- 7-统一输出`
 - **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `  规划阶段 planner-session ✓ 2.00` 和 `  执行阶段 writer-session → 6.50`
 - **且** 子代理行必须在阶段行下继续缩进并使用用户可读短名，例如 `    代码侦察 explore-session ✓ 1.50`
@@ -1494,7 +1494,7 @@
 #### 场景：watch spinner 只标记运行阶段
 
 - **给定** 当前 run 已完成 planning 且正在 execution
-- **当** 用户运行 `wo watch -w1`
+- **当** 用户运行 `oz flow watch -w1`
 - **则** stdout 第一行必须仍是提案列表项
 - **且** spinner 帧必须替换 `执行阶段` 行的 running marker
 - **且** stdout 不得显示 spinner workflow header，例如 `| w1`
@@ -1523,7 +1523,7 @@
 #### 场景：窄 TTY 刷新不残留旧帧首行
 
 - **给定** 当前 run 的 change name 很长，在窄终端中会自动换行
-- **当** 用户在真实 TTY 中运行 `wo watch` 并连续刷新多帧
+- **当** 用户在真实 TTY 中运行 `oz flow watch` 并连续刷新多帧
 - **则** 最终屏幕第一条业务内容必须仍是 `- <change-name>`
 - **且** 最终屏幕不得残留 `b1`、`w1` 或旧 spinner header
 - **且** running 阶段行仍必须显示当前 spinner marker
@@ -1531,7 +1531,7 @@
 #### 场景：规划会话可见
 
 - **给定** 当前 run 的 sessions 中记录了 planning 会话 id
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** stdout 包含 `规划阶段` 行
 - **且** `规划阶段` 行显示 planning 会话 id
 - **且** `规划阶段` 行排在执行、审核、修正、测试和归档阶段之前
@@ -1539,7 +1539,7 @@
 #### 场景：归档会话独立展示
 
 - **给定** 当前 run 已进入 archive 阶段
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** stdout 包含 `归档阶段` 行
 - **且** `归档阶段` 行显示 archiver session id
 - **且** `归档阶段` 行不得复用 executor session id
@@ -1548,7 +1548,7 @@
 
 - **给定** run 当前 stage 为 `fix_2`
 - **且** execution 和 fix_1 已完成
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** `执行阶段` 行显示 executor session id 和 `✓`
 - **且** `修正阶段` 行显示 fixer session id 和 `✓→`
 - **且** `执行阶段` 行不得显示 `→`
@@ -1558,7 +1558,7 @@
 
 - **给定** run 已完成 `fix_1` 和 `fix_2`
 - **且** `state.json.sessions` 存在 `<tool>:fixer`
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** stdout 必须只包含一条聚合后的 `修正阶段` 行
 - **且** `修正阶段` 行显示 `<tool>:fixer` 对应 session id
 - **且** `修正阶段` 行 marker 保留历史轮次状态，显示 `✓✓`
@@ -1568,7 +1568,7 @@
 - **给定** 历史 run 的 stages 包含已完成的 `fix_1`
 - **且** `state.json.sessions` 没有任何 `<tool>:fixer`
 - **且** `state.json.sessions` 存在 `<tool>:executor`
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** `修正阶段` 行必须显示 `未知`
 - **且** `修正阶段` 行不得展示 executor session id
 
@@ -1576,7 +1576,7 @@
 
 - **给定** run 当前 stage 为 `review_3`
 - **且** review_1 和 review_2 已完成
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** `审核阶段` 行显示 reviewer session id
 - **且** `审核阶段` 行 marker 保留历史轮次状态，显示 `✓✓→`
 - **且** `执行阶段` 行不得显示 `→`
@@ -1587,48 +1587,48 @@
 - **给定** run id 为 `20260512T051106.925886354Z`
 - **且** run 已进入或完成 execution 阶段
 - **且** run 状态中没有 executor session id
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** `执行阶段` 行必须显示 `未知`
 - **且** `执行阶段` 行不得包含 run id `20260512T051106.925886354Z`
 
 #### 场景：归档完成
 
 - **给定** run 已完成 archive 阶段
-- **当** 调用 `wo status -w1`
+- **当** 调用 `oz flow status -w1`
 - **则** stdout 包含 `归档阶段` 行
 - **且** `归档阶段` 行显示 archiver session id
 - **且** `归档阶段` 行显示 `✓`
 
 ### 需求：status 默认目标和短编号
 
-系统必须让无参数 `wo status` 默认展示当前仓库最新 batch；当前仓库没有 batch 时，回退展示最新 workflow。系统必须支持 `wo status -bN` 和 `wo status -wN` 查询当前仓库内按新到旧排序的第 N 个 batch 或 workflow。
+系统必须让无参数 `oz flow status` 默认展示当前仓库最新 batch；当前仓库没有 batch 时，回退展示最新 workflow。系统必须支持 `oz flow status -bN` 和 `oz flow status -wN` 查询当前仓库内按新到旧排序的第 N 个 batch 或 workflow。
 
 #### 场景：默认查看最新 batch
 
 - **给定** 当前仓库存在 batch state
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 第一行必须显示 indicator、batch 短编号和队列进度，例如 `→ b1 1/2`
 - **且** batch 标题行不得包含最新 batch 的真实 batch id
 
 #### 场景：查询历史 batch 或 workflow
 
 - **给定** 当前仓库存在至少两个 batch 和两个 workflow
-- **当** 用户运行 `wo status -b2`
+- **当** 用户运行 `oz flow status -b2`
 - **则** 输出必须展示倒数第二个 batch
-- **当** 用户运行 `wo status -w2`
+- **当** 用户运行 `oz flow status -w2`
 - **则** 输出必须展示倒数第二个 workflow 的阶段进度
 - **且** 单 workflow 查询不得切换到 batch 队列视图
 
 #### 场景：短编号不存在
 
 - **给定** 当前仓库只有一个 batch 或 workflow
-- **当** 用户运行 `wo status -b2` 或 `wo status -w2`
+- **当** 用户运行 `oz flow status -b2` 或 `oz flow status -w2`
 - **则** 命令必须失败
 - **且** 错误必须说明找不到对应短编号
 
 ### 需求：batch 状态人类输出
 
-系统必须在 `wo status` 的人类可读输出中展示 batch 级别的整体状态，让用户能看到队列总进度和每个 change，并展开 batch 内所有已创建 workflow 的极简固定列视图。
+系统必须在 `oz flow status` 的人类可读输出中展示 batch 级别的整体状态，让用户能看到队列总进度和每个 change，并展开 batch 内所有已创建 workflow 的极简固定列视图。
 
 #### 场景：运行中的 batch 展示整体和当前工作流
 
@@ -1637,7 +1637,7 @@
 - **且** `1-a` 对应的 run 已完成
 - **且** `2-b` 对应的 run 正在执行 `review_1`
 - **且** `3-c` 尚未创建 run
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 第一行必须是第一个 change 的提案列表项，例如 `- 1-a`
 - **且** 输出不得显示 batch 短编号 header、真实 batch id 或 workflow header
 - **且** 输出必须把 `1-a`、`2-b` 和 `3-c` 分别显示为只包含 change 名称的独立行
@@ -1650,17 +1650,17 @@
 
 - **给定** 当前仓库存在一个运行中的 batch state
 - **且** batch 的 `run_ids` 为空
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 输出必须直接列出 batch 中所有 change
 - **且** 输出不得包含 batch 短编号 header 或整体进度 header
 - **且** 每个 change 行不得显示为 `未开始`
-- **且** 命令不得因为缺少当前 run 而返回“没有 wo run”
+- **且** 命令不得因为缺少当前 run 而返回“没有 oz flow run”
 
 #### 场景：batch 已完成
 
 - **给定** 当前仓库最新 run 属于一个已完成 batch
 - **且** batch 中所有 change 都有对应 run id
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 输出必须包含 batch 短编号、状态和整体进度
 - **且** batch 状态必须显示为 `done`
 - **且** 每个队列内 change 行不得包含对应 run id
@@ -1672,7 +1672,7 @@
 - **且** `1-a` 对应 run 状态为 `failed`
 - **且** batch state 记录 `failed_change` 为 `1-a`
 - **且** batch state 记录 `failed_run_id` 为该 run id
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 输出必须包含失败 change `1-a`
 - **且** change 行不得包含失败 run id
 - **且** 输出必须包含脱敏后的 batch 失败摘要
@@ -1683,7 +1683,7 @@
 
 - **给定** 当前仓库最新 batch 状态为 `failed`
 - **且** batch state 的 `error` 包含 `stderr`、`backend-api`、`wss://chatgpt.com`、`websocket` 或 `tls handshake eof`
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 必须包含 `批量任务 b1 failed`
 - **且** stdout 必须包含失败 change 名称
 - **且** stdout 必须包含简短失败摘要
@@ -1698,14 +1698,14 @@
 - **给定** batch state 记录 `failed_run_id`
 - **且** 对应 run 的 `status` 为 `failed`
 - **且** 对应 run 的 `error` 包含多行底层进程错误
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** batch 错误行必须显示稳定摘要 `failed`
 - **且** batch 错误行不得显示 run 的 raw error
 
 #### 场景：当前 run 达到审核或校验阻塞
 
 - **给定** batch 中当前 run 状态为 `blocked_review_limit` 或 `blocked_validation_limit`
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 输出必须把该 run 标记为失败或阻塞
 - **且** 输出必须包含具体阻塞状态枚举
 - **且** 后续未启动 change 不得显示 run id
@@ -1714,7 +1714,7 @@
 
 - **给定** 当前仓库没有 batch state
 - **且** 最新 run 不包含 `batch_id`
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 输出必须继续使用单 workflow 极简固定列视图
 - **且** 输出不得出现 `批量任务`
 - **且** 输出不得出现 batch 队列行
@@ -1722,7 +1722,7 @@
 #### 场景：查询 batch 内 run 的 JSON status
 
 - **给定** 一个属于 batch 的 run
-- **当** 调用 `wo status --run-id <run-id> --json`
+- **当** 调用 `oz flow status --run-id <run-id> --json`
 - **则** stdout 必须仍是可解析 JSON
 - **且** JSON 字段名仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 不得包含 `批量任务`、`工作流`、完成标记或运行中标记
@@ -1730,13 +1730,13 @@
 
 ### 需求：单 workflow status 展示阶段耗时
 
-系统必须在 `wo status -wN` 的人类可读输出中把已实际执行阶段的耗时展示在对应固定列行中，不再输出总耗时公式或独立耗时块。
+系统必须在 `oz flow status -wN` 的人类可读输出中把已实际执行阶段的耗时展示在对应固定列行中，不再输出总耗时公式或独立耗时块。
 
 #### 场景：完成的 workflow 展示分钟级耗时
 
 - **给定** 当前仓库存在一个已完成 workflow
 - **且** 该 workflow 的 `execution`、`review_1`、`archive` 阶段都有开始和结束时间
-- **当** 用户运行 `wo status -w1`
+- **当** 用户运行 `oz flow status -w1`
 - **则** `执行阶段`、`审核阶段` 和 `归档阶段` 行必须分别在第四列显示两位小数分钟
 - **且** 输出不得包含 `耗时`、`分钟` 或总耗时公式
 
@@ -1749,7 +1749,7 @@
 - **给定** 当前仓库存在一个 workflow
 - **且** `review_1` 在 `stages` 中为 `completed`
 - **但** `review_1` 没有 `stage_timings` 记录
-- **当** 用户运行 `wo status -w2`
+- **当** 用户运行 `oz flow status -w2`
 - **则** 对应阶段行不得把缺失 timing 的 `review_1` 写入耗时
 - **且** 输出不得包含独立耗时拆分块
 
@@ -1762,18 +1762,18 @@
 - **给定** 当前仓库存在一个包含两个 change 的 batch
 - **且** 第一个 change 已创建 run 并有阶段 timing
 - **且** 第二个 change 尚未开始
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** 第一个 change 下必须包含缩进的 workflow header 和阶段耗时列
 - **且** 第二个 change 下不得出现阶段耗时行
 
 ### 需求：JSON status 机器接口保持兼容
 
-系统必须保持 `wo status --run-id <run-id> --json` 的 runner 顶层 contract 不变，同时允许新增 `observability` 字段暴露阶段和子代理产物路径。耗时统计只出现在人类可读输出。
+系统必须保持 `oz flow status --run-id <run-id> --json` 的 runner 顶层 contract 不变，同时允许新增 `observability` 字段暴露阶段和子代理产物路径。耗时统计只出现在人类可读输出。
 
 #### 场景：JSON 输出不包含耗时内部字段
 
 - **给定** 当前仓库存在一个带 `stage_timings` 的 run
-- **当** 用户运行 `wo status --run-id <run-id> --json`
+- **当** 用户运行 `oz flow status --run-id <run-id> --json`
 - **则** 输出必须是合法 JSON
 - **且** JSON 必须包含既有字段 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 可以新增 `observability.engine`、`observability.rows` 和 `observability.artifacts`
@@ -1783,7 +1783,7 @@
 #### 场景：JSON observability 暴露固定产物路径
 
 - **给定** 当前仓库存在一个 sealed run
-- **当** 用户运行 `wo status --run-id <run-id> --json`
+- **当** 用户运行 `oz flow status --run-id <run-id> --json`
 - **则** `observability.rows` 必须为 execution、review、fix、qa 和 archive 阶段给出稳定行
 - **且** 每个阶段 row 必须包含阶段中文名、session id、marker 和固定 `stage_artifact` 路径
 - **且** 即使审核、测试或归档尚未开始，也必须给出 `review-1.json`、`qa-1.json` 和 `delivery-summary.md` 的预期路径
@@ -1798,7 +1798,7 @@
 - **给定** 当前仓库最新 batch 状态为 `failed`
 - **且** batch 记录了 `failed_change` 和 `failed_run_id`
 - **且** 对应 run 状态为 `failed`
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 必须包含 `批量任务 b1 failed`
 - **且** stdout 必须包含失败 change 名称
 - **且** stdout 必须包含失败阶段对应的中文角色
@@ -1808,7 +1808,7 @@
 #### 场景：内部网络错误不外泄 raw 诊断
 
 - **给定** failed run 的 error 包含 `stderr`、`backend-api`、`wss://chatgpt.com`、`websocket` 或 `tls handshake eof`
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 必须包含可理解的中文失败摘要
 - **且** stdout 不得包含 `backend-api`
 - **且** stdout 不得包含 `wss://chatgpt.com`
@@ -1818,62 +1818,62 @@
 #### 场景：阻塞状态保留业务原因
 
 - **给定** failed batch 的当前 run 状态为 `blocked_review_limit` 或 `blocked_validation_limit`
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 必须包含对应阻塞原因
 - **且** stdout 不得把该状态泛化成普通智能体失败
 
 #### 场景：缺失 run state 展示记录缺失原因
 
 - **给定** failed batch 的 `failed_run_id` 或当前 run id 指向不存在的 run state 文件
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 必须展示 "工作流记录缺失，无法自动确认恢复方式"
 - **且** stdout 必须包含整条 batch 历史的清理命令
-- **且** stdout 不得提示 `wo restart -bN` 能自动继续
+- **且** stdout 不得提示 `oz flow restart -bN` 能自动继续
 
 ### 需求：可恢复 batch 优先提示 restart
 
-系统必须把可恢复 batch 的首选操作提示为 `wo restart -bN`，而不是删除整个状态目录。
+系统必须把可恢复 batch 的首选操作提示为 `oz flow restart -bN`，而不是删除整个状态目录。
 
 #### 场景：普通 failed batch 提示删除失败记录并继续
 
 - **给定** 当前 batch 状态为 `failed`
 - **且** 当前 failed run 状态为 `failed` 或 `interrupted`
-- **当** 用户运行 `wo status`
-- **则** stdout 必须提示用户运行 `wo restart -b1`
+- **当** 用户运行 `oz flow status`
+- **则** stdout 必须提示用户运行 `oz flow restart -b1`
 - **且** 提示语必须说明会删除失败记录并继续该批量任务
 - **且** stdout 不得把 `rm -rf` 作为首选操作
 
 #### 场景：启动时 stopped history 使用同一恢复提示
 
 - **给定** 当前仓库存在 stopped failed batch
-- **当** 用户无参数运行 `wo`
+- **当** 用户无参数运行 `oz flow`
 - **则** stdout 必须展示该 batch 的失败摘要
-- **且** stdout 必须提示 `wo restart -bN` 删除失败记录并继续
+- **且** stdout 必须提示 `oz flow restart -bN` 删除失败记录并继续
 
 ### 需求：clean 只清理当前项目运行态
 
-系统必须提供 `wo clean` 命令，只清理当前 git 仓库对应 repo-key 下的失败或异常运行态。
+系统必须提供 `oz flow clean` 命令，只清理当前 git 仓库对应 repo-key 下的失败或异常运行态。
 
 #### 场景：清理当前项目失败运行态
 
 - **给定** 当前仓库的用户状态目录下存在 `failed` run
-- **当** 用户在该仓库运行 `wo clean`
+- **当** 用户在该仓库运行 `oz flow clean`
 - **则** 系统必须删除该 run 目录
 - **且** stdout 必须展示已清理工作流数量
-- **且** stdout 必须说明该操作只删除 wo 历史记录，不回滚代码改动
+- **且** stdout 必须说明该操作只删除 oz flow 历史记录，不回滚代码改动
 
 #### 场景：不影响其他项目运行态
 
 - **给定** 两个不同 git 仓库共享同一个 `XDG_STATE_HOME`
 - **且** 两个仓库都存在失败 run
-- **当** 用户在第一个仓库运行 `wo clean`
+- **当** 用户在第一个仓库运行 `oz flow clean`
 - **则** 系统必须只删除第一个仓库 repo-key 下的失败 run
 - **且** 第二个仓库 repo-key 下的失败 run 必须仍然存在
 
 #### 场景：无可清理对象时输出空状态
 
 - **给定** 当前仓库没有失败或异常运行态
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** stdout 必须提示没有需要清理的失败或异常运行态
 - **且** 命令必须成功退出
 
@@ -1884,20 +1884,20 @@
 #### 场景：保留已完成 run
 
 - **给定** 当前仓库存在状态为 `done` 的 run
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统不得删除该 run 目录
 
 #### 场景：保留已归档 run
 
 - **给定** 当前仓库存在状态为 `archived_superseded` 的 run
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统不得删除该 run 目录
 
 #### 场景：跳过 active running run
 
 - **给定** 当前仓库存在状态为 `running` 的 run
 - **且** 该 run 存在 active lock
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统不得删除该 run 目录
 - **且** stdout 必须提示已跳过仍在运行的任务
 
@@ -1910,7 +1910,7 @@
 - **给定** 当前仓库存在状态为 `failed` 的 batch
 - **且** batch 的 `failed_run_id` 指向一个 run
 - **且** batch 的 `run_ids` 也包含该 run
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统必须删除该 batch 目录
 - **且** 系统必须删除该 batch 引用的 run 目录
 - **且** stdout 必须展示已清理批量任务数量和工作流数量
@@ -1919,7 +1919,7 @@
 
 - **给定** 当前仓库存在状态为 `aborted` 的 batch
 - **且** batch 引用了一个已中止 run
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统必须删除该 batch 目录
 - **且** 系统必须删除该 batch 引用的 run 目录
 
@@ -1927,7 +1927,7 @@
 
 - **给定** 当前仓库存在状态为 `failed` 的 batch
 - **且** batch 引用的某个 run 存在 active lock
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统不得删除该 batch 目录
 - **且** 系统不得删除该 active run 目录
 - **且** stdout 必须提示已跳过仍在运行的任务
@@ -1940,19 +1940,19 @@
 
 - **给定** 当前仓库 `runs/<run-id>/` 目录存在
 - **且** 该目录缺少 `state.json`
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统必须删除该 run 目录
 
 #### 场景：清理 JSON 损坏的 batch 目录
 
 - **给定** 当前仓库 `batches/<batch-id>/state.json` 存在
 - **且** 文件内容不是合法 JSON
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 系统必须删除该 batch 目录
 
 ### 需求：清理异常 run 时同步清理 Codex/Pi 子会话记录
 
-系统必须在 `wo clean` 删除失败、阻塞、中断、人工中止或损坏的 run 时，删除该 run 在 `state.json.sessions` 中引用的 Codex/Pi 子会话记录。
+系统必须在 `oz flow clean` 删除失败、阻塞、中断、人工中止或损坏的 run 时，删除该 run 在 `state.json.sessions` 中引用的 Codex/Pi 子会话记录。
 
 #### 场景：失败 run 的 Codex/Pi JSONL 和 Pi SQLite 行被清理
 
@@ -1961,7 +1961,7 @@
 - **且** Codex sessions 目录中存在匹配 Codex session id 的 JSONL 文件
 - **且** Pi sessions 目录中存在匹配 Pi session id 的 JSONL 文件
 - **且** Pi SQLite 数据库中存在匹配 Pi session id 的 session/message 行
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 该 run 目录必须被删除
 - **且** 匹配的 Codex JSONL 文件必须被删除
 - **且** 匹配的 Pi JSONL 文件必须被删除
@@ -1970,7 +1970,7 @@
 
 ### 需求：保留受保护 run 的外部 agent 记录
 
-系统必须保留未被 `wo clean` 删除的 run 及其外部 Codex/Pi 子会话记录。
+系统必须保留未被 `oz flow clean` 删除的 run 及其外部 Codex/Pi 子会话记录。
 
 #### 场景：done 和 active-locked run 的 agent 记录保留
 
@@ -1978,7 +1978,7 @@
 - **且** 当前仓库存在一个带 active lock 的异常 run
 - **且** 这两个 run 都引用 Codex/Pi session id
 - **且** 外部 Codex/Pi JSONL 和 Pi SQLite 行存在
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** done run 目录必须保留
 - **且** active-locked run 目录必须保留
 - **且** 这两个 run 引用的 Codex/Pi JSONL 文件必须保留
@@ -1993,64 +1993,64 @@
 - **给定** 当前仓库存在一个状态为 `failed` 的 batch
 - **且** batch 的 `run_ids` 或 `failed_run_id` 引用一个状态为 `failed` 的 run
 - **且** 该 run 引用 Codex/Pi session id
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** failed batch 必须被删除
 - **且** 被引用的 failed run 必须被删除
 - **且** 该 run 引用的 Codex/Pi 外部记录必须被删除
 
-### 需求：外部存储缺失或 schema 未知不阻断 wo clean
+### 需求：外部存储缺失或 schema 未知不阻断 oz flow clean
 
-系统必须把 Codex/Pi 外部存储清理作为附加清理，不得因为外部文件不存在或 Pi SQLite schema 无法识别而阻断 `wo` 自己的运行态清理。
+系统必须把 Codex/Pi 外部存储清理作为附加清理，不得因为外部文件不存在或 Pi SQLite schema 无法识别而阻断 `oz flow` 自己的运行态清理。
 
-#### 场景：缺失外部记录时仍清理 wo 状态
+#### 场景：缺失外部记录时仍清理 oz flow 状态
 
 - **给定** 当前仓库存在一个状态为 `failed` 的 run
 - **且** 该 run 记录了 Codex/Pi session id
 - **但** 本机不存在匹配的 Codex/Pi JSONL 文件
 - **且** Pi SQLite 不存在或 schema 无法识别
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 该 run 目录仍必须被删除
-- **且** `wo clean` 必须返回成功
+- **且** `oz flow clean` 必须返回成功
 
 ### 需求：输出展示 agent 子会话记录清理结果
 
-系统必须在 `wo clean` 的人类可读输出中展示成功清理的 agent 子会话记录数量。
+系统必须在 `oz flow clean` 的人类可读输出中展示成功清理的 agent 子会话记录数量。
 
 #### 场景：清理输出包含 agent 子会话记录数量
 
 - **给定** 当前仓库存在一个可清理 run
 - **且** 该 run 引用的 Codex/Pi 外部记录存在并被清理
-- **当** 用户运行 `wo clean`
+- **当** 用户运行 `oz flow clean`
 - **则** 输出必须包含清理的 workflow 数量
 - **且** 输出必须包含清理的 agent 子会话记录数量
 - **且** 输出必须继续说明该操作不回滚代码改动
 
 ### 需求：不可恢复提示使用 clean 命令
 
-系统在不可恢复任务的人类输出中必须优先提示 `wo clean`，避免让用户手工复制内部 `rm -rf` 路径。
+系统在不可恢复任务的人类输出中必须优先提示 `oz flow clean`，避免让用户手工复制内部 `rm -rf` 路径。
 
 #### 场景：status 中 blocked batch 提示 clean
 
 - **给定** 当前仓库存在不可自动恢复的 blocked batch
-- **当** 用户运行 `wo status -b1`
-- **则** stdout 必须提示可运行 `wo clean` 清理失败或异常运行态
+- **当** 用户运行 `oz flow status -b1`
+- **则** stdout 必须提示可运行 `oz flow clean` 清理失败或异常运行态
 - **且** stdout 必须说明该操作不回滚代码改动
 - **且** stdout 不得把裸 `rm -rf` 作为首选清理命令
 
 #### 场景：help 展示 clean 命令
 
-- **当** 用户运行 `wo --help`
-- **则** stdout 必须包含 `wo clean`
+- **当** 用户运行 `oz flow --help`
+- **则** stdout 必须包含 `oz flow clean`
 - **且** 命令说明必须表达清理当前项目失败或异常运行态
 
 ### 需求：不可恢复任务提供清理历史命令
 
-系统必须只在无法自动恢复时展示整条历史的删除命令，并说明该命令只清理 wo 历史记录。
+系统必须只在无法自动恢复时展示整条历史的删除命令，并说明该命令只清理 oz flow 历史记录。
 
 #### 场景：aborted batch 提示清理整条历史
 
 - **给定** 当前 batch 状态为 `aborted`
-- **当** 用户运行 `wo status -b1`
+- **当** 用户运行 `oz flow status -b1`
 - **则** stdout 必须包含用户已中止的原因
 - **且** stdout 必须包含 `rm -rf`
 - **且** 清理路径必须指向当前仓库用户状态目录下的 `batches/<batch-id>`
@@ -2060,8 +2060,8 @@
 
 - **给定** 当前 batch 状态为 `failed`
 - **且** 当前 failed run 状态为 `blocked_review_limit` 或 `blocked_validation_limit`
-- **当** 用户运行 `wo status -b1`
-- **则** stdout 不得提示 `wo restart -b1` 能自动继续
+- **当** 用户运行 `oz flow status -b1`
+- **则** stdout 不得提示 `oz flow restart -b1` 能自动继续
 - **且** stdout 必须包含整条 batch 历史的清理命令
 
 ### 需求：机器接口保持兼容
@@ -2071,23 +2071,23 @@
 #### 场景：JSON status 不包含人类提示
 
 - **给定** 一个 failed run
-- **当** 用户运行 `wo status --run-id <run-id> --json`
+- **当** 用户运行 `oz flow status --run-id <run-id> --json`
 - **则** stdout 必须是可解析 JSON
 - **且** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
-- **且** JSON 不得包含 `wo restart`
+- **且** JSON 不得包含 `oz flow restart`
 - **且** JSON 不得包含 `rm -rf`
 - **且** JSON 不得包含 watch spinner
 
 ### 需求：启动提示结构化展示已停止任务
 
-系统必须在无参数启动 `wo` 时，用结构化多行提示展示失败或已停止的历史 batch/workflow，避免重复和难读的一行输出。
+系统必须在无参数启动 `oz flow` 时，用结构化多行提示展示失败或已停止的历史 batch/workflow，避免重复和难读的一行输出。
 
 #### 场景：失败 batch 展示停止位置和原因
 
 - **给定** 当前仓库存在状态为 `failed` 的 batch
 - **且** batch state 记录 `failed_change`
 - **且** batch state 记录 `failed_run_id`
-- **当** 用户无参数运行 `wo`
+- **当** 用户无参数运行 `oz flow`
 - **则** 输出必须包含“检测到已停止的历史任务”
 - **且** 输出必须以批量任务条目展示 batch 短编号、真实 batch id 和 batch 状态
 - **且** 输出必须单独展示 failed change
@@ -2098,7 +2098,7 @@
 
 - **给定** 一个失败 batch 的 `failed_run_id` 指向某个 run
 - **且** 该 run 本身也是失败或阻塞状态
-- **当** 用户无参数运行 `wo`
+- **当** 用户无参数运行 `oz flow`
 - **则** 该 run 必须只出现在失败 batch 条目中
 - **且** 不得再出现在独立失败 workflow 条目中
 
@@ -2106,86 +2106,86 @@
 
 - **给定** 当前仓库同时存在一个失败 batch
 - **且** 当前仓库存在一个不属于 batch 的失败 run
-- **当** 用户无参数运行 `wo`
+- **当** 用户无参数运行 `oz flow`
 - **则** 输出必须在同一个已停止历史任务提示下展示 batch 条目
 - **且** 输出必须展示独立 workflow 条目
 - **且** 两类条目必须能通过“批量任务”和“工作流”区分
 
 ### 需求：status 人类输出提示可用更新
 
-系统必须在人类可读 `wo status` 中使用用户级缓存检查 `wo` 和 `oz` 是否存在 GitHub 新版本，并在存在更新时提示用户运行 `wo update`。
+系统必须在人类可读 `oz flow status` 中使用用户级缓存检查 `oz flow` 和 `oz` 是否存在 GitHub 新版本，并在存在更新时提示用户运行 `oz flow update`。
 
 #### 场景：缓存显示有更新
 
 - **给定** 更新检查缓存未过期
-- **且** 缓存记录 `wo` 或 `oz` 存在新版本
-- **当** 用户运行 `wo status`
+- **且** 缓存记录 `oz flow` 或 `oz` 存在新版本
+- **当** 用户运行 `oz flow status`
 - **则** stdout 先显示当前 run 的人类进度
 - **且** stdout 包含 `更新可用`
-- **且** stdout 提示用户运行 `wo update`
+- **且** stdout 提示用户运行 `oz flow update`
 - **且** 命令 exit code 为 0
 
 #### 场景：无法联网检查更新
 
 - **给定** 更新检查缓存不存在或已过期
 - **且** GitHub 请求失败、超时或返回不可解析响应
-- **当** 用户运行 `wo status`
+- **当** 用户运行 `oz flow status`
 - **则** stdout 仍显示当前 run 的人类进度
 - **且** 命令 exit code 为 0
 - **且** 不显示更新错误诊断
 
 #### 场景：JSON status 不包含更新提示
 
-- **给定** GitHub 上存在 `wo` 或 `oz` 新版本
-- **当** 调用 `wo status --run-id <run-id> --json`
+- **给定** GitHub 上存在 `oz flow` 或 `oz` 新版本
+- **当** 调用 `oz flow status --run-id <run-id> --json`
 - **则** stdout 是合法 JSON 对象
 - **且** JSON 字段保持现有 runner contract
-- **且** stdout 不包含 `更新可用` 或 `wo update`
+- **且** stdout 不包含 `更新可用` 或 `oz flow update`
 
-### 需求：wo update 安全更新 wo 和 oz
+### 需求：oz flow update 安全更新 oz flow 和 oz
 
-系统必须提供 `wo update` 命令，默认同时尝试更新 `wo` 和 `oz`，并在替换任何二进制前完成下载校验、新版本验证和旧版本备份。
+系统必须提供 `oz flow update` 命令，默认同时尝试更新 `oz flow` 和 `oz`，并在替换任何二进制前完成下载校验、新版本验证和旧版本备份。
 
 #### 场景：两个工具都有新版本
 
-- **给定** 本地 `wo` 和 `oz` 都低于 GitHub latest 版本
+- **给定** 本地 `oz flow` 和 `oz` 都低于 GitHub latest 版本
 - **且** 当前平台存在匹配 Release asset
 - **且** `sha256sums.txt` 校验通过
-- **当** 用户运行 `wo update`
-- **则** 系统备份当前 `wo` 和 `oz` 二进制
+- **当** 用户运行 `oz flow update`
+- **则** 系统备份当前 `oz flow` 和 `oz` 二进制
 - **且** 系统安装新版二进制
 - **且** stdout 显示每个工具的旧版本、新版本、备份路径和回滚命令
 
 #### 场景：失败不影响另一个工具
 
-- **给定** `wo` 更新成功
+- **给定** `oz flow` 更新成功
 - **但** `oz` 更新因 checksum、版本验证、备份或下载失败而中止
-- **当** 用户运行 `wo update`
-- **则** 新版 `wo` 保持安装状态
+- **当** 用户运行 `oz flow update`
+- **则** 新版 `oz flow` 保持安装状态
 - **且** 旧版 `oz` 保持不变
-- **且** stdout 分别显示 `wo` 成功和 `oz` 失败原因
+- **且** stdout 分别显示 `oz flow` 成功和 `oz` 失败原因
 
 #### 场景：工具已经是最新
 
-- **给定** 本地 `wo` 或 `oz` 已等于 GitHub latest 版本
-- **当** 用户运行 `wo update`
+- **给定** 本地 `oz flow` 或 `oz` 已等于 GitHub latest 版本
+- **当** 用户运行 `oz flow update`
 - **则** 系统不下载该工具的 Release asset
 - **且** stdout 明确显示该工具已是最新
 
 #### 场景：oz 未安装
 
 - **给定** `oz` 不在 PATH 中
-- **且** `wo` 存在可用新版本
-- **当** 用户运行 `wo update`
-- **则** 系统仍尝试更新 `wo`
+- **且** `oz flow` 存在可用新版本
+- **当** 用户运行 `oz flow update`
+- **则** 系统仍尝试更新 `oz flow`
 - **且** stdout 明确报告 `oz` 未安装或不可更新
-- **且** 命令不会因为 `oz` 缺失而跳过 `wo` 更新
+- **且** 命令不会因为 `oz` 缺失而跳过 `oz flow` 更新
 
 #### 场景：checksum 不匹配
 
 - **给定** GitHub Release asset 已下载
 - **且** `sha256sums.txt` 中的校验值与下载文件不匹配
-- **当** 用户运行 `wo update`
+- **当** 用户运行 `oz flow update`
 - **则** 系统不得替换对应工具的当前二进制
 - **且** stdout 或 stderr 明确显示校验失败
 
@@ -2193,7 +2193,7 @@
 
 - **给定** 下载和 checksum 校验成功
 - **但** staged binary 的 `--version` 输出不等于 GitHub latest tag
-- **当** 用户运行 `wo update`
+- **当** 用户运行 `oz flow update`
 - **则** 系统不得替换对应工具的当前二进制
 - **且** stdout 或 stderr 明确显示版本验证失败
 
@@ -2201,23 +2201,23 @@
 
 - **给定** 下载、checksum 和 staged binary 验证都成功
 - **但** 当前二进制无法备份到用户状态目录
-- **当** 用户运行 `wo update`
+- **当** 用户运行 `oz flow update`
 - **则** 系统不得替换当前二进制
 - **且** stdout 或 stderr 明确显示备份失败
 
-#### 场景：Unix-like 平台更新当前 wo
+#### 场景：Unix-like 平台更新当前 oz
 
 - **给定** 当前平台是 Linux 或 macOS
-- **当** 用户运行 `wo update`
+- **当** 用户运行 `oz flow update`
 - **则** 系统选择 `<tool>_<tag>_<goos>_<goarch>.tar.gz`
 - **且** 在备份完成后用 staged binary 替换目标可执行文件
 
-#### 场景：Windows 平台更新当前 wo
+#### 场景：Windows 平台更新当前 oz
 
 - **给定** 当前平台是 Windows
-- **当** 用户运行 `wo update`
+- **当** 用户运行 `oz flow update`
 - **则** 系统选择 `<tool>_<tag>_<goos>_<goarch>.zip`
-- **且** 对正在运行的 `wo.exe` 使用退出后替换流程
+- **且** 对正在运行的 `oz.exe` 使用退出后替换流程
 - **且** stdout 显示备份路径和替换状态
 
 ### 需求：审查通过后进入 QA
@@ -2230,7 +2230,7 @@
 - **且** review_1 的审核结果不需要修复
 - **当** 系统推进下一阶段
 - **则** 下一阶段必须是 `qa_1`
-- **且** `wo status` 不得显示额外的修复完成标记
+- **且** `oz flow status` 不得显示额外的修复完成标记
 
 ### 需求：JSON run abort
 
@@ -2238,7 +2238,7 @@
 
 #### 场景：中止 run
 
-- **当** 调用 `wo abort --run-id <run-id> --json`
+- **当** 调用 `oz flow abort --run-id <run-id> --json`
 - **且** 用户状态目录中的 `runs/<run-id>/state.json` 存在
 - **则** 命令 exit code 为 0
 - **且** stdout 是合法 JSON 对象
@@ -2271,7 +2271,7 @@
 
 #### 场景：JSON run 后端失败
 
-- **当** `wo run --change <change-name> --json` 已创建 sealed run
+- **当** `oz flow run --change <change-name> --json` 已创建 sealed run
 - **且** agent backend 在 execution、fix、review 或 archive 阶段失败
 - **则** 命令 exit code 非 0
 - **且** stdout 必须先保留启动时的 `running` DTO
@@ -2285,47 +2285,47 @@
 
 #### 场景：基础命令不依赖外部 workflow 工具
 
-- **当** 用户运行 `wo --help` 或 `wo --version`
+- **当** 用户运行 `oz flow --help` 或 `oz flow --version`
 - **则** 命令必须成功返回
 - **且** 不得要求本机存在 `oz`、`codex` 或 `pi`
 - **且** 测试必须断言 stdout 中的关键用户可见内容
 
 #### 场景：配置命令写入预期文件
 
-- **当** 用户在临时 git 仓库中运行 `wo config`
-- **则** 仓库根目录必须生成 `wo.yaml`
+- **当** 用户在临时 git 仓库中运行 `oz flow config`
+- **则** 仓库根目录必须生成 `oz-flow.yaml`
 - **且** 配置内容必须包含默认 workflow、validation 和 prompts 设置
 - **且** 不创建 `.wo/`
-- **当** 用户在非 git 目录运行 `wo config --global`
-- **则** 用户主目录必须生成 `~/wo.yaml`
+- **当** 用户在非 git 目录运行 `oz flow config --global`
+- **则** 用户主目录必须生成 `~/oz-flow.yaml`
 - **且** 不创建 `~/.wo/`
 - **且** 后续 prompt 读取必须证明仓库 YAML 优先于全局 YAML，并忽略旧 `.wo/cmd`
 
 #### 场景：旧配置命令返回迁移错误
 
-- **当** 用户运行 `wo init` 或 `wo install`
+- **当** 用户运行 `oz flow init` 或 `oz flow install`
 - **则** 命令必须返回非零退出
-- **且** 错误信息必须提示改用 `wo config` 或说明 prompt 已内嵌在 YAML 中
+- **且** 错误信息必须提示改用 `oz flow config` 或说明 prompt 已内嵌在 YAML 中
 
 #### 场景：JSON runner 命令输出稳定结构
 
-- **当** 用户运行 `wo contract --json`、`wo list-changes --json`、`wo status --run-id <run-id> --json` 或 `wo abort --run-id <run-id> --json`
+- **当** 用户运行 `oz flow contract --json`、`oz flow list-changes --json`、`oz flow status --run-id <run-id> --json` 或 `oz flow abort --run-id <run-id> --json`
 - **则** stdout 必须是合法 JSON
 - **且** 测试必须断言稳定字段名和关键状态值
 - **且** 失败时必须输出机器可读错误结构或返回明确错误
 
 ### 需求：交互式 workflow 业务测试
 
-系统必须通过真实行为测试覆盖用户在无参数运行 `wo` 时看到的关键菜单分支。
+系统必须通过真实行为测试覆盖用户在无参数运行 `oz flow` 时看到的关键菜单分支。
 
 #### 场景：没有 active change 时直接进入规划
 
-- **当** 用户无参数运行 `wo`
+- **当** 用户无参数运行 `oz flow`
 - **且** `oz list --json` 返回空列表
-- **则** `wo` 必须直接启动 planning 阶段 agent tool
+- **则** `oz flow` 必须直接启动 planning 阶段 agent tool
 - **且** 不得显示“选择已有变更”菜单
 - **当** planning 退出后仍没有 active change
-- **则** `wo` 必须正常返回
+- **则** `oz flow` 必须正常返回
 - **且** 不得创建新的 batch 或 sealed run
 
 #### 场景：存在未完成 run 时用户可以恢复或中止
@@ -2336,7 +2336,7 @@
 - **则** 系统必须走 resume detached 路径
 - **当** 用户选择中止
 - **则** 对应 run 状态必须变为 aborted
-- **且** `wo` 必须直接返回，不继续要求选择新任务
+- **且** `oz flow` 必须直接返回，不继续要求选择新任务
 
 #### 场景：选择已有 oz change 后提交 sealed run
 
@@ -2387,13 +2387,13 @@
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
 - **关键断言**：`tests/app` 不再用 `.gotest` 隐藏迁移层，根目录 Go 门禁稳定
 
-#### 场景：主规格和发布门禁使用根目录测试
+#### 场景：主规格和发布门禁使用 Go 测试门禁
 
 - **当** 检查主规格和发布门禁测试
 - **则** 主规格只承诺 Codex/Pi 后端和启动前 CLI 检查
 - **且** 发布门禁不得依赖 `go test ./internal`
 - **测试**：`tests/specs/codex-workflow-cli/test_docs_release_gate_root_tests_contract.sh`
-- **关键断言**：文档、发布门禁和根目录测试布局一致
+- **关键断言**：文档、发布门禁和 Go 测试入口一致
 
 #### 场景：归档后的 shell 测试可独立运行
 
@@ -2420,19 +2420,19 @@
 - **且** 该结果不能依赖删除根门禁或跳过真实业务断言
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
 - **关键断言**：核心 app、oz CLI 和根测试包可单独证明当前基线可用
-- **剩余风险**：该测试不替代全部业务 shell 测试，CI 仍需继续运行根目录 `tests/*.sh`
+- **剩余风险**：该测试不替代定向 shell 合同测试，CI/Release 不盲目遍历历史 shell 脚本
 
 ### 需求：极简 human status 不泄漏 parallel fan-in
 
-// Sources: 13-修正-wo-status-多轮并行状态展示
+// Sources: 13-修正-oz-flow-status-多轮并行状态展示
 
-系统必须让 human `wo status` 和 `wo watch` 保持固定列极简输出。parallel fan-in artifact 是内部聚合产物，不得以 `- 并行 <group>` 或 fan-in member raw status 的形式显示给用户。短名 subagent 行仍通过 `DAGNodes` 和 `sessions` 表达真实 helper 执行状态。
+系统必须让 human `oz flow status` 和 `oz flow watch` 保持固定列极简输出。parallel fan-in artifact 是内部聚合产物，不得以 `- 并行 <group>` 或 fan-in member raw status 的形式显示给用户。短名 subagent 行仍通过 `DAGNodes` 和 `sessions` 表达真实 helper 执行状态。
 
 #### 场景：多轮 run 不显示并行 summary/raw member status
 
 - **给定** 当前 run 启用了 `implementation_context` 或 `review` parallel group
 - **且** run 目录存在合法 `parallel-implementation-context.json` 或 `parallel-review-<n>.json`
-- **当** 用户运行 `wo status -wN` 或 `wo watch -wN`
+- **当** 用户运行 `oz flow status -wN` 或 `oz flow watch -wN`
 - **则** 输出不包含 `- 并行`、`implementation_context`、`parallel-review`、`LGTM_WITH_MINOR_CONCERNS` 或 `completed - -`
 - **且** 输出仍保留短名 subagent 行和固定列阶段行
 - **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
@@ -2443,21 +2443,21 @@
 
 - **给定** 当前 batch 中某个 change 已创建 run
 - **且** 该 run 已到达或已产出 parallel group artifact
-- **当** 用户运行 `wo status` 或 `wo status -bN`
+- **当** 用户运行 `oz flow status` 或 `oz flow status -bN`
 - **则** batch 输出不包含 `- 并行`、group name 或 fan-in summary
 - **且** 短名 subagent 行仍正常显示
 - **且** 不得把所有 subagent 行统一堆到 batch 底部
 
 #### 场景：JSON status 保留机器可读 artifact 路径
 
-- **当** 用户运行 `wo status --run-id <run-id> --json`
+- **当** 用户运行 `oz flow status --run-id <run-id> --json`
 - **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 不得将 fan-in summary 注入 human 可读字段
 - **且** JSON observability 可继续包含机器可读 artifact 路径
 
 ### 需求：规划阶段完成态正确
 
-// Sources: 13-修正-wo-status-多轮并行状态展示
+// Sources: 13-修正-oz-flow-status-多轮并行状态展示
 
 系统必须在默认 sealed run 中隐藏没有运行证据的规划占位行。若旧配置显式启用并完成了 `planning_context` fan-in，human status 仍可把它视为规划准备完成，且不得展开已完成的规划 subagent 明细。
 
@@ -2465,7 +2465,7 @@
 
 - **给定** sealed run 从 execution 阶段起跑且旧配置显式启用 `planning_context`
 - **且** `planning_context_*` fan-in 节点全部成功且 `parallel-planning-context.json` 存在
-- **当** 用户运行 `wo status -wN`
+- **当** 用户运行 `oz flow status -wN`
 - **则** `规划阶段` 行显示 `✓` marker
 - **且** `规划阶段` 行不展开 `需求分析`、`代码侦察`、`外部资料` 等已完成的 planning subagent 明细
 - **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
@@ -2474,7 +2474,7 @@
 
 ### 需求：多轮阶段 marker 保留历史
 
-// Sources: 13-修正-wo-status-多轮并行状态展示
+// Sources: 13-修正-oz-flow-status-多轮并行状态展示
 
 系统必须在 compact 阶段行展示已发生轮次的历史状态。当前轮次失败不能抹掉前序成功轮次。`review_*`、`qa_*`、`fix_*` 已完成轮次显示 `✓`，当前失败轮次显示 `x`，当前运行轮次显示 `→` 或 watch spinner。
 
@@ -2482,7 +2482,7 @@
 
 - **给定** run 的 `review_1` 和 `review_2` 已完成
 - **且** `review_3` 失败
-- **当** 用户运行 `wo status -wN`
+- **当** 用户运行 `oz flow status -wN`
 - **则** `审核阶段` 行显示 reviewer session id
 - **且** `审核阶段` 行 marker 显示 `✓✓x`
 - **且** `修正阶段` 行 marker 显示 `✓✓`（fix_1 和 fix_2 已完成）
@@ -2492,7 +2492,7 @@
 
 ### 需求：子代理明细绑定当前轮次
 
-// Sources: 13-修正-wo-status-多轮并行状态展示
+// Sources: 13-修正-oz-flow-status-多轮并行状态展示
 
 系统必须让 review/qa 子代理明细跟随当前 compact stage 代表轮次。`review_3` 失败时，审核阶段下的子代理应显示第三轮 subagent session 和 DAG node 状态，不得固定读取第一轮或把主阶段 `review_3` node 误判为 subagent。
 
@@ -2500,7 +2500,7 @@
 
 - **给定** `before_review_1_*`、`before_review_2_*`、`before_review_3_*` 三轮 helper DAG node 均存在
 - **且** 第三轮 helper 全部 success，但主阶段 `review_3` node failed
-- **当** 用户运行 `wo status -wN`
+- **当** 用户运行 `oz flow status -wN`
 - **则** 审核阶段下子代理行使用第三轮 session（如 `review3-target`、`review3-quality` 等）
 - **且** 输出不包含第一轮 session（如 `review1-target`）
 - **且** helper 如 `测试有效 review3-test ✓` 不能因为主阶段 `review_3` failed 被标成 `x`
@@ -2511,15 +2511,15 @@
 
 ### 需求：默认纯 Go DAG engine
 
-系统必须把默认 `wo run --change <change> --json` 执行路径设为内嵌纯 Go DAG engine。
+系统必须把默认 `oz flow run --change <change> --json` 执行路径设为内嵌纯 Go DAG engine。
 
 #### 场景：默认 run 使用 go-dag
 
-- **当** 用户在真实 active change 上运行 `wo run --change <change> --json`
+- **当** 用户在真实 active change 上运行 `oz flow run --change <change> --json`
 - **则** 默认运行必须成功推进 workflow
 - **且** run state 必须记录 `engine: go-dag`
 - **且** 默认 workflow 配置必须启用 `parallel.enabled: true`
-- **且** `wo status -wN` 必须展示 `引擎 go-dag`，不得展示并行 group fan-in summary
+- **且** `oz flow status -wN` 必须展示 `引擎 go-dag`，不得展示并行 group fan-in summary
 
 ### 需求：默认 parallel subagents 与 DAG 图
 
@@ -2527,20 +2527,20 @@
 
 #### 场景：默认配置启用 parallel
 
-- **当** 用户运行 `wo config`
-- **则** 生成的 `wo.yaml` 必须包含 `engine: go-dag`
+- **当** 用户运行 `oz flow config`
+- **则** 生成的 `oz-flow.yaml` 必须包含 `engine: go-dag`
 - **且** 必须包含 `parallel.enabled: true`
 
 #### 场景：Mermaid 图展示 fan-out/fan-in
 
-- **当** 用户运行 `wo graph --change <change> --format mermaid`
+- **当** 用户运行 `oz flow graph --change <change> --format mermaid`
 - **则** Mermaid 输出必须包含 implementation context、review、QA 的 subagent 节点和 fan-in 节点
 - **且** 图中必须包含 archive gate
 - **且** 默认图不得要求任何外部 workflow scheduler
 
 #### 场景：默认 go-dag status 保持 JSON contract 兼容
 
-- **当** 默认 go-dag run 完成后，用户运行 `wo status --run-id <run-id> --json`
+- **当** 默认 go-dag run 完成后，用户运行 `oz flow status --run-id <run-id> --json`
 - **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`
 
@@ -2548,35 +2548,35 @@
 
 // Sources: 11-新增-MADA-工作流profiles
 
-系统必须把默认 `wo.yaml` 生成逻辑中的并行 subagent 描述、角色 purpose、profile 提示词配置从 Go 字符串拼接中剥离到独立内置 YAML 模板文件 `profiles-template/*.yaml`。
+系统必须把默认 `oz-flow.yaml` 生成逻辑中的并行 subagent 描述、角色 purpose、profile 提示词配置从 Go 字符串拼接中剥离到独立内置 YAML 模板文件 `profiles-template/*.yaml`。
 
 #### 场景：默认 profile 由内置 YAML 模板生成
 
 - **给定** 当前仓库源码
 - **当** 系统生成默认工作流配置
 - **则** 仓库必须包含 `profiles-template/default.yaml`
-- **并且** `profiles-template/default.yaml` 必须保存默认 `wo config` 当前输出语义
+- **并且** `profiles-template/default.yaml` 必须保存默认 `oz flow config` 当前输出语义
 - **并且** Go 源码不得继续硬编码默认 subagent 角色名和 purpose 文本
-- **并且** 默认 `wo config` 不带 `--profile` 时仍生成与现有默认 profile 等价的标准 `wo.yaml`
+- **并且** 默认 `oz flow config` 不带 `--profile` 时仍生成与现有默认 profile 等价的标准 `oz-flow.yaml`
 - **测试**：`tests/specs/codex-workflow-cli/test_profile_templates_externalized_contract.sh`
-- **关键断言**：模板文件存在且包含业务角色；Go 源码不再承载默认角色文本；默认 `wo config` 仍可生成和加载标准配置
+- **关键断言**：模板文件存在且包含业务角色；Go 源码不再承载默认角色文本；默认 `oz flow config` 仍可生成和加载标准配置
 - **剩余风险**：替换内置模板后需要重新构建二进制
 
 ### 需求：MADA profile 生成标准配置
 
 // Sources: 11-新增-MADA-工作流profiles
 
-系统必须允许用户通过 `wo config --profile <name>` 生成可试用的 MADA 工作流配置，且输出仍是标准 `wo.yaml`。
+系统必须允许用户通过 `oz flow config --profile <name>` 生成可试用的 MADA 工作流配置，且输出仍是标准 `oz-flow.yaml`。
 
-#### 场景：三个 MADA profile 均能生成可加载的 wo.yaml
+#### 场景：三个 MADA profile 均能生成可加载的 oz-flow.yaml
 
 - **给定** 一个临时 git 仓库
-- **当** 用户分别运行 `wo config --profile mada-code`、`wo config --profile mada-decision`、`wo config --profile mada-research`
-- **则** 每次都必须生成 `wo.yaml`
+- **当** 用户分别运行 `oz flow config --profile mada-code`、`oz flow config --profile mada-decision`、`oz flow config --profile mada-research`
+- **则** 每次都必须生成 `oz-flow.yaml`
 - **并且** YAML 中必须启用 `parallel.enabled`
 - **并且** 必须包含 `implementation_context`、`review`、`qa` 三个默认并行组
 - **并且** `review` 和 `qa` 必须是 `gate_input`，`implementation_context` 必须是 `advisory`
-- **并且** `wo graph --change <change> --format json` 必须能成功读取该配置
+- **并且** `oz flow graph --change <change> --format json` 必须能成功读取该配置
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
 - **关键断言**：三类 profile 都生成标准配置；三类默认并行组模式正确
 - **剩余风险**：不启动真实 agent，避免创建阶段依赖外部模型
@@ -2584,9 +2584,9 @@
 #### 场景：decision profile 包含决策评审所需角色
 
 - **给定** 一个临时 git 仓库
-- **当** 用户运行 `wo config --profile mada-decision`
-- **则** 生成的 `wo.yaml` 必须包含面向技术选型的角色：`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
-- **并且** `wo graph --change <change> --format json` 必须展示这些 review 子代理节点
+- **当** 用户运行 `oz flow config --profile mada-decision`
+- **则** 生成的 `oz-flow.yaml` 必须包含面向技术选型的角色：`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
+- **并且** `oz flow graph --change <change> --format json` 必须展示这些 review 子代理节点
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
 - **关键断言**：decision profile 不退化为默认代码审查角色
 - **剩余风险**：该测试不评价具体推荐答案质量
@@ -2597,23 +2597,23 @@
 
 系统必须让用户能发现可用 profile，并在输入错误 profile 时得到明确反馈。
 
-#### 场景：wo config --list-profiles 输出全部 profile
+#### 场景：oz flow config --list-profiles 输出全部 profile
 
-- **当** 用户运行 `wo config --list-profiles`
+- **当** 用户运行 `oz flow config --list-profiles`
 - **则** 输出必须包含 `default`、`mada-code`、`mada-decision`、`mada-research`
 - **并且** 每个 MADA profile 必须带有中文用途说明
-- **并且** 该命令不得写入 `wo.yaml`
+- **并且** 该命令不得写入 `oz-flow.yaml`
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh`
 - **关键断言**：profile 可发现；list 命令无写文件副作用
 - **剩余风险**：第一版只要求 human 输出，不要求 JSON 输出
 
 #### 场景：未知 profile 返回错误并提示可用名称
 
-- **当** 用户运行 `wo config --profile not-real`
+- **当** 用户运行 `oz flow config --profile not-real`
 - **则** 命令必须非零退出
 - **并且** stderr 必须包含未知 profile 名称
 - **并且** stderr 必须提示至少一个可用 profile 名称
-- **并且** 不得写入 `wo.yaml`
+- **并且** 不得写入 `oz-flow.yaml`
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh`
 - **关键断言**：错误明确且无配置文件副作用
 - **剩余风险**：错误文案可以调整，但必须包含输入名和可用 profile 名称
@@ -2634,7 +2634,7 @@
 - **真实数据来源**：脚本创建临时 git 仓库和旧格式 active change，并运行真实编译后的 `oz validate`
 - **入口路径**：`cmd/oz validate`
 - **关键断言**：旧格式 active change 通过 validate；新 scope 字段不是 acceptance 必填项
-- **剩余风险**：该测试不启动完整 `wo run`，因为兼容性重点是未运行提案的创建阶段合同
+- **剩余风险**：该测试不启动完整 `oz flow run`，因为兼容性重点是未运行提案的创建阶段合同
 
 // Sources: 12-收窄验收gate到提案范围
 
@@ -2650,7 +2650,7 @@ review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 
 - **并且**必须包含 `out_of_scope_existing`
 - **并且**必须说明当前变更、acceptance 合同和 introduced regression 仍是 hard block
 - **测试**：`tests/specs/codex-workflow-cli/test_prompt_scope_contract.sh`
-- **真实数据来源**：脚本读取仓库内真实 `prompts-template/wo-review.md` 和 `prompts-template/wo-qa.md`
+- **真实数据来源**：脚本读取仓库内真实 `prompts-template/oz-flow-review.md` 和 `prompts-template/oz-flow-qa.md`
 - **入口路径**：默认 prompt 模板
 - **关键断言**：review/QA prompt 都包含 scope 字段、非阻断 finding 字段和当前范围硬阻断说明
 - **剩余风险**：该测试只验证 prompt 明确性，最终 gate 行为由前面的 Go 合同测试证明

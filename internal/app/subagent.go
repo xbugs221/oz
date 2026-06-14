@@ -571,7 +571,7 @@ func subagentPrompt(groupName string, member ParallelMemberConfig, output string
 		"",
 		"交付合同：",
 		"- 只在 ARTIFACT_DIR 内写入结果文件，目标固定为 ARTIFACT_PATH。",
-		"- 写入后必须运行：wo validate-member-artifact --artifact \"$ARTIFACT_PATH\" --group " + groupName + " --member " + member.Name + " --change " + context.ChangeName,
+		"- 写入后必须运行：oz flow validate-member-artifact --artifact \"$ARTIFACT_PATH\" --group " + groupName + " --member " + member.Name + " --change " + context.ChangeName,
 		"- 最终回复只简短说明已写入和校验结果；不要把 JSON 作为最终回复传输。",
 		"ARTIFACT_PATH 文件字段必须严格为：",
 		memberArtifactSchemaPrompt(),
@@ -838,7 +838,7 @@ func artifactRetryPrompt(groupName string, member ParallelMemberConfig, artifact
 		"- 已满足项、正向确认、无操作项，不写 findings，只写 summary/evidence。",
 		"- blocker/major 只用于当前提案范围内的明确失败。",
 		"只在 ARTIFACT_DIR 内写入结果文件，目标固定为 ARTIFACT_PATH。",
-		"写入后必须运行：wo validate-member-artifact --artifact \"$ARTIFACT_PATH\" --group " + groupName + " --member " + member.Name + " --change " + context.ChangeName,
+		"写入后必须运行：oz flow validate-member-artifact --artifact \"$ARTIFACT_PATH\" --group " + groupName + " --member " + member.Name + " --change " + context.ChangeName,
 		"最终回复只简短说明已写入和校验结果；不要把 JSON 作为最终回复传输。",
 		memberArtifactSchemaPrompt(),
 	}, "\n") + "\n"

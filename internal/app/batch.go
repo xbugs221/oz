@@ -154,7 +154,7 @@ func (e *Engine) RunBatch(ctx context.Context, batchID string) error {
 		return err
 	}
 	if batch.Status != batchStatusRunning {
-		return fmt.Errorf("批量任务 %s 状态 %s 不能直接继续，请使用 wo restart", batchID, batch.Status)
+		return fmt.Errorf("批量任务 %s 状态 %s 不能直接继续，请使用 oz flow restart", batchID, batch.Status)
 	}
 	for {
 		for batch.Status == batchStatusRunning && batch.CurrentIndex < len(batch.Changes) {
@@ -432,7 +432,7 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
 				if batch.Status == batchStatusRunning && isStaleRunningRun(repo, state) {
-					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 wo restart -%s 重试当前批量阶段", batchAlias))
+					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 oz flow restart -%s 重试当前批量阶段", batchAlias))
 				}
 				continue
 			}
@@ -464,14 +464,14 @@ func batchFailureLines(repo string, batch BatchState, batchAlias string) []strin
 	// Check if this is recoverable via restart.
 	if batch.Status == batchStatusFailed {
 		if isBatchRestartRecoverable(repo, batch) {
-			lines = append(lines, fmt.Sprintf("  提示: 可运行 wo restart -%s 删除失败记录并继续该批量任务", batchAlias))
+			lines = append(lines, fmt.Sprintf("  提示: 可运行 oz flow restart -%s 删除失败记录并继续该批量任务", batchAlias))
 		} else {
-			lines = append(lines, "  清理: 可运行 wo clean 清理当前项目失败或异常运行态")
-			lines = append(lines, "        该操作仅删除 wo 历史记录，不回滚代码改动")
+			lines = append(lines, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态")
+			lines = append(lines, "        该操作仅删除 oz flow 历史记录，不回滚代码改动")
 		}
 	} else if batch.Status == batchStatusAborted {
-		lines = append(lines, "  清理: 可运行 wo clean 清理当前项目失败或异常运行态")
-		lines = append(lines, "        该操作仅删除 wo 历史记录，不回滚代码改动")
+		lines = append(lines, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态")
+		lines = append(lines, "        该操作仅删除 oz flow 历史记录，不回滚代码改动")
 	}
 	return lines
 }
@@ -547,7 +547,7 @@ func batchCleanupPath(repo, batchID string) string {
 func startDetachedBatchResumeCommand(repo, batchID string) error {
 	exe, err := currentExecutable()
 	if err != nil {
-		return fmt.Errorf("解析 wo 可执行文件失败：%w", err)
+		return fmt.Errorf("解析 oz flow 可执行文件失败：%w", err)
 	}
 	cmd := exec.Command(exe, "batch", "--batch-id", batchID, "--json")
 	cmd.Dir = repo

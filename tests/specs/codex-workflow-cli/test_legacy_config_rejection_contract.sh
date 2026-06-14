@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证旧 wo.yaml 顶层、别名和冗余字段被硬拒绝，不再被静默兼容。
+# 文件功能目的：验证旧 oz-flow.yaml 顶层、别名和冗余字段被硬拒绝，不再被静默兼容。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -25,8 +25,8 @@ fail() {
 wo_bin="$tmp/wo"
 empty_home="$tmp/empty-home"
 mkdir -p "$empty_home"
-note "构建真实 wo binary"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/wo 2>&1 | tee -a "$log"
+note "构建真实 oz flow binary"
+go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 init_project() {
   local project="$1"
@@ -44,7 +44,7 @@ run_rejection_case() {
   local field="$2"
   local project="$tmp/$name"
   init_project "$project"
-  cat >"$project/wo.yaml"
+  cat >"$project/oz-flow.yaml"
 
   note "验证旧字段被拒绝：$field ($name)"
   set +e
@@ -71,7 +71,7 @@ run_global_rejection_case() {
   local home="$tmp/$name-home"
   init_project "$project"
   mkdir -p "$home"
-  cat >"$home/wo.yaml"
+  cat >"$home/oz-flow.yaml"
 
   note "验证旧全局配置被拒绝：$field ($name)"
   set +e
@@ -91,7 +91,7 @@ run_global_rejection_case() {
   fi
 }
 
-run_rejection_case "old-wo-root" "wo" <<'YAML'
+run_rejection_case "old-oz-flow-root" "wo" <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
@@ -228,7 +228,7 @@ validation:
   max_attempts_per_stage: 3
 YAML
 
-run_global_rejection_case "old-global-wo-root" "wo" <<'YAML'
+run_global_rejection_case "old-global-oz-flow-root" "wo" <<'YAML'
 wo:
   workflow:
     stages:

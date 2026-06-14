@@ -18,7 +18,7 @@ func BuiltInWorkflowProfiles() []WorkflowProfile {
 	}
 }
 
-// WorkflowProfileYAML renders a built-in profile template into the final wo.yaml body.
+// WorkflowProfileYAML renders a built-in profile template into the final oz-flow.yaml body.
 func WorkflowProfileYAML(profile string) (string, error) {
 	if !knownWorkflowProfile(profile) {
 		return "", fmt.Errorf("未知 profile %q，可用 profile: %s", profile, strings.Join(workflowProfileNames(), ", "))

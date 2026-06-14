@@ -1,0 +1,61 @@
+{
+  "summary": "验收独立 wo CLI 已被彻底删除，工作流能力统一迁移到唯一 oz 二进制的 oz flow 命令组，且活跃产品面不保留旧 wo 兼容命名",
+  "coverage": [
+    {
+      "spec": "需求：唯一 oz CLI 承载工作流命令 / 场景：仓库只构建一个 oz 二进制且 flow 命令组可用",
+      "tests": ["single-oz-flow-binary-contract"],
+      "evidence": ["single-oz-flow-binary-log"],
+      "risk": "不启动真实 agent 后端，只验证 CLI 分发、帮助、状态类只读入口、发布面和 Go 回归"
+    },
+    {
+      "spec": "需求：删除 wo 历史兼容产品面 / 场景：活跃产品面不再残留 wo 命名或兼容合同",
+      "tests": ["no-wo-legacy-surface-contract"],
+      "evidence": ["no-wo-legacy-surface-log"],
+      "risk": "不扫描 docs/changes/archive 历史归档提案"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "single-oz-flow-binary-contract",
+      "source": "change_contract",
+      "path": "docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh",
+      "command": "bash docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh",
+      "purpose": "证明仓库最终只构建 oz 一个 CLI，且工作流入口通过 oz flow 真实可用",
+      "assertions": [
+        "cmd/oz/main.go 存在且 cmd/wo 不存在",
+        "GitHub Actions 不再引用 cmd/wo 或独立 wo 构建产物",
+        "构建出的 oz 二进制支持 oz flow --help、oz flow status 和 oz flow watch",
+        "go test ./... 通过"
+      ],
+      "expected_initial_failure": "功能未实现时应失败于 cmd/wo 仍存在、oz flow 不存在或 CI/Release 仍引用 wo"
+    },
+    {
+      "id": "no-wo-legacy-surface-contract",
+      "source": "change_contract",
+      "path": "docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh",
+      "command": "bash docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh",
+      "purpose": "证明活跃源码、文档、CI、规格、测试和模板不再保留 wo 历史兼容产品面",
+      "assertions": [
+        "活跃产品路径中不存在 cmd/wo、./cmd/wo、wo.yaml、XDG_STATE_HOME/wo 等旧合同",
+        "活跃用户文档和规格不再提示 wo status、wo watch、wo run、wo clean 或 wo config",
+        "模板文件名不再使用 wo-*.md",
+        "Go 依赖和导入中不存在 github.com/xbugs221/wo"
+      ],
+      "expected_initial_failure": "功能未实现时应失败于旧命令、旧配置、旧状态目录或旧模板命名残留"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "single-oz-flow-binary-log",
+      "kind": "runtime_log",
+      "path": "test-results/oz-flow-merge/single-oz-flow-binary-contract.log",
+      "purpose": "记录单二进制构建、flow 命令检查、workflow 扫描和 go test 输出；该文件是本地运行产物，不进入 git"
+    },
+    {
+      "id": "no-wo-legacy-surface-log",
+      "kind": "runtime_log",
+      "path": "test-results/oz-flow-merge/no-wo-legacy-surface-contract.log",
+      "purpose": "记录活跃产品路径的旧 wo 命名扫描结果；该文件是本地运行产物，不进入 git"
+    }
+  ]
+}

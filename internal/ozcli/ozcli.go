@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/xbugs221/oz/internal/acceptance"
+	"github.com/xbugs221/oz/internal/app"
 	"github.com/xbugs221/oz/skills"
 )
 
@@ -74,6 +75,8 @@ func (c *cli) run(args []string) int {
 		err = c.validateCmd(args[1:])
 	case "archive":
 		err = c.archiveCmd(args[1:])
+	case "flow":
+		err = app.Run(args[1:], os.Stdin, c.out, c.err)
 	default:
 		err = fmt.Errorf("未知命令：%s", args[0])
 	}
@@ -91,6 +94,7 @@ func (c *cli) printHelp() {
 	fmt.Fprintln(c.out, "日常命令：")
 	fmt.Fprintln(c.out, "  list | l [--json]")
 	fmt.Fprintln(c.out, "  install | i [--global | -g]")
+	fmt.Fprintln(c.out, "  flow <status|watch|run|config|clean|...>")
 	fmt.Fprintln(c.out, "")
 	fmt.Fprintln(c.out, "自动化接口：")
 	fmt.Fprintln(c.out, "  create")

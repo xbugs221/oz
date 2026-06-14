@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo 公开 graph/engine 合同只暴露当前 go-dag 工作流。
+# 文件功能目的：验证 oz flow 公开 graph/engine 合同只暴露当前 go-dag 工作流。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -24,8 +24,8 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/test.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT"
@@ -60,11 +60,11 @@ set +e
 ) >"$RESULT_DIR/graph-unknown.out" 2>"$RESULT_DIR/graph-unknown.err"
 unknown_graph_code=$?
 set -e
-[[ "$unknown_graph_code" -ne 0 ]] || fail "wo graph --format yaml should fail"
+[[ "$unknown_graph_code" -ne 0 ]] || fail "oz flow graph --format yaml should fail"
 grep -Eiq 'json.*mermaid|mermaid.*json' "$RESULT_DIR/graph-unknown.out" "$RESULT_DIR/graph-unknown.err" || fail "graph error should advertise only current formats"
 
 note "workflow.engine legacy is rejected before graph output"
-cat >"$PROJECT/wo.yaml" <<'YAML'
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     engine: legacy
@@ -80,7 +80,7 @@ set -e
 grep -Eiq 'go-dag' "$RESULT_DIR/engine-legacy.out" "$RESULT_DIR/engine-legacy.err" || fail "legacy rejection should guide the user to go-dag"
 
 note "run --engine unknown is rejected with go-dag guidance"
-rm -f "$PROJECT/wo.yaml"
+rm -f "$PROJECT/oz-flow.yaml"
 set +e
 (
   cd "$PROJECT"
@@ -88,7 +88,7 @@ set +e
 ) >"$RESULT_DIR/run-engine-unknown.out" 2>"$RESULT_DIR/run-engine-unknown.err"
 run_unknown_code=$?
 set -e
-[[ "$run_unknown_code" -ne 0 ]] || fail "wo run --engine unknown should fail"
+[[ "$run_unknown_code" -ne 0 ]] || fail "oz flow run --engine unknown should fail"
 grep -Eiq 'go-dag' "$RESULT_DIR/run-engine-unknown.out" "$RESULT_DIR/run-engine-unknown.err" || fail "run --engine unknown rejection should guide the user to go-dag"
 
 note "contract passed: public graph and engine paths only expose go-dag"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo 阶段产物门禁状态与命令 validation 状态分离，并验证 execution 后验收预检会阻断不可执行证据合同。
+# 文件功能目的：验证 oz flow 阶段产物门禁状态与命令 validation 状态分离，并验证 execution 后验收预检会阻断不可执行证据合同。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"

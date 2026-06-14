@@ -1,4 +1,4 @@
-// Package app exposes the machine-readable contract used by wo runners.
+// Package app exposes the machine-readable contract used by oz flow runners.
 package app
 
 import (
@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// Version is the wo CLI version injected from the release git tag.
+// Version is the oz flow CLI version injected from the release git tag.
 var Version = "dev"
 
 // runnerCapabilities lists the JSON subcommands promised by the runner contract.
@@ -34,7 +34,7 @@ type RunnerState struct {
 	Observability *statusView       `json:"observability,omitempty"`
 }
 
-// runnerContract is the capability discovery payload for wo.
+// runnerContract is the capability discovery payload for oz flow.
 type runnerContract struct {
 	JSON         bool     `json:"json"`
 	Version      string   `json:"version"`
@@ -99,7 +99,7 @@ func writeRunnerContract(stdout io.Writer) error {
 	return writeJSON(stdout, runnerContract{JSON: true, Version: resolvedVersion(), Capabilities: runnerCapabilities})
 }
 
-// resolvedVersion reports the release tag when wo was installed or run from the source repository.
+// resolvedVersion reports the release tag when oz flow was installed or run from the source repository.
 func resolvedVersion() string {
 	if Version != "" && Version != "dev" {
 		return Version

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo status --run-id --json 新增 observability，并给出阶段与子代理固定产物路径。
+# 文件功能目的：验证 oz flow status --run-id --json 新增 observability，并给出阶段与子代理固定产物路径。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"

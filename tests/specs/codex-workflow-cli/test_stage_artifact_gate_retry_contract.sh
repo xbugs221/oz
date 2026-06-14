@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo 对每个主阶段的缺失或非法产物都使用同一角色会话重试修正，而不是直接失败。
-# Sources: 6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同
+# 文件功能目的：验证 oz flow 对每个主阶段的缺失或非法产物都使用同一角色会话重试修正，而不是直接失败。
+# Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -28,15 +28,15 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/contract.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
 
 cat >"$FAKEBIN/oz" <<'SH'
 #!/usr/bin/env bash
-# 文件功能目的：为临时仓库提供真实 wo 调用所需的最小 oz JSON 接口。
+# 文件功能目的：为临时仓库提供真实 oz flow 调用所需的最小 oz JSON 接口。
 set -euo pipefail
 
 case "$1" in
@@ -103,9 +103,9 @@ state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
 attempt_dir = pathlib.Path(os.environ["CODEX_ATTEMPT_DIR"])
 call_log = pathlib.Path(os.environ["CODEX_CALL_LOG"])
 
-states = sorted((state_home / "wo" / "repos").glob("*/runs/*/state.json"))
+states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 if not states:
-    raise SystemExit("no wo state found")
+    raise SystemExit("no oz flow state found")
 running = []
 for path in states:
     try:
@@ -338,7 +338,7 @@ cat >"$PROJECT/docs/changes/1-stage-artifact-retry/acceptance.json" <<'JSON'
 }
 JSON
 
-cat >"$PROJECT/wo.yaml" <<'YAML'
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     engine: go-dag
@@ -364,7 +364,7 @@ YAML
 git -C "$PROJECT" add .
 git -C "$PROJECT" commit -q -m initial
 
-note "run wo and expect every stage artifact problem to be repaired in-session"
+note "run oz flow and expect every stage artifact problem to be repaired in-session"
 set +e
 CODEX_ATTEMPT_DIR="$TMP/attempts" \
 CODEX_CALL_LOG="$RESULT_DIR/codex-calls.jsonl" \
@@ -376,7 +376,7 @@ run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/contract.log"
 cat "$RESULT_DIR/run.err" >>"$RESULT_DIR/contract.log"
-[[ "$run_code" -eq 0 ]] || fail "wo run should repair missing/invalid stage artifacts instead of failing"
+[[ "$run_code" -eq 0 ]] || fail "oz flow run should repair missing/invalid stage artifacts instead of failing"
 
 python3 - "$TMP/state" "$RESULT_DIR/codex-calls.jsonl" <<'PY' || exit 1
 import json
@@ -385,7 +385,7 @@ import sys
 
 state_home = pathlib.Path(sys.argv[1])
 call_log = pathlib.Path(sys.argv[2])
-states = sorted((state_home / "wo" / "repos").glob("*/runs/*/state.json"))
+states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 if not states:
     raise SystemExit("missing run state")
 state_path = states[-1]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo status/watch 使用统一极简固定列视图，并且 batch 只是多个 workflow 视图的组合。
+# 文件功能目的：验证 oz flow status/watch 使用统一极简固定列视图，并且 batch 只是多个 workflow 视图的组合。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -26,7 +26,7 @@ note() {
 
 cd "$repo_root"
 
-note "写入 internal/app 包级契约测试，直接覆盖 wo status/watch 渲染路径"
+note "写入 internal/app 包级契约测试，直接覆盖 oz flow status/watch 渲染路径"
 cat >"$test_file" <<'GO'
 package app
 
@@ -258,8 +258,8 @@ raw_capture="$result_dir/watch-tty.raw"
 screen_capture="$result_dir/watch-tty-screen.txt"
 long_change="9-这是一个非常非常长的中文提案名称用于触发窄终端自动换行并验证watch不会残留旧首行"
 
-note "构建真实 wo 二进制并创建窄 TTY watch 场景"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/wo 2>&1 | tee -a "$log"
+note "构建真实 oz flow 二进制并创建窄 TTY watch 场景"
+go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
 mkdir -p "$tty_repo"
 cd "$tty_repo"
 git init >/dev/null
@@ -282,12 +282,12 @@ repo = pathlib.Path(sys.argv[1]).resolve()
 change = sys.argv[2]
 name = re.sub(r"[^a-z0-9]+", "-", repo.name.lower()).strip("-") or "repo"
 digest = hashlib.sha1(str(repo).encode()).hexdigest()[:10]
-base = pathlib.Path(os.environ["XDG_STATE_HOME"]) / "wo" / "repos" / f"{name}-{digest}"
+base = pathlib.Path(os.environ["XDG_STATE_HOME"]) / "oz" / "flow" / "repos" / f"{name}-{digest}"
 run_id = "20260610T020000.000000000Z"
 batch_id = "20260610T020001.000000000Z"
 
 def write_json(path, payload):
-    # write_json 写入真实 wo runtime state 文件。
+    # write_json 写入真实 oz flow runtime state 文件。
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 

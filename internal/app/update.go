@@ -1,4 +1,4 @@
-// Package app implements update checks and safe release installation for wo and oz.
+// Package app implements update checks and safe release installation for oz.
 package app
 
 import (
@@ -91,7 +91,6 @@ type updateInstallResult struct {
 // defaultUpdateTools defines the release repositories and asset naming inputs.
 func defaultUpdateTools() []updateTool {
 	return []updateTool{
-		{Name: "wo", Owner: "xbugs221", Repo: "oz"},
 		{Name: "oz", Owner: "xbugs221", Repo: "oz"},
 	}
 }
@@ -108,7 +107,7 @@ func printUpdateHint(stdout io.Writer) {
 		if !ok || !result.UpdateAvailable {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- %s %s -> %s：运行 wo update", tool.Name, result.Current, result.Latest))
+		lines = append(lines, fmt.Sprintf("- %s %s -> %s：运行 oz flow update", tool.Name, result.Current, result.Latest))
 	}
 	if len(lines) == 0 {
 		return
@@ -120,10 +119,10 @@ func printUpdateHint(stdout io.Writer) {
 	}
 }
 
-// runUpdate installs newer wo and oz binaries from the same oz release batch.
+// runUpdate installs a newer oz binary from the oz release batch.
 func runUpdate(stdout io.Writer) error {
 	client := updateHTTPClient()
-	results := make([]updateInstallResult, 0, 2)
+	results := make([]updateInstallResult, 0, 1)
 	for _, tool := range defaultUpdateTools() {
 		results = append(results, installToolUpdate(context.Background(), client, tool))
 	}
@@ -288,7 +287,7 @@ func installToolUpdateWithTrust(ctx context.Context, client *http.Client, tool u
 		result.Err = err
 		return result
 	}
-	tempDir, err := os.MkdirTemp("", "wo-update-*")
+	tempDir, err := os.MkdirTemp("", "oz-flow-update-*")
 	if err != nil {
 		result.Err = err
 		return result
@@ -347,24 +346,13 @@ func installToolUpdateWithTrust(ctx context.Context, client *http.Client, tool u
 	return result
 }
 
-// currentToolPath resolves wo through argv or PATH and oz through PATH.
+// currentToolPath resolves the named tool through PATH.
 func currentToolPath(name string) (string, error) {
-	if name == "wo" {
-		if override := os.Getenv("WO_UPDATE_SELF_PATH"); override != "" {
-			return override, nil
-		}
-		if exe, err := os.Executable(); err == nil && exe != "" {
-			return exe, nil
-		}
-	}
 	return resolveCommand(name)
 }
 
-// currentToolVersion reads local tool versions from wo internals or --version.
+// currentToolVersion reads local tool versions from --version.
 func currentToolVersion(name string) (string, error) {
-	if name == "wo" {
-		return resolvedVersion(), nil
-	}
 	path, err := resolveCommand(name)
 	if err != nil {
 		return "", err
@@ -741,14 +729,14 @@ func updateHTTPClient() *http.Client {
 
 // updateCachePath resolves the user cache file for update checks.
 func updateCachePath() (string, error) {
-	if override := os.Getenv("WO_UPDATE_CACHE"); override != "" {
+	if override := os.Getenv("OZ_FLOW_UPDATE_CACHE"); override != "" {
 		return override, nil
 	}
 	root, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "wo", "update-check.json"), nil
+	return filepath.Join(root, "oz", "flow", "update-check.json"), nil
 }
 
 // readUpdateCache decodes update check cache.

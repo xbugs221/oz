@@ -25,26 +25,8 @@ jobs:
           install_dir="${RUNNER_TEMP}/oz-bin"
           mkdir -p "$install_dir"
           go build -o "$install_dir/oz" ./cmd/oz
-          go build -o "$install_dir/wo" ./cmd/wo
           echo "$install_dir" >> "$GITHUB_PATH"
           "$install_dir/oz" --version
-          "$install_dir/wo" --version
 
       - name: Run Go tests
         run: go test ./...
-
-      - name: Run shell business tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          for script in tests/*.sh; do
-            echo "::group::$script"
-            set +e
-            bash "$script"
-            status=$?
-            set -e
-            echo "::endgroup::"
-            if [ "$status" -ne 0 ]; then
-              exit "$status"
-            fi
-          done

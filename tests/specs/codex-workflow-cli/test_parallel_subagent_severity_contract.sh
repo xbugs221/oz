@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证 parallel subagent 写出 severity=info 时会被归一化为 minor，不会中断 go-dag workflow。
-# Sources: 6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同
+# Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -28,8 +28,8 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/contract.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
@@ -89,7 +89,7 @@ import shutil
 
 repo = pathlib.Path(os.environ["CODEX_REPO"])
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
-states = sorted((state_home / "wo" / "repos").glob("*/runs/*/state.json"))
+states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 running = []
 for path in states:
     state = json.loads(path.read_text(encoding="utf-8"))
@@ -267,7 +267,7 @@ cat >"$PROJECT/docs/changes/1-parallel-info-severity/acceptance.json" <<'JSON'
 }
 JSON
 
-cat >"$PROJECT/wo.yaml" <<'YAML'
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     engine: go-dag
@@ -294,7 +294,7 @@ YAML
 git -C "$PROJECT" add .
 git -C "$PROJECT" commit -q -m initial
 
-note "run wo and expect info severity to normalize instead of failing"
+note "run oz flow and expect info severity to normalize instead of failing"
 set +e
 PI_ATTEMPT_FILE="$TMP/pi-attempts" \
 PI_PROMPT_LOG="$RESULT_DIR/pi-prompts.jsonl" \
@@ -306,7 +306,7 @@ run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/contract.log"
 cat "$RESULT_DIR/run.err" >>"$RESULT_DIR/contract.log"
-[[ "$run_code" -eq 0 ]] || fail "wo run should normalize or repair parallel subagent severity=info instead of failing"
+[[ "$run_code" -eq 0 ]] || fail "oz flow run should normalize or repair parallel subagent severity=info instead of failing"
 
 python3 - "$TMP/state" "$RESULT_DIR/pi-prompts.jsonl" <<'PY' || exit 1
 import json
@@ -315,7 +315,7 @@ import sys
 
 state_home = pathlib.Path(sys.argv[1])
 prompt_log = pathlib.Path(sys.argv[2])
-states = sorted((state_home / "wo" / "repos").glob("*/runs/*/state.json"))
+states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 if not states:
     raise SystemExit("missing run state")
 state_path = states[-1]

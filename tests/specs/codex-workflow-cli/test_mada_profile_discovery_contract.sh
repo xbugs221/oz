@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sources: 11-新增-MADA-工作流profiles
-# Purpose: 验证 wo config 的 profile 发现入口和未知 profile 错误路径。
+# Purpose: 验证 oz flow config 的 profile 发现入口和未知 profile 错误路径。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -46,13 +46,13 @@ assert_text() {
 }
 
 wo_bin="$tmpdir/wo"
-note "构建真实 wo 二进制: $wo_bin"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/wo 2>&1 | tee -a "$log"
+note "构建真实 oz flow 二进制: $wo_bin"
+go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
 repo="$(make_repo)"
 list_out="$tmpdir/list-profiles.out"
 bad_out="$tmpdir/bad-profile.out"
 
-note "运行 wo config --list-profiles"
+note "运行 oz flow config --list-profiles"
 (
   cd "$repo"
   "$wo_bin" config --list-profiles
@@ -65,8 +65,8 @@ done
 for text in 代码 决策 调研; do
   assert_text "$list_out" "$text"
 done
-if [[ -e "$repo/wo.yaml" ]]; then
-  fail "wo config --list-profiles 不得写入 wo.yaml"
+if [[ -e "$repo/oz-flow.yaml" ]]; then
+  fail "oz flow config --list-profiles 不得写入 oz-flow.yaml"
 fi
 
 note "运行未知 profile 错误路径"
@@ -86,8 +86,8 @@ assert_text "$bad_out" "not-real"
 assert_text "$bad_out" "mada-code"
 assert_text "$bad_out" "mada-decision"
 assert_text "$bad_out" "mada-research"
-if [[ -e "$repo/wo.yaml" ]]; then
-  fail "未知 profile 错误路径不得写入 wo.yaml"
+if [[ -e "$repo/oz-flow.yaml" ]]; then
+  fail "未知 profile 错误路径不得写入 oz-flow.yaml"
 fi
 
 note "PASS"

@@ -128,7 +128,7 @@ func TestHumanStatusMarksUnownedRunningRunStale(t *testing.T) {
 	}
 	foundHint := false
 	for _, line := range lines {
-		if line == "  提示: 当前 run 的 lock 已失效，可运行 wo restart 重试当前阶段" {
+		if line == "  提示: 当前 run 的 lock 已失效，可运行 oz flow restart 重试当前阶段" {
 			foundHint = true
 		}
 	}
@@ -165,7 +165,7 @@ func TestStatusViewRendersRunningBatch(t *testing.T) {
 	if !strings.Contains(joined, "- "+state.ChangeName+" x -") || !strings.Contains(joined, "执行") {
 		t.Fatalf("running batch output missing current stale run rows:\n%s", joined)
 	}
-	if !strings.Contains(joined, "wo restart -b1 重试当前批量阶段") {
+	if !strings.Contains(joined, "oz flow restart -b1 重试当前批量阶段") {
 		t.Fatalf("running batch output missing stale batch restart hint:\n%s", joined)
 	}
 }
@@ -200,7 +200,7 @@ func TestStatusViewRendersFailedBatch(t *testing.T) {
 	if !strings.Contains(joined, "错误: "+state.ChangeName+" 的写阶段失败：测试失败") {
 		t.Fatalf("failed batch output missing failure summary:\n%s", joined)
 	}
-	if !strings.Contains(joined, "wo restart -b2 删除失败记录并继续该批量任务") {
+	if !strings.Contains(joined, "oz flow restart -b2 删除失败记录并继续该批量任务") {
 		t.Fatalf("failed batch output missing restart guidance:\n%s", joined)
 	}
 }
@@ -313,7 +313,7 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 	t.Fatalf("runner observability missing running execution row: %s", data)
 }
 
-// statusViewImplementationContextState returns a minimal execution state with two configured helpers.
+// statusViewImplementationContextState returns a minimal execution state with toz flow configured helpers.
 func statusViewImplementationContextState() State {
 	workflow := DefaultWorkflowConfig()
 	workflow.Engine = "go-dag"

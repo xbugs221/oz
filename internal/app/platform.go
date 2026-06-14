@@ -1,4 +1,4 @@
-// Package app provides cross-platform filesystem and process helpers for wo.
+// Package app provides cross-platform filesystem and process helpers for oz flow.
 package app
 
 import (

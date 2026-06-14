@@ -64,11 +64,11 @@ type WorkflowDisplay struct {
 func runGraph(repo string, args []string, stdout io.Writer) error {
 	changeName, err := requireFlagValue(args, "--change")
 	if err != nil {
-		return fmt.Errorf("用法：wo graph --change <change-name> --format json|mermaid")
+		return fmt.Errorf("用法：oz flow graph --change <change-name> --format json|mermaid")
 	}
 	format, err := requireFlagValue(args, "--format")
 	if err != nil {
-		return fmt.Errorf("用法：wo graph --change <change-name> --format json|mermaid")
+		return fmt.Errorf("用法：oz flow graph --change <change-name> --format json|mermaid")
 	}
 	workflow, err := LoadWorkflowConfig(repo)
 	if err != nil {
@@ -93,7 +93,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 	normalizeWorkflowConfig(&workflow)
 	spec := WorkflowSpec{
 		ChangeName: changeName,
-		Display:    WorkflowDisplay{Title: "wo workflow: " + changeName},
+		Display:    WorkflowDisplay{Title: "oz flow workflow: " + changeName},
 	}
 	var beforeExecutionPrereqs []WorkflowEdge
 	if planning := addParallelGroup(&spec, workflow, "planning_context", "planning", "execution", 0, nil); planning != "" {

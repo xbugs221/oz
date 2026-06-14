@@ -34,7 +34,7 @@ func RunAliasForID(refs []StatusRef, runID string) string {
 	return ""
 }
 
-// ResolveStatusTarget maps wo status arguments to either a batch or workflow id.
+// ResolveStatusTarget maps oz flow status arguments to either a batch or workflow id.
 func ResolveStatusTarget(repo string, args []string) (kind string, ref StatusRef, err error) {
 	if len(args) == 0 {
 		batches, err := ListBatchRefs(repo)
@@ -51,10 +51,10 @@ func ResolveStatusTarget(repo string, args []string) (kind string, ref StatusRef
 		if len(runs) > 0 {
 			return "run", runs[0], nil
 		}
-		return "", StatusRef{}, fmt.Errorf("没有 wo run")
+		return "", StatusRef{}, fmt.Errorf("没有 oz flow run")
 	}
 	if len(args) != 1 {
-		return "", StatusRef{}, fmt.Errorf("用法：wo status [-bN|-wN]")
+		return "", StatusRef{}, fmt.Errorf("用法：oz flow status [-bN|-wN]")
 	}
 	arg := args[0]
 	switch {
@@ -65,7 +65,7 @@ func ResolveStatusTarget(repo string, args []string) (kind string, ref StatusRef
 		ref, err := resolveIndexedRef(repo, arg, "-w", ListRunRefs)
 		return "run", ref, err
 	default:
-		return "", StatusRef{}, fmt.Errorf("用法：wo status [-bN|-wN]")
+		return "", StatusRef{}, fmt.Errorf("用法：oz flow status [-bN|-wN]")
 	}
 }
 

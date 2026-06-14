@@ -27,15 +27,15 @@ fail() {
 assert_no_run_state() {
   local state_root="$1"
   local output_file="$2"
-  if [[ -d "$state_root/wo/repos" ]]; then
-    find "$state_root/wo/repos" -path '*/runs/*/state.json' -type f | sort >"$output_file"
+  if [[ -d "$state_root/oz/flow/repos" ]]; then
+    find "$state_root/oz/flow/repos" -path '*/runs/*/state.json' -type f | sort >"$output_file"
     [[ ! -s "$output_file" ]] || fail "启动前检查失败后不应创建 run state"
   else
     : >"$output_file"
   fi
 }
 
-# write_demo_change 创建最小 active change，让测试走真实 wo run 入口。
+# write_demo_change 创建最小 active change，让测试走真实 oz flow run 入口。
 write_demo_change() {
   local repo="$1"
   local change="$2"
@@ -91,7 +91,7 @@ JSON
 note "编译真实 wo/oz CLI"
 WO="$TMP/wo"
 OZ="$TMP/oz"
-(cd "$ROOT" && go build -o "$WO" ./cmd/wo) 2>&1 | tee -a "$LOG"
+(cd "$ROOT" && go build -o "$WO" ./cmd/oz) 2>&1 | tee -a "$LOG"
 (cd "$ROOT" && go build -o "$OZ" ./cmd/oz) 2>&1 | tee -a "$LOG"
 
 PROJECT="$TMP/project"
@@ -183,7 +183,7 @@ printf 'missing codex: no run state created\n' >>"$STATE_SNAPSHOT"
 
 note "第三后端配置必须按未知工具失败"
 legacy_tool="open""code"
-cat >"$PROJECT/wo.yaml" <<YAML
+cat >"$PROJECT/oz-flow.yaml" <<YAML
 wo:
   workflow:
     defaults:

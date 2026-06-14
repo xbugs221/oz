@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// restartHuman resolves wo restart's human aliases and starts the selected worker detached.
+// restartHuman resolves oz flow restart's human aliases and starts the selected worker detached.
 func restartHuman(ctx context.Context, stdout io.Writer, repo string, engine *Engine, args []string) error {
 	_ = ctx
 	kind, ref, err := ResolveRestartTarget(repo, args)
@@ -62,7 +62,7 @@ func ResolveRestartTarget(repo string, args []string) (kind string, ref StatusRe
 		return "", StatusRef{}, fmt.Errorf("没有可重启任务")
 	}
 	if len(args) != 1 {
-		return "", StatusRef{}, fmt.Errorf("用法：wo restart [-bN|-wN]")
+		return "", StatusRef{}, fmt.Errorf("用法：oz flow restart [-bN|-wN]")
 	}
 	switch {
 	case strings.HasPrefix(args[0], "-b"):
@@ -72,7 +72,7 @@ func ResolveRestartTarget(repo string, args []string) (kind string, ref StatusRe
 		ref, err := resolveIndexedRef(repo, args[0], "-w", ListRunRefs)
 		return "run", ref, err
 	default:
-		return "", StatusRef{}, fmt.Errorf("用法：wo restart [-bN|-wN]")
+		return "", StatusRef{}, fmt.Errorf("用法：oz flow restart [-bN|-wN]")
 	}
 }
 

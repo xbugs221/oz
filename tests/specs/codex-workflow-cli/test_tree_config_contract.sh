@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证默认 wo.yaml 改为根节点树状 stages.before 配置，并验证 parallel 顶层开关控制子代理图节点。
+# 文件功能目的：验证默认 oz-flow.yaml 改为根节点树状 stages.before 配置，并验证 parallel 顶层开关控制子代理图节点。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -9,7 +9,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$result_dir"
 log="$result_dir/tree-config.log"
-generated_yaml="$result_dir/generated-wo.yaml"
+generated_yaml="$result_dir/generated-oz-flow.yaml"
 graph_json="$result_dir/graph.json"
 : >"$log"
 
@@ -41,8 +41,8 @@ assert_not_regex() {
 wo_bin="$tmp/wo"
 empty_home="$tmp/empty-home"
 mkdir -p "$empty_home"
-note "构建真实 wo binary"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/wo 2>&1 | tee -a "$log"
+note "构建真实 oz flow binary"
+go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 project="$tmp/project"
 mkdir -p "$project"
@@ -53,13 +53,13 @@ printf 'demo\n' >"$project/README.md"
 git -C "$project" add README.md
 git -C "$project" commit -qm init
 
-note "运行 wo config，生成默认 wo.yaml"
+note "运行 oz flow config，生成默认 oz-flow.yaml"
 (
   cd "$project"
   HOME="$empty_home" "$wo_bin" config
 ) >"$result_dir/config.out" 2>"$result_dir/config.err"
 
-cp "$project/wo.yaml" "$generated_yaml"
+cp "$project/oz-flow.yaml" "$generated_yaml"
 note "已生成 evidence: $generated_yaml"
 
 for pattern in \
@@ -116,8 +116,8 @@ assert_contains "$enabled_graph" "浏览器路径测试员"
 assert_contains "$enabled_graph" "execution"
 assert_contains "$enabled_graph" "archive"
 
-note "改写 wo.yaml 为 parallel:false，验证子代理被整体关闭"
-cat >"$project/wo.yaml" <<'YAML'
+note "改写 oz-flow.yaml 为 parallel:false，验证子代理被整体关闭"
+cat >"$project/oz-flow.yaml" <<'YAML'
 parallel: false
 max_review_iterations: 0
 stages:

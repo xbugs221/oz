@@ -1,4 +1,4 @@
-// Package app owns the human interactive wo workflow menu.
+// Package app owns the human interactive oz flow workflow menu.
 package app
 
 import (

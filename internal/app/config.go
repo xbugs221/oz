@@ -74,7 +74,7 @@ type ValidationCommand struct {
 	Args       []string `json:"args,omitempty" yaml:"args"`
 }
 
-// WorkflowProfile describes one built-in profile visible from `wo config`.
+// WorkflowProfile describes one built-in profile visible from `oz flow config`.
 type WorkflowProfile struct {
 	Name        string
 	Description string
@@ -84,7 +84,7 @@ type WorkflowProfile struct {
 // DefaultWorkflowConfigYAML is kept for tests that compare the generated config text.
 var DefaultWorkflowConfigYAML = mustDefaultWorkflowConfigYAML()
 
-// LoadWorkflowConfig reads wo.yaml or wo.yml and returns an expanded effective config.
+// LoadWorkflowConfig reads oz-flow.yaml or oz-flow.yml and returns an expanded effective config.
 func LoadWorkflowConfig(repo string) (WorkflowConfig, error) {
 	config := DefaultWorkflowConfig()
 	if path, err := globalWorkflowConfigPath(); err != nil {
@@ -107,7 +107,7 @@ func LoadWorkflowConfig(repo string) (WorkflowConfig, error) {
 	return config, nil
 }
 
-// DefaultWorkflowConfig returns the built-in runtime behavior used without wo.yaml.
+// DefaultWorkflowConfig returns the built-in runtime behavior used without oz-flow.yaml.
 func DefaultWorkflowConfig() WorkflowConfig {
 	config, err := workflowConfigFromProfile("default")
 	if err != nil {
@@ -140,7 +140,7 @@ func globalWorkflowConfigPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("解析用户主目录失败：%w", err)
 	}
-	return filepath.Join(home, "wo.yaml"), nil
+	return filepath.Join(home, "oz-flow.yaml"), nil
 }
 
 func mergeWorkflowConfigFile(config *WorkflowConfig, path string) error {
@@ -157,12 +157,12 @@ func mergeWorkflowConfigFile(config *WorkflowConfig, path string) error {
 }
 
 func workflowConfigPath(repo string) (string, error) {
-	yamlPath := filepath.Join(repo, "wo.yaml")
-	ymlPath := filepath.Join(repo, "wo.yml")
+	yamlPath := filepath.Join(repo, "oz-flow.yaml")
+	ymlPath := filepath.Join(repo, "oz-flow.yml")
 	yamlExists := fileExists(yamlPath)
 	ymlExists := fileExists(ymlPath)
 	if yamlExists && ymlExists {
-		return "", fmt.Errorf("wo.yaml 和 wo.yml 不能同时存在")
+		return "", fmt.Errorf("oz-flow.yaml 和 oz-flow.yml 不能同时存在")
 	}
 	if yamlExists {
 		return yamlPath, nil
@@ -189,7 +189,7 @@ func WriteWorkflowConfigProfile(repo string, global bool, profile string) (strin
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(repo, "wo.yaml")
+	path := filepath.Join(repo, "oz-flow.yaml")
 	if global {
 		var err error
 		path, err = globalWorkflowConfigPath()
@@ -200,8 +200,8 @@ func WriteWorkflowConfigProfile(repo string, global bool, profile string) (strin
 	if fileExists(path) {
 		return "", fmt.Errorf("%s 已存在", filepath.Base(path))
 	}
-	if !global && fileExists(filepath.Join(repo, "wo.yml")) {
-		return "", fmt.Errorf("wo.yml 已存在")
+	if !global && fileExists(filepath.Join(repo, "oz-flow.yml")) {
+		return "", fmt.Errorf("oz-flow.yml 已存在")
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		return "", err
@@ -331,12 +331,12 @@ func defaultStageOptionsByKind() map[string]StageOptions {
 
 func defaultPromptSet() map[string]string {
 	names := map[string]string{
-		"planning":  "wo-discuss.md",
-		"execution": "wo-start.md",
-		"review":    "wo-review.md",
-		"qa":        "wo-qa.md",
-		"fix":       "wo-fix.md",
-		"archive":   "wo-done.md",
+		"planning":  "oz-flow-discuss.md",
+		"execution": "oz-flow-start.md",
+		"review":    "oz-flow-review.md",
+		"qa":        "oz-flow-qa.md",
+		"fix":       "oz-flow-fix.md",
+		"archive":   "oz-flow-done.md",
 	}
 	prompts := map[string]string{}
 	for key, file := range names {

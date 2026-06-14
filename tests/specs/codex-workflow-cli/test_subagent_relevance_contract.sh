@@ -26,7 +26,7 @@ fail() {
 wo_bin="$tmp/wo"
 oz_bin="$tmp/oz"
 note "构建真实 wo/oz binary"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/wo 2>&1 | tee -a "$log"
+go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
 go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 fakebin="$tmp/fakebin"
@@ -51,7 +51,7 @@ import sys
 
 _prompt = sys.argv[1]
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
-states = sorted(state_home.glob("wo/repos/*/runs/*/state.json"))
+states = sorted(state_home.glob("oz/flow/repos/*/runs/*/state.json"))
 if not states:
     raise SystemExit("no state.json found for fake codex")
 state_path = states[-1]
@@ -233,7 +233,7 @@ cat >"$project/docs/changes/$change/spec.md" <<'MD'
 
 #### 场景：CLI 配置更新
 
-- **当** 用户运行 wo run
+- **当** 用户运行 oz flow run
 - **则** execution 完成 task
 - **且** 浏览器路径测试员标记无关
 MD
@@ -269,7 +269,7 @@ cat >"$project/docs/changes/$change/acceptance.json" <<'JSON'
 }
 JSON
 
-cat >"$project/wo.yaml" <<'YAML'
+cat >"$project/oz-flow.yaml" <<'YAML'
 parallel: true
 max_review_iterations: 1
 stages:
@@ -339,7 +339,7 @@ YAML
 git -C "$project" add .
 git -C "$project" commit -qm init
 
-note "运行 wo run，验证 stages.before 子代理默认启动与 relevant:false"
+note "运行 oz flow run，验证 stages.before 子代理默认启动与 relevant:false"
 AGENT_CALL_LOG="$agent_log" \
 WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
@@ -347,7 +347,7 @@ HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
   bash -c 'cd "$1" && "$2" run --change "$3" --json' _ "$project" "$wo_bin" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
-    fail "wo run 未能完成树状配置 relevance 场景"
+    fail "oz flow run 未能完成树状配置 relevance 场景"
   }
 
 cat "$tmp/run.jsonl" >>"$log"
@@ -357,7 +357,7 @@ state_path="$(XDG_STATE_HOME="$tmp/state" python3 - <<'PY'
 import os
 import pathlib
 
-states = sorted(pathlib.Path(os.environ["XDG_STATE_HOME"]).glob("wo/repos/*/runs/*/state.json"))
+states = sorted(pathlib.Path(os.environ["XDG_STATE_HOME"]).glob("oz/flow/repos/*/runs/*/state.json"))
 if not states:
     raise SystemExit("no state.json found")
 print(states[-1])

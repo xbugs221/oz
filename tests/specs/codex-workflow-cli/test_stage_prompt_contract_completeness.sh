@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo 内置阶段提示词首轮保留完整阶段合同，续轮只省略示例和方法论。
-# Sources: 6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同, 18-修复GitHub-CI并更新仓库文档
+# 文件功能目的：验证 oz flow 内置阶段提示词首轮保留完整阶段合同，续轮只省略示例和方法论。
+# Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同, 18-修复GitHub-CI并更新仓库文档
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -30,7 +30,7 @@ func renderChangeSixPrompt(t *testing.T, templateFile, templateName, stage strin
 	}
 	state := State{
 		RunID:      "change-six-prompt-contract",
-		ChangeName: "6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同",
+		ChangeName: "6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同",
 		Stage:      stage,
 		Workflow:   DefaultWorkflowConfig(),
 		Sessions:   sessions,
@@ -68,13 +68,13 @@ func requireChangeSixPromptOmits(t *testing.T, prompt string, rejects ...string)
 
 // TestChangeSixDiscussPromptKeepsPlanningEntry verifies planning still enters oz-plan.
 func TestChangeSixDiscussPromptKeepsPlanningEntry(t *testing.T) {
-	prompt := renderChangeSixPrompt(t, "wo-discuss.md", "wo-discuss", "planning", nil)
+	prompt := renderChangeSixPrompt(t, "oz-flow-discuss.md", "oz-flow-discuss", "planning", nil)
 	requireChangeSixPromptContains(t, prompt, "讨论规划阶段", "oz-plan")
 }
 
 // TestChangeSixExecutionPromptDelegatesToOzExec prevents start prompts from duplicating oz-exec.
 func TestChangeSixExecutionPromptDelegatesToOzExec(t *testing.T) {
-	prompt := renderChangeSixPrompt(t, "wo-start.md", "wo-start", "execution", nil)
+	prompt := renderChangeSixPrompt(t, "oz-flow-start.md", "oz-flow-start", "execution", nil)
 	requireChangeSixPromptContains(t, prompt,
 		"state.json.change_name",
 		"oz-exec",
@@ -86,7 +86,7 @@ func TestChangeSixExecutionPromptDelegatesToOzExec(t *testing.T) {
 
 // TestChangeSixReviewPromptKeepsFirstTurnAuditContract verifies review has inputs, output, schema, and evidence rules.
 func TestChangeSixReviewPromptKeepsFirstTurnAuditContract(t *testing.T) {
-	first := renderChangeSixPrompt(t, "wo-review.md", "wo-review", "review_1", nil)
+	first := renderChangeSixPrompt(t, "oz-flow-review.md", "oz-flow-review", "review_1", nil)
 	requireChangeSixPromptContains(t, first,
 		"state.json",
 		"acceptance.json",
@@ -98,14 +98,14 @@ func TestChangeSixReviewPromptKeepsFirstTurnAuditContract(t *testing.T) {
 		"non_blocking_findings",
 	)
 
-	resumed := renderChangeSixPrompt(t, "wo-review.md", "wo-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
+	resumed := renderChangeSixPrompt(t, "oz-flow-review.md", "oz-flow-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
 	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "review-2.json", "review-1.json", "fix-1-summary.md", "JSON object")
 	requireChangeSixPromptOmits(t, resumed, "JSON schema：", "如需修复，使用：", "如需提前终止无效循环，使用：")
 }
 
 // TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract verifies QA keeps required tests, evidence, and matrix rules.
 func TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract(t *testing.T) {
-	first := renderChangeSixPrompt(t, "wo-qa.md", "wo-qa", "qa_1", nil)
+	first := renderChangeSixPrompt(t, "oz-flow-qa.md", "oz-flow-qa", "qa_1", nil)
 	requireChangeSixPromptContains(t, first,
 		"state.json",
 		"acceptance.json",
@@ -119,14 +119,14 @@ func TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract(t *testing.T) {
 		"scope",
 	)
 
-	resumed := renderChangeSixPrompt(t, "wo-qa.md", "wo-qa", "qa_2", map[string]string{"codex:qa": "qa-session"})
+	resumed := renderChangeSixPrompt(t, "oz-flow-qa.md", "oz-flow-qa", "qa_2", map[string]string{"codex:qa": "qa-session"})
 	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "qa-2.json", "schema")
 	requireChangeSixPromptOmits(t, resumed, "clean 示例：", "needs_fix 示例：")
 }
 
 // TestChangeSixFixPromptKeepsFirstTurnRootCauseContract verifies fix keeps current findings, boundaries, and summary output.
 func TestChangeSixFixPromptKeepsFirstTurnRootCauseContract(t *testing.T) {
-	first := renderChangeSixPrompt(t, "wo-fix.md", "wo-fix", "fix_1", nil)
+	first := renderChangeSixPrompt(t, "oz-flow-fix.md", "oz-flow-fix", "fix_1", nil)
 	requireChangeSixPromptContains(t, first,
 		"state.json",
 		"acceptance.json",
@@ -139,14 +139,14 @@ func TestChangeSixFixPromptKeepsFirstTurnRootCauseContract(t *testing.T) {
 		"fix-1-summary.md",
 	)
 
-	resumed := renderChangeSixPrompt(t, "wo-fix.md", "wo-fix", "fix_2", map[string]string{"codex:fixer": "fix-session"})
+	resumed := renderChangeSixPrompt(t, "oz-flow-fix.md", "oz-flow-fix", "fix_2", map[string]string{"codex:fixer": "fix-session"})
 	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "review-2.json", "qa-2.json", "fix-2-summary.md")
 	requireChangeSixPromptOmits(t, resumed, "充分理解评审意见", "必须做根因分析", "禁止只按错误文本打补丁")
 }
 
 // TestChangeSixArchivePromptDelegatesToOzArchive verifies archive prompt stays as a skill entry point.
 func TestChangeSixArchivePromptKeepsDeliveryContract(t *testing.T) {
-	prompt := renderChangeSixPrompt(t, "wo-done.md", "wo-done", "archive", nil)
+	prompt := renderChangeSixPrompt(t, "oz-flow-done.md", "oz-flow-done", "archive", nil)
 	requireChangeSixPromptContains(t, prompt,
 		"state.json.change_name",
 		"oz-archive",

@@ -1,7 +1,7 @@
 # windows-platform-support 规格
 
 ## 目的
-定义 wo 在 Windows 上运行 sealed workflow 时必须满足的路径、命令、进程、锁文件和终端输出约束。
+定义 oz flow 在 Windows 上运行 sealed workflow 时必须满足的路径、命令、进程、锁文件和终端输出约束。
 
 ## 需求
 
@@ -11,7 +11,7 @@
 
 #### 场景：Windows 路径写入状态文件
 - **当** 系统在 Windows 上保存阶段日志路径
-- **则** `state.json` 中的路径使用 slash 形式，例如 `.wo/runs/run-1/state.json`
+- **则** `state.json` 中的路径使用 slash 形式，例如 `.oz/flow/runs/run-1/state.json`
 - **则** 系统读取该路径时能转换为 Windows 本机路径
 
 ### 需求：Windows 命令发现

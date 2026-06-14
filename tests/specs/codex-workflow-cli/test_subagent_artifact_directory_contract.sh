@@ -74,7 +74,7 @@ func TestSubagentPromptRequiresArtifactFileAndValidationCommand(t *testing.T) {
 	for _, required := range []string{
 		"ARTIFACT_DIR=",
 		"ARTIFACT_PATH=" + artifactPath,
-		"wo validate-member-artifact",
+		"oz flow validate-member-artifact",
 		"--artifact \"$ARTIFACT_PATH\"",
 		"--group qa",
 		"--member 浏览器路径测试员",

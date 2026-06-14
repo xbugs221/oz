@@ -1,4 +1,4 @@
-// Package acceptance validates structured oz and wo acceptance contracts.
+// Package acceptance validates structured oz and oz flow acceptance contracts.
 package acceptance
 
 import (
@@ -334,7 +334,7 @@ func weakAssertion(assertion string) bool {
 }
 
 func validTestSource(source string) bool {
-	// validTestSource matches the existing wo sealed-run schema.
+	// validTestSource matches the existing oz flow sealed-run schema.
 	switch source {
 	case "change_contract", "root_e2e", "existing_regression", "new_regression":
 		return true
@@ -344,7 +344,7 @@ func validTestSource(source string) bool {
 }
 
 func validEvidenceKind(kind string) bool {
-	// validEvidenceKind matches the existing wo sealed-run schema.
+	// validEvidenceKind matches the existing oz flow sealed-run schema.
 	switch kind {
 	case "screenshot", "trace", "network", "console", "runtime_log", "state_snapshot", "other":
 		return true

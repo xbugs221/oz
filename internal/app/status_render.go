@@ -41,7 +41,7 @@ func watchBatchStatusLines(repo string, batch *BatchState, batchAlias string, sp
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
 				if batch.Status == batchStatusRunning && isStaleRunningRun(repo, state) {
-					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 wo restart -%s 重试当前批量阶段", batchAlias))
+					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 oz flow restart -%s 重试当前批量阶段", batchAlias))
 				}
 				continue
 			}
@@ -62,7 +62,7 @@ func watchRunStatusLines(repo string, state State, runAlias string, spinner stri
 	}
 	lines := runProposalStatusLines(repo, state, runAlias, spinner)
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {
-		lines = append(lines, "提示: 可运行 wo restart 重启最近失败任务")
+		lines = append(lines, "提示: 可运行 oz flow restart 重启最近失败任务")
 	}
 	return lines
 }
@@ -75,7 +75,7 @@ func runProposalStatusLines(repo string, state State, runAlias string, runningMa
 		lines = append(lines, fmt.Sprintf("  %s", line))
 	}
 	if isStaleRunningRun(repo, state) {
-		lines = append(lines, "  提示: 当前 run 的 lock 已失效，可运行 wo restart 重试当前阶段")
+		lines = append(lines, "  提示: 当前 run 的 lock 已失效，可运行 oz flow restart 重试当前阶段")
 	}
 	return lines
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo status 人类输出不泄漏 parallel fan-in 摘要，同时机器 gate 仍严格校验 parallel artifact。
+# 文件功能目的：验证 oz flow status 人类输出不泄漏 parallel fan-in 摘要，同时机器 gate 仍严格校验 parallel artifact。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"

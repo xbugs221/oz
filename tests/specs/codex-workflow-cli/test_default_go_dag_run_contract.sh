@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件目的：通过真实 wo run/status 入口验证默认执行使用内嵌 go-dag engine。
+# 文件目的：通过真实 oz flow run/status 入口验证默认执行使用内嵌 go-dag engine。
 # Sources: 3-默认启用-纯go-dag并行subagents
 set -euo pipefail
 
@@ -26,7 +26,7 @@ fail() {
 cd "$repo_root"
 wo="$tmp/wo"
 oz="$tmp/oz"
-go build -o "$wo" ./cmd/wo 2>&1 | tee -a "$log"
+go build -o "$wo" ./cmd/oz 2>&1 | tee -a "$log"
 go build -o "$oz" ./cmd/oz 2>&1 | tee -a "$log"
 
 fakebin="$tmp/fakebin"
@@ -70,9 +70,9 @@ if name:
     raise SystemExit(0)
 
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
-states = sorted(state_home.glob("wo/repos/*/runs/*/state.json"))
+states = sorted(state_home.glob("oz/flow/repos/*/runs/*/state.json"))
 if not states:
-    raise SystemExit("no wo state.json found")
+    raise SystemExit("no oz flow state.json found")
 state_path = states[-1]
 state = json.loads(state_path.read_text(encoding="utf-8"))
 repo = pathlib.Path(os.environ["WO_TEST_REPO"])
@@ -113,13 +113,13 @@ cat >"$project/docs/changes/1-默认go-dag/proposal.md" <<'MD'
 
 ## 背景
 
-这个临时 change 用来验证 wo 默认运行路径。
+这个临时 change 用来验证 oz flow 默认运行路径。
 MD
 
 cat >"$project/docs/changes/1-默认go-dag/brief.md" <<'MD'
 # 默认 go-dag
 
-验证默认 wo run 使用 go-dag 推进真实 change，并保留状态观测合同。
+验证默认 oz flow run 使用 go-dag 推进真实 change，并保留状态观测合同。
 MD
 
 cat >"$project/docs/changes/1-默认go-dag/design.md" <<'MD'
@@ -137,7 +137,7 @@ cat >"$project/docs/changes/1-默认go-dag/spec.md" <<'MD'
 
 #### 场景：运行并归档
 
-- **当** 用户运行 wo run
+- **当** 用户运行 oz flow run
 - **则** run 完成并记录 go-dag 状态
 MD
 
@@ -165,14 +165,14 @@ cat >"$project/docs/changes/1-默认go-dag/acceptance.json" <<'JSON'
       "path": "docs/changes/1-默认go-dag/tests/test_contract.sh",
       "command": "bash docs/changes/1-默认go-dag/tests/test_contract.sh",
       "purpose": "证明临时 change 包含真实测试入口",
-      "assertions": ["默认 wo run 使用 go-dag 推进 execution 并完成 archive"]
+      "assertions": ["默认 oz flow run 使用 go-dag 推进 execution 并完成 archive"]
     }
   ],
   "required_evidence": []
 }
 JSON
 
-cat >"$project/wo.yaml" <<'YAML'
+cat >"$project/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
@@ -181,19 +181,19 @@ YAML
 git -C "$project" add .
 git -C "$project" commit -q -m initial
 
-note "运行默认 wo run，验证内嵌 go-dag 能推进真实 change"
+note "运行默认 oz flow run，验证内嵌 go-dag 能推进真实 change"
 WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
   bash -c 'cd "$1" && "$2" run --change "1-默认go-dag" --json' _ "$project" "$wo" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
-    fail "默认 wo run 失败"
+    fail "默认 oz flow run 失败"
   }
 
 cat "$tmp/run.jsonl" >>"$log"
 
-state="$(find "$tmp/state/wo/repos" -path '*/runs/*/state.json' -print | sort | tail -n 1)"
+state="$(find "$tmp/state/oz/flow/repos" -path '*/runs/*/state.json' -print | sort | tail -n 1)"
 test -n "$state" || fail "缺少 run state.json"
 note "state: $state"
 cat "$state" >>"$log"
@@ -221,9 +221,9 @@ HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
   bash -c 'cd "$1" && "$2" status -w1' _ "$project" "$wo" >"$tmp/status.txt"
 cat "$tmp/status.txt" >>"$log"
-grep -qF "fake-main-session-execution" "$tmp/status.txt" || fail "wo status 必须显示 execution 主阶段 session"
-grep -qF "代码" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
-grep -qF "外部" "$tmp/status.txt" || fail "wo status 必须显示 implementation_context 并行成员"
+grep -qF "fake-main-session-execution" "$tmp/status.txt" || fail "oz flow status 必须显示 execution 主阶段 session"
+grep -qF "代码" "$tmp/status.txt" || fail "oz flow status 必须显示 implementation_context 并行成员"
+grep -qF "外部" "$tmp/status.txt" || fail "oz flow status 必须显示 implementation_context 并行成员"
 
 note "检查 JSON status 兼容旧 runner contract"
 WO_TEST_REPO="$project" \

@@ -56,9 +56,9 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 		mustHave   []string
 		mustReject []string
 	}{
-		{name: "wo-discuss", mustHave: []string{"oz-plan", "讨论规划阶段"}, mustReject: []string{"change-name", "open questions"}},
-		{name: "wo-start", mustHave: []string{"oz-exec", "state.json.change_name", "当前 oz change", "acceptance.json", "不要超出当前提案范围"}, mustReject: []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"}},
-		{name: "wo-done", mustHave: []string{"oz-archive", "delivery-summary.md", "最终审核"}, mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"}},
+		{name: "oz-flow-discuss", mustHave: []string{"oz-plan", "讨论规划阶段"}, mustReject: []string{"change-name", "open questions"}},
+		{name: "oz-flow-start", mustHave: []string{"oz-exec", "state.json.change_name", "当前 oz change", "acceptance.json", "不要超出当前提案范围"}, mustReject: []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"}},
+		{name: "oz-flow-done", mustHave: []string{"oz-archive", "delivery-summary.md", "最终审核"}, mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"}},
 	} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", tc.name+".md"))
 		if err != nil {

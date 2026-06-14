@@ -1,4 +1,4 @@
-// Package app starts and records human planning sessions for wo.
+// Package app starts and records human planning sessions for oz flow.
 package app
 
 import (
@@ -27,7 +27,7 @@ func runPlanning(ctx context.Context, repo string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	sessionFile, err := os.CreateTemp("", "wo-planning-session-*")
+	sessionFile, err := os.CreateTemp("", "oz-flow-planning-session-*")
 	if err != nil {
 		return "", "", err
 	}

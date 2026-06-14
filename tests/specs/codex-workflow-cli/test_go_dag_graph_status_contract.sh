@@ -25,7 +25,7 @@ fail() {
 
 cd "$repo_root"
 wo="$tmp/wo"
-go build -o "$wo" ./cmd/wo 2>&1 | tee -a "$log"
+go build -o "$wo" ./cmd/oz 2>&1 | tee -a "$log"
 
 project="$tmp/project"
 mkdir -p "$project"
@@ -36,15 +36,15 @@ printf 'initial\n' >"$project/README.md"
 git -C "$project" add README.md
 git -C "$project" commit -q -m initial
 
-note "wo config 应生成默认 go-dag 与 parallel enabled 配置"
+note "oz flow config 应生成默认 go-dag 与 parallel enabled 配置"
 (cd "$project" && "$wo" config) >"$tmp/config.out"
 cat "$tmp/config.out" >>"$log"
-cat "$project/wo.yaml" >>"$log"
-grep -qF "engine: go-dag" "$project/wo.yaml" || fail "wo.yaml 必须声明默认 engine: go-dag"
-grep -qF "parallel:" "$project/wo.yaml" || fail "wo.yaml 必须包含 parallel 配置"
-grep -qF "enabled: true" "$project/wo.yaml" || fail "parallel.enabled 必须默认 true"
+cat "$project/oz-flow.yaml" >>"$log"
+grep -qF "engine: go-dag" "$project/oz-flow.yaml" || fail "oz-flow.yaml 必须声明默认 engine: go-dag"
+grep -qF "parallel:" "$project/oz-flow.yaml" || fail "oz-flow.yaml 必须包含 parallel 配置"
+grep -qF "enabled: true" "$project/oz-flow.yaml" || fail "parallel.enabled 必须默认 true"
 
-note "wo graph mermaid 应展示紧凑中文状态图和默认并行成员"
+note "oz flow graph mermaid 应展示紧凑中文状态图和默认并行成员"
 (cd "$project" && "$wo" graph --change demo --format mermaid) >"$tmp/graph.mmd"
 cat "$tmp/graph.mmd" >>"$log"
 for want in \

@@ -68,37 +68,37 @@ func requirePromptOmits(t *testing.T, prompt string, rejects ...string) {
 
 // TestBundledReviewPromptKeepsArtifactRules verifies reviewer prompt keeps compact JSON rules.
 func TestBundledReviewPromptKeepsExamplesOnlyForFirstReviewerTurn(t *testing.T) {
-	first := renderBundledPromptForRoleContract(t, "wo-review.md", "wo-review", "review_1", nil)
+	first := renderBundledPromptForRoleContract(t, "oz-flow-review.md", "oz-flow-review", "review_1", nil)
 	requirePromptContains(t, first, "严格 JSON", "decision", "scope", "non_blocking_findings", "review-1.json")
 
-	resumed := renderBundledPromptForRoleContract(t, "wo-review.md", "wo-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
+	resumed := renderBundledPromptForRoleContract(t, "oz-flow-review.md", "oz-flow-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
 	requirePromptContains(t, resumed, "review-2.json", "review-1.json", "fix-1-summary.md", "JSON object")
 	requirePromptOmits(t, resumed, "JSON schema：", "如需修复，使用：", "如需提前终止无效循环，使用：", "\"summary\": \"一句话总结审核结果\"", "\"decision\": \"needs_fix\"")
 }
 
 // TestBundledQAPromptKeepsArtifactRules verifies QA prompt keeps compact JSON rules.
 func TestBundledQAPromptKeepsExamplesOnlyForFirstQATurn(t *testing.T) {
-	first := renderBundledPromptForRoleContract(t, "wo-qa.md", "wo-qa", "qa_1", nil)
+	first := renderBundledPromptForRoleContract(t, "oz-flow-qa.md", "oz-flow-qa", "qa_1", nil)
 	requirePromptContains(t, first, "decision", "scope", "acceptance_matrix")
 
-	resumed := renderBundledPromptForRoleContract(t, "wo-qa.md", "wo-qa", "qa_2", map[string]string{"codex:qa": "qa-session"})
+	resumed := renderBundledPromptForRoleContract(t, "oz-flow-qa.md", "oz-flow-qa", "qa_2", map[string]string{"codex:qa": "qa-session"})
 	requirePromptContains(t, resumed, "qa-2.json", "schema")
 	requirePromptOmits(t, resumed, "clean 示例：", "needs_fix 示例：", "\"summary\": \"核心业务路径已通过 QA\"", "\"decision\": \"needs_fix\"")
 }
 
 // TestBundledFixPromptKeepsMethodologyOnlyForFirstFixerTurn verifies fixes stop replaying startup methodology.
 func TestBundledFixPromptKeepsMethodologyOnlyForFirstFixerTurn(t *testing.T) {
-	first := renderBundledPromptForRoleContract(t, "wo-fix.md", "wo-fix", "fix_1", nil)
+	first := renderBundledPromptForRoleContract(t, "oz-flow-fix.md", "oz-flow-fix", "fix_1", nil)
 	requirePromptContains(t, first, "review-1.json", "qa-1.json", "必须做根因分析", "禁止只按错误文本打补丁", "fix-1-summary.md")
 
-	resumed := renderBundledPromptForRoleContract(t, "wo-fix.md", "wo-fix", "fix_2", map[string]string{"codex:fixer": "fix-session"})
+	resumed := renderBundledPromptForRoleContract(t, "oz-flow-fix.md", "oz-flow-fix", "fix_2", map[string]string{"codex:fixer": "fix-session"})
 	requirePromptContains(t, resumed, "review-2.json", "qa-2.json", "fix-2-summary.md", "只修复当前 review/QA artifact 中列出的 findings")
 	requirePromptOmits(t, resumed, "充分理解评审意见", "从根源入手，不能治标不治本", "禁止只按错误文本打补丁")
 }
 
 // TestBundledExecutionPromptDelegatesToOzExec verifies execution prompt stays as a skill entry point.
 func TestBundledExecutionPromptDelegatesToOzExec(t *testing.T) {
-	prompt := renderBundledPromptForRoleContract(t, "wo-start.md", "wo-start", "execution", nil)
+	prompt := renderBundledPromptForRoleContract(t, "oz-flow-start.md", "oz-flow-start", "execution", nil)
 	requirePromptContains(t, prompt,
 		"oz-exec",
 		"state.json.change_name",
@@ -110,7 +110,7 @@ func TestBundledExecutionPromptDelegatesToOzExec(t *testing.T) {
 
 // TestBundledDonePromptRequiresAuditableDeliverySummary verifies the final summary is useful to human reviewers.
 func TestBundledDonePromptRequiresAuditableDeliverySummary(t *testing.T) {
-	prompt := renderBundledPromptForRoleContract(t, "wo-done.md", "wo-done", "archive", map[string]string{
+	prompt := renderBundledPromptForRoleContract(t, "oz-flow-done.md", "oz-flow-done", "archive", map[string]string{
 		"codex:reviewer": "review-session",
 		"codex:qa":       "qa-session",
 		"codex:fixer":    "fix-session",

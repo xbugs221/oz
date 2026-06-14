@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 batch 中某个 change 的 execution 产物可修复时，wo 会同会话修正并继续后续 change。
-# Sources: 6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同
+# 文件功能目的：验证 batch 中某个 change 的 execution 产物可修复时，oz flow 会同会话修正并继续后续 change。
+# Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -28,8 +28,8 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/contract.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
@@ -103,7 +103,7 @@ state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
 attempt_dir = pathlib.Path(os.environ["CODEX_ATTEMPT_DIR"])
 call_log = pathlib.Path(os.environ["CODEX_CALL_LOG"])
 
-states = sorted((state_home / "wo" / "repos").glob("*/runs/*/state.json"))
+states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 running = []
 for path in states:
     state = json.loads(path.read_text(encoding="utf-8"))
@@ -207,7 +207,7 @@ SH
 JSON
 done
 
-cat >"$PROJECT/wo.yaml" <<'YAML'
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     engine: go-dag
@@ -236,7 +236,7 @@ repo = os.path.abspath(sys.argv[1])
 print(os.path.basename(repo).lower() + "-" + hashlib.sha1(repo.encode()).hexdigest()[:10])
 PY
 )"
-batch_dir="$TMP/state/wo/repos/$repo_key/batches/batch-artifact-retry"
+batch_dir="$TMP/state/oz/flow/repos/$repo_key/batches/batch-artifact-retry"
 mkdir -p "$batch_dir"
 cat >"$batch_dir/state.json" <<'JSON'
 {
@@ -289,7 +289,7 @@ if retry.get("session") != "thread-executor":
 if not retry.get("has_artifact_gate_prompt"):
     raise SystemExit("1-a execution retry prompt did not include artifact gate failure")
 
-run_states = sorted((state_home / "wo" / "repos").glob("*/runs/*/state.json"))
+run_states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 if len(run_states) != 2:
     raise SystemExit(f"run state count = {len(run_states)}, want 2")
 for path in run_states:

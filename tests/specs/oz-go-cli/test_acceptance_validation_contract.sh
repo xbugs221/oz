@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Sources: 2-合并-wo-执行器到-oz-仓库, 21-共享验收证据追溯逻辑
-# 文件目的：验证 oz validate 正式校验当前 wo 允许的 acceptance.json 格式。
+# Sources: 2-合并-oz-flow-执行器到-oz-仓库, 21-共享验收证据追溯逻辑
+# 文件目的：验证 oz validate 正式校验当前 oz flow 允许的 acceptance.json 格式。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -21,7 +21,7 @@ cat >"$change_dir/brief.md" <<'MD'
 
 ## 用户原始需求
 
-验证 oz validate 接受当前 wo 允许的验收合同格式。
+验证 oz validate 接受当前 oz flow 允许的验收合同格式。
 MD
 
 cat >"$change_dir/proposal.md" <<'MD'
@@ -35,7 +35,7 @@ MD
 cat >"$change_dir/design.md" <<'MD'
 # 设计
 
-使用当前 wo 已允许的 acceptance.json 字段作为 oz validate 的正式校验对象。
+使用当前 oz flow 已允许的 acceptance.json 字段作为 oz validate 的正式校验对象。
 MD
 
 cat >"$change_dir/spec.md" <<'MD'
@@ -48,7 +48,7 @@ cat >"$change_dir/spec.md" <<'MD'
 #### 场景：合法合同通过
 
 - **当** 用户运行 oz validate
-- **则** 当前 wo 允许的 acceptance.json 格式通过校验
+- **则** 当前 oz flow 允许的 acceptance.json 格式通过校验
 MD
 
 cat >"$change_dir/task.md" <<'MD'
@@ -68,7 +68,7 @@ SH
 
 cat >"$change_dir/acceptance.json" <<'JSON'
 {
-  "summary": "验证 oz validate 接受当前 wo 允许的验收合同格式",
+  "summary": "验证 oz validate 接受当前 oz flow 允许的验收合同格式",
   "coverage": [
     {
       "spec": "需求：统一验收合同 / 场景：合法合同通过",
@@ -96,7 +96,7 @@ cat >"$change_dir/acceptance.json" <<'JSON'
       "id": "validate-json",
       "kind": "runtime_log",
       "path": "test-results/oz-validate-valid.json",
-      "purpose": "记录 oz validate 对当前 wo 格式 acceptance.json 的校验结果"
+      "purpose": "记录 oz validate 对当前 oz flow 格式 acceptance.json 的校验结果"
     }
   ]
 }
@@ -148,7 +148,7 @@ cat >"$change_dir/acceptance.json" <<'JSON'
       "id": "validate-json",
       "kind": "runtime_log",
       "path": "test-results/oz-validate-valid.json",
-      "purpose": "记录 oz validate 对当前 wo 格式 acceptance.json 的校验结果"
+      "purpose": "记录 oz validate 对当前 oz flow 格式 acceptance.json 的校验结果"
     }
   ]
 }

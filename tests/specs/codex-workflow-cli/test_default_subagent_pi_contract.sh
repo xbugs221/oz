@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证新项目默认 wo.yaml 中 parallel subagent tool 使用 pi 而不是 legacy-agent。
+# 文件功能目的：验证新项目默认 oz-flow.yaml 中 parallel subagent tool 使用 pi 而不是 legacy-agent。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -24,8 +24,8 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/test.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT"
@@ -39,22 +39,22 @@ mkdir -p "$PROJECT"
   git commit -qm init
 )
 
-note "generate default wo.yaml in a fresh project"
+note "generate default oz-flow.yaml in a fresh project"
 (
   cd "$PROJECT"
   "$WO_BIN" config
 ) >"$RESULT_DIR/config.out" 2>"$RESULT_DIR/config.err"
 
-cp "$PROJECT/wo.yaml" "$RESULT_DIR/wo.yaml"
-grep -q 'engine: go-dag' "$PROJECT/wo.yaml" || fail "default wo.yaml should keep engine: go-dag"
-grep -q 'implementation_context:' "$PROJECT/wo.yaml" || fail "default wo.yaml should include implementation_context"
+cp "$PROJECT/oz-flow.yaml" "$RESULT_DIR/oz-flow.yaml"
+grep -q 'engine: go-dag' "$PROJECT/oz-flow.yaml" || fail "default oz-flow.yaml should keep engine: go-dag"
+grep -q 'implementation_context:' "$PROJECT/oz-flow.yaml" || fail "default oz-flow.yaml should include implementation_context"
 
-member_count="$(grep -c '^            - name:' "$PROJECT/wo.yaml" || true)"
-pi_tool_count="$(grep -c '^              tool: pi$' "$PROJECT/wo.yaml" || true)"
-[[ "$member_count" -gt 0 ]] || fail "default wo.yaml should contain subagent members"
+member_count="$(grep -c '^            - name:' "$PROJECT/oz-flow.yaml" || true)"
+pi_tool_count="$(grep -c '^              tool: pi$' "$PROJECT/oz-flow.yaml" || true)"
+[[ "$member_count" -gt 0 ]] || fail "default oz-flow.yaml should contain subagent members"
 [[ "$pi_tool_count" -eq "$member_count" ]] || fail "expected every default subagent member to write tool: pi, got $pi_tool_count/$member_count"
-if grep -Eq '^[[:space:]]+tool: (codex|legacy-agent)$' "$PROJECT/wo.yaml"; then
-  fail "default wo.yaml should not contain non-pi subagent tool"
+if grep -Eq '^[[:space:]]+tool: (codex|legacy-agent)$' "$PROJECT/oz-flow.yaml"; then
+  fail "default oz-flow.yaml should not contain non-pi subagent tool"
 fi
 
 note "default graph contains implementation subagent nodes without duplicated planning helpers"

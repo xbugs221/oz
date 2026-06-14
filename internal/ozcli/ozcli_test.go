@@ -386,7 +386,7 @@ func TestValidateOutputsStableJSON(t *testing.T) {
 }
 
 func TestValidateChecksAcceptanceContract(t *testing.T) {
-	// TestValidateChecksAcceptanceContract keeps oz and wo aligned on sealed-run inputs.
+	// TestValidateChecksAcceptanceContract keeps oz and oz flow aligned on sealed-run inputs.
 	project := newProject(t)
 	change := "2-重写-oz-go-cli"
 	writeValidChange(t, project, change)

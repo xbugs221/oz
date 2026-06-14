@@ -28,7 +28,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runValidateMemberArtifact(args[1:], stdout)
 		case "update":
 			if len(args) != 1 {
-				return fmt.Errorf("用法：wo update")
+				return fmt.Errorf("用法：oz flow update")
 			}
 			return runUpdate(stdout)
 		case "config":
@@ -163,12 +163,12 @@ func printStoppedHistory(stdout io.Writer, repo string, batches []BatchState, ru
 			if isBatchRestartRecoverable(repo, batch) {
 				fmt.Fprintf(stdout, "  提示: 可运行 %s 删除失败记录并继续该批量任务\n", restartCommandForAlias(alias))
 			} else {
-				fmt.Fprintf(stdout, "  清理: 可运行 wo clean 清理当前项目失败或异常运行态\n")
-				fmt.Fprintf(stdout, "        该操作仅删除 wo 历史记录，不回滚代码改动\n")
+				fmt.Fprintf(stdout, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态\n")
+				fmt.Fprintf(stdout, "        该操作仅删除 oz flow 历史记录，不回滚代码改动\n")
 			}
 		} else if batch.Status == batchStatusAborted {
-			fmt.Fprintf(stdout, "  清理: 可运行 wo clean 清理当前项目失败或异常运行态\n")
-			fmt.Fprintf(stdout, "        该操作仅删除 wo 历史记录，不回滚代码改动\n")
+			fmt.Fprintf(stdout, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态\n")
+			fmt.Fprintf(stdout, "        该操作仅删除 oz flow 历史记录，不回滚代码改动\n")
 		}
 	}
 	for _, state := range runs {
@@ -187,8 +187,8 @@ func printStoppedHistory(stdout io.Writer, repo string, batches []BatchState, ru
 			if isRestartableRunCandidate(repo, state) {
 				fmt.Fprintf(stdout, "  提示: 可运行 %s 重启该工作流\n", restartCommandForAlias(runAlias))
 			} else {
-				fmt.Fprintf(stdout, "  清理: 可运行 wo clean 清理当前项目失败或异常运行态\n")
-				fmt.Fprintf(stdout, "        该操作仅删除 wo 历史记录，不回滚代码改动\n")
+				fmt.Fprintf(stdout, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态\n")
+				fmt.Fprintf(stdout, "        该操作仅删除 oz flow 历史记录，不回滚代码改动\n")
 			}
 		}
 	}
@@ -197,9 +197,9 @@ func printStoppedHistory(stdout io.Writer, repo string, batches []BatchState, ru
 // restartCommandForAlias returns the shortest human restart command for a status alias.
 func restartCommandForAlias(alias string) string {
 	if strings.HasPrefix(alias, "b") || strings.HasPrefix(alias, "w") {
-		return "wo restart -" + alias
+		return "oz flow restart -" + alias
 	}
-	return "wo restart"
+	return "oz flow restart"
 }
 
 // batchAliasForID returns a batch short alias or falls back to the real id.
@@ -341,6 +341,10 @@ func printChanges(stdout io.Writer, repo string) error {
 func printHumanStatus(stdout io.Writer, repo string, args ...string) error {
 	kind, ref, err := ResolveStatusTarget(repo, args)
 	if err != nil {
+		if len(args) == 0 && err.Error() == "没有 oz flow run" {
+			fmt.Fprintln(stdout, err)
+			return nil
+		}
 		return err
 	}
 	if kind == "batch" {
@@ -382,56 +386,56 @@ func projectName(repo string) string {
 
 // printHelp writes supported command-line options.
 func printHelp(stdout io.Writer) {
-	fmt.Fprintln(stdout, "wo 通过封闭的 Codex/Pi 工作流执行 oz 变更。")
+	fmt.Fprintln(stdout, "oz flow 通过封闭的 Codex/Pi 工作流执行 oz 变更。")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "用法：")
-	fmt.Fprintln(stdout, "  wo")
-	fmt.Fprintln(stdout, "  wo config [--global] [--profile <name>]")
-	fmt.Fprintln(stdout, "  wo config --list-profiles")
-	fmt.Fprintln(stdout, "  wo run | wo r")
-	fmt.Fprintln(stdout, "  wo status")
-	fmt.Fprintln(stdout, "  wo restart")
-	fmt.Fprintln(stdout, "  wo clean [--agent-sessions]")
-	fmt.Fprintln(stdout, "  wo watch")
-	fmt.Fprintln(stdout, "  wo update")
-	fmt.Fprintln(stdout, "  wo --list-changes")
-	fmt.Fprintln(stdout, "  wo --run <change-name>")
-	fmt.Fprintln(stdout, "  wo --resume")
-	fmt.Fprintln(stdout, "  wo validate-review --artifact <artifact-path> [--json]")
-	fmt.Fprintln(stdout, "  wo --version")
+	fmt.Fprintln(stdout, "  oz flow")
+	fmt.Fprintln(stdout, "  oz flow config [--global] [--profile <name>]")
+	fmt.Fprintln(stdout, "  oz flow config --list-profiles")
+	fmt.Fprintln(stdout, "  oz flow run | oz flow r")
+	fmt.Fprintln(stdout, "  oz flow status")
+	fmt.Fprintln(stdout, "  oz flow restart")
+	fmt.Fprintln(stdout, "  oz flow clean [--agent-sessions]")
+	fmt.Fprintln(stdout, "  oz flow watch")
+	fmt.Fprintln(stdout, "  oz flow update")
+	fmt.Fprintln(stdout, "  oz flow --list-changes")
+	fmt.Fprintln(stdout, "  oz flow --run <change-name>")
+	fmt.Fprintln(stdout, "  oz flow --resume")
+	fmt.Fprintln(stdout, "  oz flow validate-review --artifact <artifact-path> [--json]")
+	fmt.Fprintln(stdout, "  oz flow --version")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "人类交互命令：")
-	fmt.Fprintln(stdout, "  wo                         进入规划、选择 active change，或恢复 run")
-	fmt.Fprintln(stdout, "  wo clean [--agent-sessions] 清理当前项目失败或异常运行态")
-	fmt.Fprintln(stdout, "  wo config [--global] [--profile <name>] 写入仓库 wo.yaml 或用户 ~/wo.yaml（默认写入 default profile）")
-	fmt.Fprintln(stdout, "  wo config --list-profiles  查看可用的 profile 列表")
-	fmt.Fprintln(stdout, "  wo run | wo r              直接全选 active change 并启动任务队列")
-	fmt.Fprintln(stdout, "  wo status                  打印最新 run 进度")
-	fmt.Fprintln(stdout, "  wo restart [-bN|-wN]       重启最近失败或中断的批量任务/工作流")
-	fmt.Fprintln(stdout, "  wo watch [-bN|-wN]         持续刷新运行中的任务状态")
-	fmt.Fprintln(stdout, "  wo update                  更新 wo 和 oz，并输出备份回滚命令")
-	fmt.Fprintln(stdout, "  wo --list-changes          打印 active docs/changes 名称")
-	fmt.Fprintln(stdout, "  wo --run <change-name>     为 active change 启动可追加任务队列")
-	fmt.Fprintln(stdout, "  wo --resume                恢复最新未完成 run")
+	fmt.Fprintln(stdout, "  oz flow                         进入规划、选择 active change，或恢复 run")
+	fmt.Fprintln(stdout, "  oz flow clean [--agent-sessions] 清理当前项目失败或异常运行态")
+	fmt.Fprintln(stdout, "  oz flow config [--global] [--profile <name>] 写入仓库 oz-flow.yaml 或用户 ~/oz-flow.yaml（默认写入 default profile）")
+	fmt.Fprintln(stdout, "  oz flow config --list-profiles  查看可用的 profile 列表")
+	fmt.Fprintln(stdout, "  oz flow run | oz flow r              直接全选 active change 并启动任务队列")
+	fmt.Fprintln(stdout, "  oz flow status                  打印最新 run 进度")
+	fmt.Fprintln(stdout, "  oz flow restart [-bN|-wN]       重启最近失败或中断的批量任务/工作流")
+	fmt.Fprintln(stdout, "  oz flow watch [-bN|-wN]         持续刷新运行中的任务状态")
+	fmt.Fprintln(stdout, "  oz flow update                  更新 oz flow 和 oz，并输出备份回滚命令")
+	fmt.Fprintln(stdout, "  oz flow --list-changes          打印 active docs/changes 名称")
+	fmt.Fprintln(stdout, "  oz flow --run <change-name>     为 active change 启动可追加任务队列")
+	fmt.Fprintln(stdout, "  oz flow --resume                恢复最新未完成 run")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Runner JSON 命令：")
-	fmt.Fprintln(stdout, "  wo validate-review --artifact <artifact-path> [--json]")
-	fmt.Fprintln(stdout, "  wo contract --json")
-	fmt.Fprintln(stdout, "  wo list-changes --json")
-	fmt.Fprintln(stdout, "  wo run --change <change-name> --json")
-	fmt.Fprintln(stdout, "  wo resume --run-id <run-id> --json")
-	fmt.Fprintln(stdout, "  wo restart --run-id <run-id> --json")
-	fmt.Fprintln(stdout, "  wo restart --batch-id <batch-id> --json")
-	fmt.Fprintln(stdout, "  wo status --run-id <run-id> --json")
-	fmt.Fprintln(stdout, "  wo abort --run-id <run-id> --json")
-	fmt.Fprintln(stdout, "  wo batch --batch-id <batch-id> --json")
-	fmt.Fprintln(stdout, "  wo batch append --batch-id <batch-id> --change <change-name> --json")
+	fmt.Fprintln(stdout, "  oz flow validate-review --artifact <artifact-path> [--json]")
+	fmt.Fprintln(stdout, "  oz flow contract --json")
+	fmt.Fprintln(stdout, "  oz flow list-changes --json")
+	fmt.Fprintln(stdout, "  oz flow run --change <change-name> --json")
+	fmt.Fprintln(stdout, "  oz flow resume --run-id <run-id> --json")
+	fmt.Fprintln(stdout, "  oz flow restart --run-id <run-id> --json")
+	fmt.Fprintln(stdout, "  oz flow restart --batch-id <batch-id> --json")
+	fmt.Fprintln(stdout, "  oz flow status --run-id <run-id> --json")
+	fmt.Fprintln(stdout, "  oz flow abort --run-id <run-id> --json")
+	fmt.Fprintln(stdout, "  oz flow batch --batch-id <batch-id> --json")
+	fmt.Fprintln(stdout, "  oz flow batch append --batch-id <batch-id> --change <change-name> --json")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "文件：")
-	fmt.Fprintln(stdout, "  wo.yaml                    仓库工作流配置，可用 wo config 创建")
-	fmt.Fprintln(stdout, "  ~/wo.yaml                  用户级默认工作流配置")
+	fmt.Fprintln(stdout, "  oz-flow.yaml                    仓库工作流配置，可用 oz flow config 创建")
+	fmt.Fprintln(stdout, "  ~/oz-flow.yaml                  用户级默认工作流配置")
 	fmt.Fprintln(stdout, "  docs/changes/<name>/       active oz changes")
-	fmt.Fprintln(stdout, "  ${XDG_STATE_HOME:-~/.local/state}/wo/repos/<repo-key>/runs/<run-id>/")
+	fmt.Fprintln(stdout, "  ${XDG_STATE_HOME:-~/.local/state}/oz/flow/repos/<repo-key>/runs/<run-id>/")
 	fmt.Fprintln(stdout, "                             sealed run 状态、prompt 快照和 artifact")
 }
 
@@ -452,7 +456,7 @@ func printHumanStageChecklist(stdout io.Writer, state State) {
 		fmt.Fprintln(stdout, line)
 	}
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {
-		fmt.Fprintln(stdout, "提示: 可运行 wo restart 重启最近失败任务")
+		fmt.Fprintln(stdout, "提示: 可运行 oz flow restart 重启最近失败任务")
 	}
 }
 
@@ -466,7 +470,7 @@ func printHumanStatusStageChecklist(stdout io.Writer, repo string, state State) 
 		fmt.Fprintln(stdout, line)
 	}
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {
-		fmt.Fprintln(stdout, "提示: 可运行 wo restart 重启最近失败任务")
+		fmt.Fprintln(stdout, "提示: 可运行 oz flow restart 重启最近失败任务")
 	}
 }
 
@@ -490,10 +494,10 @@ func supportsInPlaceProgress(stdout io.Writer) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// spinnerFrames are the ASCII spinner animation frames for wo watch.
+// spinnerFrames are the ASCII spinner animation frames for oz flow watch.
 var spinnerFrames = []string{"|", "/", "-", "\\"}
 
-// runWatch implements the wo watch command with continuous status refresh.
+// runWatch implements the oz flow watch command with continuous status refresh.
 func runWatch(stdout io.Writer, repo string, args ...string) error {
 	targetKind, targetRef, err := resolveWatchTarget(repo, args)
 	if err != nil {
@@ -560,7 +564,7 @@ func resolveWatchTarget(repo string, args []string) (kind string, ref StatusRef,
 		return "", StatusRef{}, fmt.Errorf("当前没有正在进行的批量任务或工作流")
 	}
 	if len(args) != 1 {
-		return "", StatusRef{}, fmt.Errorf("用法：wo watch [-bN|-wN]")
+		return "", StatusRef{}, fmt.Errorf("用法：oz flow watch [-bN|-wN]")
 	}
 	arg := args[0]
 	switch {
@@ -571,7 +575,7 @@ func resolveWatchTarget(repo string, args []string) (kind string, ref StatusRef,
 		ref, err := resolveIndexedRef(repo, arg, "-w", ListRunRefs)
 		return "run", ref, err
 	default:
-		return "", StatusRef{}, fmt.Errorf("用法：wo watch [-bN|-wN]")
+		return "", StatusRef{}, fmt.Errorf("用法：oz flow watch [-bN|-wN]")
 	}
 }
 
@@ -596,11 +600,11 @@ func parseConfigCommandOptions(args []string) (configCommandOptions, error) {
 			options.Profile = args[i+1]
 			i++
 		default:
-			return configCommandOptions{}, fmt.Errorf("用法：wo config [--global] [--profile <name>] 或 wo config --list-profiles")
+			return configCommandOptions{}, fmt.Errorf("用法：oz flow config [--global] [--profile <name>] 或 oz flow config --list-profiles")
 		}
 	}
 	if options.ListProfiles && (options.Global || options.Profile != "default" || len(args) > 1) {
-		return configCommandOptions{}, fmt.Errorf("用法：wo config --list-profiles")
+		return configCommandOptions{}, fmt.Errorf("用法：oz flow config --list-profiles")
 	}
 	return options, nil
 }

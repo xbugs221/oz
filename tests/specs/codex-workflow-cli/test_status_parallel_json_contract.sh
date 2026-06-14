@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 wo status --run-id --json 在存在 parallel artifacts 时仍保持 runner 机器接口，不输出人类并行摘要。
+# 文件功能目的：验证 oz flow status --run-id --json 在存在 parallel artifacts 时仍保持 runner 机器接口，不输出人类并行摘要。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"

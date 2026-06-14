@@ -942,7 +942,7 @@ func compactHumanRowName(row statusViewRow) string {
 	return name
 }
 
-// compactHumanSubagentName maps common helper roles to two-cell status labels.
+// compactHumanSubagentName maps common helper roles to toz-flow-cell status labels.
 func compactHumanSubagentName(fullName, fallback string) string {
 	switch {
 	case strings.Contains(fullName, "CLI/API"):

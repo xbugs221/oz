@@ -1,4 +1,4 @@
-// Package app dispatches repository-scoped wo commands after base startup wiring.
+// Package app dispatches repository-scoped oz flow commands after base startup wiring.
 package app
 
 import (
@@ -36,17 +36,17 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 		fmt.Fprintf(stdout, "已创建 %s\n", filepath.Base(path))
 		return nil
 	case "init":
-		return fmt.Errorf("wo init 已移除，请改用 wo config")
+		return fmt.Errorf("oz flow init 已移除，请改用 oz flow config")
 	case "install":
-		return fmt.Errorf("wo install 已移除，prompt 已内嵌在 wo.yaml 中；请改用 wo config 或 wo config --global")
+		return fmt.Errorf("oz flow install 已移除，prompt 已内嵌在 oz-flow.yaml 中；请改用 oz flow config 或 oz flow config --global")
 	case "contract":
 		if !hasFlag(args[1:], "--json") {
-			return fmt.Errorf("用法：wo contract --json")
+			return fmt.Errorf("用法：oz flow contract --json")
 		}
 		return writeRunnerContract(stdout)
 	case "list-changes":
 		if !hasFlag(args[1:], "--json") {
-			return fmt.Errorf("用法：wo list-changes --json")
+			return fmt.Errorf("用法：oz flow list-changes --json")
 		}
 		changes, err := ListChanges(repo)
 		if err != nil {
@@ -57,7 +57,7 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 		return dispatchRunCommand(ctx, args, stdout, repo, engine)
 	case "r":
 		if len(args) != 1 {
-			return fmt.Errorf("用法：wo r")
+			return fmt.Errorf("用法：oz flow r")
 		}
 		return submitAllActiveChanges(ctx, stdout, repo, engine)
 	case "resume":
@@ -73,7 +73,7 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 	case "clean":
 		for _, arg := range args[1:] {
 			if arg != "--agent-sessions" {
-				return fmt.Errorf("用法：wo clean [--agent-sessions]")
+				return fmt.Errorf("用法：oz flow clean [--agent-sessions]")
 			}
 		}
 		return runClean(stdout, repo, args[1:]...)
@@ -85,7 +85,7 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 		return engine.Resume(ctx)
 	case "--run":
 		if len(args) != 2 {
-			return fmt.Errorf("用法：wo --run <change-name>")
+			return fmt.Errorf("用法：oz flow --run <change-name>")
 		}
 		if err := ValidateChange(repo, args[1]); err != nil {
 			return err
@@ -102,7 +102,7 @@ func dispatchRunCommand(ctx context.Context, args []string, stdout io.Writer, re
 		return submitAllActiveChanges(ctx, stdout, repo, engine)
 	}
 	if !hasFlag(args[1:], "--json") {
-		return fmt.Errorf("用法：wo run --change <change-name> [--engine go-dag] --json")
+		return fmt.Errorf("用法：oz flow run --change <change-name> [--engine go-dag] --json")
 	}
 	changeName, err := requireFlagValue(args[1:], "--change")
 	if err != nil {
@@ -120,7 +120,7 @@ func dispatchRunCommand(ctx context.Context, args []string, stdout io.Writer, re
 // dispatchResumeCommand handles JSON runner resume and preserves failure DTO output.
 func dispatchResumeCommand(ctx context.Context, args []string, stdout io.Writer, repo string, engine *Engine) error {
 	if !hasFlag(args[1:], "--json") {
-		return fmt.Errorf("用法：wo resume --run-id <run-id> --json")
+		return fmt.Errorf("用法：oz flow resume --run-id <run-id> --json")
 	}
 	runID, err := requireFlagValue(args[1:], "--run-id")
 	if err != nil {
@@ -164,7 +164,7 @@ func dispatchBatchCommand(ctx context.Context, args []string, stdout io.Writer, 
 			}
 		}
 		if len(changeNames) == 0 {
-			return fmt.Errorf("用法：wo batch append --batch-id <batch-id> --change <change-name> [--change <change-name> ...]")
+			return fmt.Errorf("用法：oz flow batch append --batch-id <batch-id> --change <change-name> [--change <change-name> ...]")
 		}
 		changes := make([]Change, 0, len(changeNames))
 		for _, name := range changeNames {
@@ -173,7 +173,7 @@ func dispatchBatchCommand(ctx context.Context, args []string, stdout io.Writer, 
 		return appendSelectedBatchChanges(stdout, repo, batchID, changes)
 	}
 	if !hasFlag(args[1:], "--json") {
-		return fmt.Errorf("用法：wo batch --batch-id <batch-id> --json")
+		return fmt.Errorf("用法：oz flow batch --batch-id <batch-id> --json")
 	}
 	engine.Output = nil
 	return engine.RunBatch(ctx, batchID)
@@ -185,7 +185,7 @@ func dispatchRestartCommand(ctx context.Context, args []string, stdout io.Writer
 		runID, runErr := optionalFlagValue(args[1:], "--run-id")
 		batchID, batchErr := optionalFlagValue(args[1:], "--batch-id")
 		if runErr != nil || batchErr != nil || (runID == "" && batchID == "") || (runID != "" && batchID != "") {
-			return fmt.Errorf("用法：wo restart --run-id <run-id> --json 或 wo restart --batch-id <batch-id> --json")
+			return fmt.Errorf("用法：oz flow restart --run-id <run-id> --json 或 oz flow restart --batch-id <batch-id> --json")
 		}
 		engine.Output = nil
 		if runID != "" {
@@ -217,7 +217,7 @@ func dispatchStatusCommand(args []string, stdout io.Writer, repo string) error {
 // dispatchAbortCommand aborts a JSON runner workflow and emits the final state.
 func dispatchAbortCommand(args []string, stdout io.Writer, repo string) error {
 	if !hasFlag(args[1:], "--json") {
-		return fmt.Errorf("用法：wo abort --run-id <run-id> --json")
+		return fmt.Errorf("用法：oz flow abort --run-id <run-id> --json")
 	}
 	runID, err := requireFlagValue(args[1:], "--run-id")
 	if err != nil {

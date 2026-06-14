@@ -25,8 +25,8 @@ mkdir -p "$RESULT_DIR"
 
 WO_BIN="$TMP/wo"
 OZ_BIN="$TMP/oz"
-note "build real wo binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/wo) >>"$RESULT_DIR/test.log" 2>&1
+note "build real oz flow binary"
+(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 (cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
@@ -42,7 +42,7 @@ import os
 import pathlib
 
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
-states = sorted(state_home.glob("wo/repos/*/runs/*/state.json"))
+states = sorted(state_home.glob("oz/flow/repos/*/runs/*/state.json"))
 if not states:
     raise SystemExit("no state.json found")
 state_path = states[-1]
@@ -174,7 +174,7 @@ MD
 cat >"$PROJECT/docs/changes/1-子代理artifact重试/design.md" <<'MD'
 # 设计
 
-使用 fake pi 产生一次格式错误，再由 wo resume 原会话修正。
+使用 fake pi 产生一次格式错误，再由 oz flow resume 原会话修正。
 MD
 
 cat >"$PROJECT/docs/changes/1-子代理artifact重试/spec.md" <<'MD'
@@ -228,7 +228,7 @@ cat >"$PROJECT/docs/changes/1-子代理artifact重试/acceptance.json" <<'JSON'
 }
 JSON
 
-cat >"$PROJECT/wo.yaml" <<'YAML'
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     max_review_iterations: 0
@@ -269,19 +269,19 @@ cat "$RESULT_DIR/run.err" >>"$RESULT_DIR/test.log"
 [[ "$run_code" -eq 0 ]] || fail "go-dag run should repair malformed subagent artifact instead of failing"
 
 attempts="$(cat "$TMP/pi-attempts")"
-[[ "$attempts" == "2" ]] || fail "expected exactly two pi subagent attempts, got $attempts"
+[[ "$attempts" == "2" ]] || fail "expected exactly toz flow pi subagent attempts, got $attempts"
 grep -q 'session=pi-subagent-session' "$RESULT_DIR/pi-prompts.log" || fail "retry must resume the original pi subagent session"
 grep -Eq 'evidence|字符串数组|string' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must include schema guidance for evidence"
 if grep -q 'SUBAGENT_OUTPUT=' "$RESULT_DIR/pi-prompts.log"; then
   fail "subagent prompt must not expose artifact output path"
 fi
 grep -q 'ARTIFACT_PATH=' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must provide ARTIFACT_PATH"
-grep -q 'wo validate-member-artifact' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must provide member artifact validation command"
+grep -q 'oz flow validate-member-artifact' "$RESULT_DIR/pi-prompts.log" || fail "retry prompt must provide member artifact validation command"
 if grep -q '最终只输出' "$RESULT_DIR/pi-prompts.log"; then
   fail "retry prompt must not rely on final bare JSON output"
 fi
 
-state="$(find "$TMP/state/wo/repos" -name state.json -type f -print | sort | tail -n 1)"
+state="$(find "$TMP/state/oz/flow/repos" -name state.json -type f -print | sort | tail -n 1)"
 test -n "$state" || fail "missing state.json"
 run_dir="$(dirname "$state")"
 member_artifact="$(find "$run_dir/parallel-members/planning_context" -path '*.artifact/member.json' -type f -print | head -n 1)"

@@ -1,4 +1,4 @@
-# This workflow publishes tested cross-platform oz and wo binaries for version tags.
+# This workflow publishes tested cross-platform oz binaries for version tags.
 name: Release
 
 on:
@@ -30,32 +30,14 @@ jobs:
           install_dir="${RUNNER_TEMP}/oz-bin"
           mkdir -p "$install_dir"
           go build -o "$install_dir/oz" ./cmd/oz
-          go build -o "$install_dir/wo" ./cmd/wo
           echo "$install_dir" >> "$GITHUB_PATH"
           "$install_dir/oz" --version
-          "$install_dir/wo" --version
 
       - name: Run Go tests
         run: go test ./...
 
-      - name: Run shell business tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          for script in tests/*.sh; do
-            echo "::group::$script"
-            set +e
-            bash "$script"
-            status=$?
-            set -e
-            echo "::endgroup::"
-            if [ "$status" -ne 0 ]; then
-              exit "$status"
-            fi
-          done
-
   build:
-    name: Build ${{ matrix.tool }} ${{ matrix.goos }}/${{ matrix.goarch }}
+    name: Build oz ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     needs: test
     strategy:
@@ -86,30 +68,6 @@ jobs:
             goos: windows
             goarch: arm64
             archive_ext: zip
-          - tool: wo
-            goos: linux
-            goarch: amd64
-            archive_ext: tar.gz
-          - tool: wo
-            goos: linux
-            goarch: arm64
-            archive_ext: tar.gz
-          - tool: wo
-            goos: darwin
-            goarch: amd64
-            archive_ext: tar.gz
-          - tool: wo
-            goos: darwin
-            goarch: arm64
-            archive_ext: tar.gz
-          - tool: wo
-            goos: windows
-            goarch: amd64
-            archive_ext: zip
-          - tool: wo
-            goos: windows
-            goarch: arm64
-            archive_ext: zip
 
     steps:
       - name: Checkout
@@ -125,47 +83,40 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          TOOL: ${{ matrix.tool }}
         run: |
           set -euo pipefail
           mkdir -p build
-          output="build/${TOOL}"
+          output="build/oz"
           if [ "${GOOS}" = "windows" ]; then
-            output="build/${TOOL}.exe"
+            output="build/oz.exe"
           fi
           version="v0.0.0-dev"
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             version="${GITHUB_REF_NAME}"
           fi
-          if [ "${TOOL}" = "wo" ]; then
-            go build -trimpath -ldflags="-s -w -X github.com/xbugs221/oz/internal/app.Version=${version}" -o "${output}" ./cmd/wo
-          else
-            go build -trimpath -ldflags="-s -w -X github.com/xbugs221/oz/internal/ozcli.version=${version}" -o "${output}" ./cmd/oz
-          fi
+          go build -trimpath -ldflags="-s -w -X github.com/xbugs221/oz/internal/ozcli.version=${version}" -o "${output}" ./cmd/oz
 
       - name: Package Unix binary
         if: matrix.goos != 'windows'
         env:
-          TOOL: ${{ matrix.tool }}
         run: |
           set -euo pipefail
-          archive="${TOOL}_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
-          tar -C build -czf "${archive}" "${TOOL}"
+          archive="oz_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
+          tar -C build -czf "${archive}" oz
 
       - name: Package Windows binary
         if: matrix.goos == 'windows'
         env:
-          TOOL: ${{ matrix.tool }}
         run: |
           set -euo pipefail
-          archive="${TOOL}_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
-          (cd build && zip "../${archive}" "${TOOL}.exe")
+          archive="oz_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
+          (cd build && zip "../${archive}" oz.exe)
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.tool }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ matrix.tool }}_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive_ext }}
+          name: oz-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: oz_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive_ext }}
           if-no-files-found: error
 
   release:

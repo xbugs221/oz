@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件目的：验证 task 未完成时，wo 仍会启动 execution 前的代码侦察和外部资料 subagents。
+# 文件目的：验证 task 未完成时，oz flow 仍会启动 execution 前的代码侦察和外部资料 subagents。
 # Sources: 17-已完成执行跳过上下文subagents
 set -euo pipefail
 
@@ -27,7 +27,7 @@ fail() {
 cd "$repo_root"
 wo="$tmp/wo"
 oz="$tmp/oz"
-go build -o "$wo" ./cmd/wo 2>&1 | tee -a "$log"
+go build -o "$wo" ./cmd/oz 2>&1 | tee -a "$log"
 go build -o "$oz" ./cmd/oz 2>&1 | tee -a "$log"
 
 fakebin="$tmp/fakebin"
@@ -73,9 +73,9 @@ if name:
     raise SystemExit(0)
 
 state_home = pathlib.Path(os.environ["XDG_STATE_HOME"])
-states = sorted(state_home.glob("wo/repos/*/runs/*/state.json"))
+states = sorted(state_home.glob("oz/flow/repos/*/runs/*/state.json"))
 if not states:
-    raise SystemExit("no wo state.json found")
+    raise SystemExit("no oz flow state.json found")
 state_path = states[-1]
 state = json.loads(state_path.read_text(encoding="utf-8"))
 repo = pathlib.Path(os.environ["WO_TEST_REPO"])
@@ -149,7 +149,7 @@ cat >"$project/docs/changes/$change/spec.md" <<'MD'
 
 #### 场景：task 未完成
 
-- **当** 用户运行 wo run
+- **当** 用户运行 oz flow run
 - **则** 先启动 execution context subagents
 MD
 
@@ -184,7 +184,7 @@ cat >"$project/docs/changes/$change/acceptance.json" <<'JSON'
 }
 JSON
 
-cat >"$project/wo.yaml" <<'YAML'
+cat >"$project/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
     engine: go-dag
@@ -222,7 +222,7 @@ YAML
 git -C "$project" add .
 git -C "$project" commit -q -m initial
 
-note "运行 wo run：task 未完成时必须保留 execution context subagents"
+note "运行 oz flow run：task 未完成时必须保留 execution context subagents"
 WO_TEST_REPO="$project" \
 SUBAGENT_MARKER="$subagent_marker" \
 XDG_STATE_HOME="$tmp/state" \
@@ -239,7 +239,7 @@ state_path="$(XDG_STATE_HOME="$tmp/state" python3 - <<'PY'
 import os
 import pathlib
 
-states = sorted(pathlib.Path(os.environ["XDG_STATE_HOME"]).glob("wo/repos/*/runs/*/state.json"))
+states = sorted(pathlib.Path(os.environ["XDG_STATE_HOME"]).glob("oz/flow/repos/*/runs/*/state.json"))
 if not states:
     raise SystemExit("no state.json found")
 print(states[-1])

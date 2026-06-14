@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// runtimeRoot returns the user state directory that owns wo runtime state.
+// runtimeRoot returns the user state directory that owns oz flow runtime state.
 func runtimeRoot() (string, error) {
 	return runtimeRootForGOOS(runtime.GOOS)
 }
@@ -19,23 +19,23 @@ func runtimeRoot() (string, error) {
 // runtimeRootForGOOS resolves the state root for tests and platform-specific defaults.
 func runtimeRootForGOOS(goos string) (string, error) {
 	if xdg := os.Getenv("XDG_STATE_HOME"); xdg != "" {
-		return filepath.Join(xdg, "wo"), nil
+		return filepath.Join(xdg, "oz", "flow"), nil
 	}
 	if goos == "windows" {
 		if local := os.Getenv("LOCALAPPDATA"); local != "" {
-			return filepath.Join(local, "wo"), nil
+			return filepath.Join(local, "oz", "flow"), nil
 		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("解析用户主目录失败：%w", err)
 		}
-		return filepath.Join(home, ".local", "state", "wo"), nil
+		return filepath.Join(home, ".local", "state", "oz", "flow"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("解析用户主目录失败：%w", err)
 	}
-	return filepath.Join(home, ".local", "state", "wo"), nil
+	return filepath.Join(home, ".local", "state", "oz", "flow"), nil
 }
 
 // repoRuntimeDir returns the state directory reserved for one repository.
@@ -106,7 +106,7 @@ func batchesRoot(repo string) (string, error) {
 func runDir(repo, runID string) string {
 	root, err := runsRoot(repo)
 	if err != nil {
-		panic(fmt.Errorf("解析 wo 运行时 run 路径失败：%w", err))
+		panic(fmt.Errorf("解析 oz flow 运行时 run 路径失败：%w", err))
 	}
 	return filepath.Join(root, runID)
 }
@@ -120,7 +120,7 @@ func acceptancePath(repo, changeName string) string {
 func batchDir(repo, batchID string) string {
 	root, err := batchesRoot(repo)
 	if err != nil {
-		panic(fmt.Errorf("解析 wo 运行时 batch 路径失败：%w", err))
+		panic(fmt.Errorf("解析 oz flow 运行时 batch 路径失败：%w", err))
 	}
 	return filepath.Join(root, batchID)
 }

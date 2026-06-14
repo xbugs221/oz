@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# 文件功能目的：长期验证 wo 命令分发、交互流程和规划入口保持独立源码边界。
+# 文件功能目的：长期验证 oz flow 命令分发、交互流程和规划入口保持独立源码边界。
 # Sources: 28-拆分wo命令分发边界
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-log="$repo_root/test-results/refactor-command-dispatch/wo-command-dispatch-boundary-contract.log"
+log="$repo_root/test-results/refactor-command-dispatch/oz-flow-command-dispatch-boundary-contract.log"
 mkdir -p "$(dirname "$log")"
 : >"$log"
 
 note() {
-  # note 记录关键步骤，同时产出 wo-command-dispatch-boundary-log 证据。
+  # note 记录关键步骤，同时产出 oz-flow-command-dispatch-boundary-log 证据。
   printf '%s\n' "$*" | tee -a "$log"
 }
 
@@ -21,9 +21,9 @@ fail() {
 
 cd "$repo_root"
 
-note "evidence id: wo-command-dispatch-boundary-log"
+note "evidence id: oz-flow-command-dispatch-boundary-log"
 note "evidence path: $log"
-note "test id: wo-command-dispatch-boundary-contract"
+note "test id: oz-flow-command-dispatch-boundary-contract"
 
 for file in \
   internal/app/command_dispatch.go \
@@ -54,4 +54,4 @@ done
 note "运行 internal/app 与 cmd/oz 命令面回归"
 go test ./internal/app ./cmd/oz -count=1 2>&1 | tee -a "$log"
 
-note "PASS: wo-command-dispatch-boundary-contract"
+note "PASS: oz-flow-command-dispatch-boundary-contract"

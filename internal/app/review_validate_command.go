@@ -18,7 +18,7 @@ type reviewValidationResult struct {
 
 func runValidateReviewArtifact(args []string, stdout io.Writer) error {
 	if !hasFlag(args, "--artifact") {
-		return fmt.Errorf("用法：wo validate-review --artifact <artifact-path> [--json]")
+		return fmt.Errorf("用法：oz flow validate-review --artifact <artifact-path> [--json]")
 	}
 	path, err := requireFlagValue(args, "--artifact")
 	if err != nil {

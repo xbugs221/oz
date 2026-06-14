@@ -27,7 +27,7 @@ const (
 	statusBlocked                   = "blocked_review_limit"
 	statusValidationBlocked         = "blocked_validation_limit"
 	statusAcceptanceContractBlocked = "blocked_acceptance_contract"
-	errNoInitialCommit              = "首次 git commit 前不能启动 wo run，请创建初始提交后重试"
+	errNoInitialCommit              = "首次 git commit 前不能启动 oz flow run，请创建初始提交后重试"
 )
 
 // State is the durable source of truth for one sealed run.
@@ -547,7 +547,7 @@ func warnWorkflowWrite(action string, err error) {
 	if err == nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "wo warning: %s: %v\n", action, err)
+	fmt.Fprintf(os.Stderr, "oz flow warning: %s: %v\n", action, err)
 }
 
 // stageOptionsForRun resolves dynamic stage options and persists automatic escalations.
@@ -1124,7 +1124,7 @@ func newRunID() string {
 func startDetachedResumeCommand(repo, runID string) error {
 	exe, err := currentExecutable()
 	if err != nil {
-		return fmt.Errorf("解析 wo 可执行文件失败：%w", err)
+		return fmt.Errorf("解析 oz flow 可执行文件失败：%w", err)
 	}
 	base := runDir(repo, runID)
 	if err := os.MkdirAll(base, 0o755); err != nil {
