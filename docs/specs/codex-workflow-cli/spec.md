@@ -467,6 +467,22 @@
 - **真实数据来源**：脚本临时写入 `internal/app` 包级测试，调用真实 `memberArtifactPath`、`subagentPrompt`、`oz flow validate-member-artifact` 分发入口和 `nodeRunSubagent`
 - **关键断言**：member artifact 固定为 `*.artifact/member.json`；prompt 提供 `ARTIFACT_PATH` 和校验命令；格式坏的 required QA helper 产出 failed member artifact 但不把 run 置为 failed；sibling artifact 写入仍阻断
 
+// Sources: 33-拆分子智能体执行边界
+
+#### 场景：subagent 执行边界拆分
+
+- **当** go-dag 调度 subagent member 执行 retry、只读边界、artifact 处理和 prompt 组装
+- **则** retry/attempt 执行必须位于 `internal/app/subagent_attempt.go`
+- **且** 只读边界检查必须位于 `internal/app/subagent_boundary.go`
+- **且** member artifact 读写、schema 校验和 captured text 兜底生成必须位于 `internal/app/subagent_artifact.go`
+- **且** prompt context、初次 prompt 和 retry prompt 必须位于 `internal/app/subagent_prompt.go`
+- **且** `internal/app/subagent.go` 必须只保留薄编排入口，不得重新承载 retry 循环、runner 调用或 retryable error 包装
+- **且** 子智能体超时、只读边界、artifact 兜底和并发 artifact 相关 Go 回归必须继续通过
+- **测试**：`tests/specs/codex-workflow-cli/test_subagent_boundary_contract.sh`
+- **真实数据来源**：脚本读取仓库当前 `internal/app` 生产代码，并运行真实 `go test ./internal/app` subagent/parallel 相关回归
+- **关键断言**：目标边界文件存在且包含对应关键函数；`subagent.go` 行数保持薄入口；关键 retry/attempt 细节不回流入口文件；Go 回归通过
+- **剩余风险**：该测试不直接启动真实外部 Codex/Pi CLI，真实外部 agent 集成仍依赖环境验证
+
 #### 场景：并行层开启时主阶段不变
 
 - **给定** 用户启用 `workflow.parallel.enabled: true`

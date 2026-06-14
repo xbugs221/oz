@@ -1,0 +1,34 @@
+{
+  "summary": "验证 subagent 执行路径按 retry、只读边界、artifact 和 prompt 拆分，同时保持并行 helper 回归稳定。",
+  "coverage": [
+    {
+      "spec": "需求：子智能体执行边界拆分 / 场景：retry、只读边界、artifact 和 prompt 职责被分离",
+      "tests": ["subagent-boundary"],
+      "evidence": ["subagent-boundary-log"],
+      "risk": "该证据不直接调用真实外部 agent CLI，执行阶段需根据环境补充集成验证。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "subagent-boundary",
+      "source": "change_contract",
+      "path": "docs/changes/33-拆分子智能体执行边界/tests/subagent_boundary_test.sh",
+      "command": "bash docs/changes/33-拆分子智能体执行边界/tests/subagent_boundary_test.sh",
+      "purpose": "通过 subagent-boundary-log 证明 subagent 的 retry、只读边界、artifact 和 prompt 职责已拆分，并且 subagent Go 回归通过。",
+      "assertions": [
+        "subagent attempt、boundary、artifact、prompt 逻辑分别位于独立 Go 文件",
+        "subagent.go 不再是 1000 行级别混合职责文件",
+        "go test ./internal/app 的 subagent/parallel 相关回归测试通过并写入 test-results/33-subagent-boundary/contract.log"
+      ],
+      "expected_initial_failure": "当前 subagent.go 尚未拆分时，应失败于缺少目标文件或关键函数仍在旧文件。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "subagent-boundary-log",
+      "kind": "runtime_log",
+      "path": "test-results/33-subagent-boundary/contract.log",
+      "purpose": "记录 subagent 结构检查和 Go 回归命令输出；该文件是本地运行产物，不进入 git。"
+    }
+  ]
+}
