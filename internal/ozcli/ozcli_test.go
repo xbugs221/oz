@@ -1,5 +1,5 @@
-// Package main tests the user-visible oz CLI workflow with real filesystem projects.
-package main
+// Package ozcli tests the user-visible oz CLI workflow with real filesystem projects.
+package ozcli
 
 import (
 	"bytes"

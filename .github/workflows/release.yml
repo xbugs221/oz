@@ -140,7 +140,7 @@ jobs:
           if [ "${TOOL}" = "wo" ]; then
             go build -trimpath -ldflags="-s -w -X github.com/xbugs221/oz/internal/app.Version=${version}" -o "${output}" ./cmd/wo
           else
-            go build -trimpath -ldflags="-s -w -X main.version=${version}" -o "${output}" ./cmd/oz
+            go build -trimpath -ldflags="-s -w -X github.com/xbugs221/oz/internal/ozcli.version=${version}" -o "${output}" ./cmd/oz
           fi
 
       - name: Package Unix binary

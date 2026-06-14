@@ -230,6 +230,6 @@ if rg -n "func acceptance(EvidenceHasProducer|TestMentionsEvidence|TestScriptPro
   exit 1
 fi
 
-go test ./internal/acceptance ./internal/app ./cmd/oz -count=1 2>&1 | tee -a "$producer_log"
+go test ./internal/acceptance ./internal/app ./internal/ozcli ./cmd/oz -count=1 2>&1 | tee -a "$producer_log"
 
 echo "PASS"

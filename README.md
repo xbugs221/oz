@@ -45,6 +45,13 @@ docs/changes
 
 `oz` 和 `wo` 都是 Go 编译的二进制程序，windows/macos/linux 三大操作系统兼容，而且 arm/x64 兼容。
 
+安装最新版：
+
+```bash
+go install github.com/xbugs221/oz@latest
+go install github.com/xbugs221/oz/cmd/wo@latest
+```
+
 提案的一般使用流程涉及 4 个阶段：
 
 - `plan` 规划：讨论探索需求可行性/划定边界

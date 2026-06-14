@@ -36,7 +36,11 @@ if [[ ! -d "$ROOT/tests/app" && ! -d "$ROOT/tests/specs" ]]; then
 fi
 
 note "检查核心真实测试包可单独运行"
-(cd "$ROOT" && go test ./internal/app ./cmd/oz ./tests -count=1) 2>&1 | tee -a "$LOG" || fail "核心真实测试包未通过"
+(cd "$ROOT" && go test ./internal/app ./internal/ozcli ./cmd/oz ./tests -count=1) 2>&1 | tee -a "$LOG" || fail "核心真实测试包未通过"
+
+note "检查 Go install 使用的包路径可构建"
+tmp_bin_dir="$(mktemp -d)"
+(cd "$ROOT" && go build -o "$tmp_bin_dir/oz" . && go build -o "$tmp_bin_dir/wo" ./cmd/wo) 2>&1 | tee -a "$LOG" || fail "根 oz 包或 cmd/wo 无法构建"
 
 note "检查根目录 Go 测试门禁稳定"
 (cd "$ROOT" && go test ./... -count=1) 2>&1 | tee -a "$LOG" || fail "go test ./... 未通过"

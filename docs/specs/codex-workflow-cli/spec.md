@@ -2399,7 +2399,7 @@
 #### 场景：后续重构拥有稳定测试基线
 
 - **当** 根测试门禁完成
-- **则** `go test ./internal/app ./cmd/oz ./tests` 必须通过
+- **则** `go test ./internal/app ./internal/ozcli ./cmd/oz ./tests` 必须通过
 - **且** 该结果不能依赖删除根门禁或跳过真实业务断言
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
 - **关键断言**：核心 app、oz CLI 和根测试包可单独证明当前基线可用
