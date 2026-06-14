@@ -188,6 +188,21 @@
 - **且** `findings[].scope` 必须支持 `1=current_change`、`2=introduced_regression`、`0=out_of_scope_existing`
 - **且** `out_of_scope_existing` 仍表示历史债务或无关问题，不得阻断当前提案 clean
 
+#### 场景：运行状态边界已拆分且核心行为不变
+
+// Sources: 26-拆分运行状态持久化边界
+
+- **当** sealed run 状态机读写运行状态、构造 prompt 上下文、检测 git 人工干预或处理 run lock
+- **则** 状态 JSON 读写、run id 校验和合并写入逻辑必须位于独立 state store 边界
+- **且** run lock、run 中止和 superseded archive 逻辑必须位于独立 run lock 边界
+- **且** prompt snapshot、prompt template 渲染和 prompt context 构造逻辑必须位于独立 prompt context 边界
+- **且** git snapshot、人工干预路径分类和 porcelain 解析逻辑必须位于独立 git guard 边界
+- **且** `state.go` 不得重新直接定义这些已拆分职责的核心 helper
+- **且** 现有状态机、Go DAG、人工干预和 acceptance preflight 回归必须继续通过
+- **测试**：`tests/specs/codex-workflow-cli/test_state_runtime_boundary_contract.sh`
+- **关键断言**：4 个运行状态边界文件存在，`state.go` 不再承载迁出 helper，关键 `internal/app` 回归通过
+- **剩余风险**：该测试不逐行验证 helper 的完整实现细节，代码审查仍需确认没有留下重复实现
+
 ### 需求：agent tool JSONL 事件驱动
 
 系统必须通过当前阶段 effective agent tool 的 stdout JSONL 事件流抽取 session id，但不在 run 目录重复保存 agent JSONL 日志。
