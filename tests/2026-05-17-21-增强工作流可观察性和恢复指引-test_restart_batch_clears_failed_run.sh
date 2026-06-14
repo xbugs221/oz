@@ -121,6 +121,7 @@ exit 7
 EOF
 chmod +x "$FAKEBIN/codex"
 ln -sf "$FAKEBIN/codex" "$FAKEBIN/pi"
+ln -sf "$FAKEBIN/codex" "$FAKEBIN/agy"
 
 # Restart the batch — the detached worker will eventually fail in the fake agent,
 # but createRun() runs before agent invocation and must produce a new run.
@@ -149,8 +150,12 @@ new_run_id = ""
 while time.time() < deadline:
     batch_path = os.path.join(batches_dir, BATCH_ID, "state.json")
     if os.path.exists(batch_path):
-        with open(batch_path, encoding="utf-8") as f:
-            batch = json.load(f)
+        try:
+            with open(batch_path, encoding="utf-8") as f:
+                batch = json.load(f)
+        except json.JSONDecodeError:
+            time.sleep(0.3)
+            continue
         new_run_id = batch["run_ids"].get("1-重启变更", "")
         if new_run_id and new_run_id != OLD_RUN_ID:
             break

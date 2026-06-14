@@ -141,6 +141,7 @@ PYEOF
 chmod +x "$TMPDIR/bin/legacy-agent"
 ln -sf "$TMPDIR/bin/legacy-agent" "$TMPDIR/bin/codex"
 ln -sf "$TMPDIR/bin/legacy-agent" "$TMPDIR/bin/pi"
+ln -sf "$TMPDIR/bin/legacy-agent" "$TMPDIR/bin/agy"
 
 # 5. Create active changes
 for name in 1-a 2-b 3-c; do
