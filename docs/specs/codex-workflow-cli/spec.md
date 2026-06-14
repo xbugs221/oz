@@ -1476,7 +1476,7 @@
 
 ### 需求：人类 run status 极简固定列视图
 
-// Sources: 23-统一状态展示视图模型
+// Sources: 23-统一状态展示视图模型, 27-统一状态展示视图入口
 
 系统必须支持用户通过 `wo status` 和 `wo watch` 查看同一套极简固定列进度视图，而不是内部 workflow stage 列表、标题摘要或 engine 诊断行。
 
@@ -1504,10 +1504,12 @@
 - **当** 检查 `internal/app` 状态展示实现
 - **则** `internal/app` 必须存在 status render 源文件
 - **且** `app.go` 不得继续定义 `watchBatchStatusLines`、`watchRunStatusLines`、`runProposalStatusLines` 或 `watchStageChecklistLines` 等文本拼接 helper
+- **且** `app.go` 不得继续定义 checklist、visible session、planner session、session role 和 duration 汇总等状态展示计算 helper
+- **且** `status_view.go` 和 `status_render.go` 必须共同承载 human status、watch、runner JSON 和执行进度 checklist 的共享展示边界
 - **且** `printHumanStatus`、`watchStatusLines` 和 runner JSON 必须复用共享状态 view/render 路径
 - **测试**：`tests/specs/codex-workflow-cli/test_status_view_render_contract.sh`
 - **关键断言**：状态展示职责离开 `app.go`，并通过相关 status/watch/runner Go 回归测试
-- **剩余风险**：静态检查不约束 renderer 的最终私有函数命名
+- **剩余风险**：静态检查不比较每一行中文文本的完整快照，也不约束 renderer 的最终私有函数命名
 
 #### 场景：用户可见状态输出保持稳定
 
