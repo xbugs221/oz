@@ -80,6 +80,14 @@
 - **则** `wo` 必须仍保留对 `oz list/status/validate/archive` 命令协议的调用能力
 - **并且** 合并不得要求执行器测试改成直接 import `cmd/oz`
 
+### 场景：wo 命令分发边界保持清晰
+
+- **给定** `wo` CLI 代码已经合入当前仓库
+- **当** 维护者调整 repo 命令分发、无参数交互流程或 planning 入口
+- **则** `internal/app/command_dispatch.go`、`internal/app/interactive.go` 和 `internal/app/planning.go` 必须作为独立边界文件存在
+- **并且** `internal/app/app.go` 不得重新直接包含 `run`、`resume`、`batch`、`restart`、`status`、`abort`、`clean`、`watch`、`--resume`、`--run` 这些 repo 命令的大 switch case
+- **并且** `internal/app` 与 `cmd/oz` 命令面回归必须通过，证明拆分不改变现有 CLI 行为
+
 ### 场景：归档阶段按逻辑维护长期规格测试
 
 - **当** 智能体执行归档阶段
