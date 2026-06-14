@@ -95,6 +95,14 @@
 - **并且** `internal/app/config.go` 不得重新直接定义 schema input、profile 渲染、parallel 展开或 validation 解析 helper
 - **并且** 默认 tree config、legacy 字段拒绝、profile 发现、MADA profile 生成和 parallel 配置合同必须继续通过，证明用户可见配置行为不变
 
+### 场景：工作流 Engine 运行边界保持清晰
+
+- **当** 维护者调整 workflow Engine 的状态模型、运行入口、恢复逻辑、阶段执行或进度持久化
+- **则** `internal/app/state_model.go`、`internal/app/engine_run.go`、`internal/app/engine_resume.go`、`internal/app/engine_stage.go` 和 `internal/app/engine_progress.go` 必须作为独立边界文件存在
+- **并且** `State` 模型、`resumeRun`、`runLoop`、`runStage`、`stageProgressWriter` 必须分别落在对应职责文件
+- **并且** `internal/app/state.go` 不得重新成为承载核心运行职责的 1000 行级混合文件
+- **并且** workflow 相关 Go 回归必须继续通过，证明文件拆分不改变运行行为
+
 ### 场景：归档阶段按逻辑维护长期规格测试
 
 - **当** 智能体执行归档阶段
