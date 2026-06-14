@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestStatusViewReadsImplementationContextDAGNodes verifies status/watch sees renamed execution context nodes.
@@ -23,6 +24,25 @@ func TestStatusViewReadsImplementationContextDAGNodes(t *testing.T) {
 	}
 	if marker := statusViewSubagentMarker(t, view, "外部资料研究员"); marker != "✓" {
 		t.Fatalf("success implementation_context marker = %q, want ✓", marker)
+	}
+}
+
+// TestRunningSubagentDurationShowsBeforeFinish verifies active helpers show elapsed wall time immediately.
+func TestRunningSubagentDurationShowsBeforeFinish(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.DAGNodes = map[string]DAGNodeState{
+		"implementation_context_1": {
+			Status: statusRunning,
+			StartedAt: time.Now().UTC().
+				Add(-2 * time.Minute).
+				Format(time.RFC3339Nano),
+		},
+	}
+
+	view := buildStatusView(t.TempDir(), state, state.RunID, "")
+	row := statusViewSubagentRow(t, view, "代码库侦察员")
+	if row.DurationMinutes == nil || *row.DurationMinutes < 1.5 {
+		t.Fatalf("running subagent duration = %#v, want visible wall time before finish", row.DurationMinutes)
 	}
 }
 
@@ -296,11 +316,19 @@ func statusViewImplementationContextState() State {
 // statusViewSubagentMarker finds one subagent row by full configured member name.
 func statusViewSubagentMarker(t *testing.T, view statusView, fullName string) string {
 	t.Helper()
-	if marker, found := statusViewOptionalSubagentMarker(view, fullName); found {
-		return marker
+	return statusViewSubagentRow(t, view, fullName).Marker
+}
+
+// statusViewSubagentRow finds one subagent row by full configured member name.
+func statusViewSubagentRow(t *testing.T, view statusView, fullName string) statusViewRow {
+	t.Helper()
+	for _, row := range view.Rows {
+		if row.Kind == "subagent" && row.FullName == fullName {
+			return row
+		}
 	}
 	t.Fatalf("subagent row %q not found in %#v", fullName, view.Rows)
-	return ""
+	return statusViewRow{}
 }
 
 // statusViewOptionalSubagentMarker returns a subagent marker only when the row is visible.

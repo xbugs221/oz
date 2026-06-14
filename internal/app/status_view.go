@@ -56,6 +56,7 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 	state = humanDisplayState(repo, state)
 	ensureWorkflowConfig(&state)
 	normalizeStateMaps(&state)
+	now := time.Now().UTC()
 	view := statusView{
 		DisplayID:      nonEmpty(displayID, state.RunID),
 		Indicator:      runningMarker,
@@ -63,16 +64,16 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 		Engine:         statusViewEngine(state),
 		RunArtifactDir: runDir(repo, state.RunID),
 		Artifacts:      statusRootArtifacts(repo, state),
-		WallMinutes:    statusWorkflowWallDuration(state, time.Now().UTC()),
+		WallMinutes:    statusWorkflowWallDuration(state, now),
 	}
 	for _, spec := range compactStageSpecs {
 		stages := matchingStatusStages(state, spec)
-		row := statusStageRow(repo, state, spec)
+		row := statusStageRow(repo, state, spec, now)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
 		}
 		view.Rows = append(view.Rows, row)
-		view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages))...)
+		view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages), now)...)
 	}
 	applyStatusRunningMarker(&view, runningMarker)
 	return view
@@ -83,6 +84,7 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 	state = humanDisplayState(repo, state)
 	ensureWorkflowConfig(&state)
 	normalizeStateMaps(&state)
+	now := time.Now().UTC()
 	view := statusView{
 		DisplayID:      nonEmpty(displayID, state.RunID),
 		Indicator:      runningMarker,
@@ -90,17 +92,17 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 		Engine:         statusViewEngine(state),
 		RunArtifactDir: runDir(repo, state.RunID),
 		Artifacts:      statusRootArtifacts(repo, state),
-		WallMinutes:    statusWorkflowWallDuration(state, time.Now().UTC()),
+		WallMinutes:    statusWorkflowWallDuration(state, now),
 	}
 	for _, spec := range compactStageSpecs {
 		stages := matchingStatusStages(state, spec)
-		row := statusStageRow(repo, state, spec)
+		row := statusStageRow(repo, state, spec, now)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
 		}
 		view.Rows = append(view.Rows, row)
 		if spec.stage != "planning" {
-			view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages))...)
+			view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages), now)...)
 		}
 	}
 	applyStatusRunningMarker(&view, runningMarker)
@@ -119,7 +121,7 @@ func statusViewEngine(state State) string {
 }
 
 // statusStageRow builds one main-stage row, aggregating repeated review or QA rounds.
-func statusStageRow(repo string, state State, spec compactStageSpec) statusViewRow {
+func statusStageRow(repo string, state State, spec compactStageSpec, now time.Time) statusViewRow {
 	stages := matchingStatusStages(state, spec)
 	row := statusViewRow{
 		Kind:      "stage",
@@ -142,7 +144,7 @@ func statusStageRow(repo string, state State, spec compactStageSpec) statusViewR
 	if state.Status == statusAcceptanceContractBlocked && spec.role == "executor" {
 		row.Marker = "x"
 	}
-	if minutes, ok := statusStageDuration(state, stages, time.Now().UTC()); ok {
+	if minutes, ok := statusStageDuration(state, stages, now); ok {
 		row.DurationMinutes = &minutes
 	}
 	return row
@@ -348,7 +350,7 @@ func statusStageArtifact(repo string, state State, stage string) string {
 }
 
 // statusSubagentRows returns reached helper member rows owned by a compact parent stage.
-func statusSubagentRows(repo string, state State, parentStage string) []statusViewRow {
+func statusSubagentRows(repo string, state State, parentStage string, now time.Time) []statusViewRow {
 	if !state.Workflow.Parallel.Enabled {
 		return nil
 	}
@@ -387,7 +389,7 @@ func statusSubagentRows(repo string, state State, parentStage string) []statusVi
 					"group_artifact":  groupArtifact,
 				},
 			}
-			if minutes, ok := statusNodeDuration(node); ok {
+			if minutes, ok := statusNodeDuration(node, now); ok {
 				row.DurationMinutes = &minutes
 			}
 			rows = append(rows, row)
@@ -504,17 +506,25 @@ func statusSubagentMarker(node DAGNodeState, hasNode bool, memberArtifact string
 	}
 }
 
-// statusNodeDuration returns a helper node duration in minutes when both timestamps are valid.
-func statusNodeDuration(node DAGNodeState) (float64, bool) {
-	if node.StartedAt == "" || node.FinishedAt == "" {
+// statusNodeDuration returns a helper node wall-time duration once the node has started.
+func statusNodeDuration(node DAGNodeState, now time.Time) (float64, bool) {
+	if node.StartedAt == "" {
 		return 0, false
 	}
 	startedAt, err := time.Parse(time.RFC3339Nano, node.StartedAt)
 	if err != nil {
 		return 0, false
 	}
-	finishedAt, err := time.Parse(time.RFC3339Nano, node.FinishedAt)
-	if err != nil || finishedAt.Before(startedAt) {
+	finishedAt := now
+	if node.FinishedAt != "" {
+		finishedAt, err = time.Parse(time.RFC3339Nano, node.FinishedAt)
+		if err != nil {
+			return 0, false
+		}
+	} else if node.Status != statusRunning {
+		return 0, false
+	}
+	if finishedAt.Before(startedAt) {
 		return 0, false
 	}
 	return finishedAt.Sub(startedAt).Minutes(), true
