@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Purpose: verify the public OMO-style parallel helper config and prompt-only execution contract.
+# Purpose: verify the public tree-shaped parallel helper config and prompt-only execution contract.
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -17,30 +17,29 @@ import (
     "testing"
 )
 
-func TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups(t *testing.T) {
+func TestDefaultWorkflowConfigYAMLIncludesTreeParallelHelpers(t *testing.T) {
     yaml := DefaultWorkflowConfigYAML
 
     required := []string{
-        "parallel:",
-        "enabled: true",
-        "implementation_context:",
+        "parallel: true",
+        "stages:",
+        "before:",
+        "execution:",
         "review:",
         "qa:",
         "代码库侦察员",
         "外部资料研究员",
         "目标核对审核员",
-        "代码质量审核员",
         "测试有效性审核员",
         "安全风险审核员",
         "上下文一致性审核员",
         "CLI/API 测试员",
         "浏览器路径测试员",
-        "证据采集员",
         "回归场景测试员",
     }
     for _, want := range required {
         if !strings.Contains(yaml, want) {
-            t.Fatalf("DefaultWorkflowConfigYAML missing %q; parallel OMO-style config skeleton is not exposed", want)
+            t.Fatalf("DefaultWorkflowConfigYAML missing %q; tree-shaped parallel helper config is not exposed", want)
         }
     }
 
@@ -59,7 +58,7 @@ func TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups(t *testing.T) {
 }
 EOF
 
-OZ_MIGRATED_APP_RUN='TestDefaultWorkflowConfigYAMLIncludesOMOParallelGroups' \
+OZ_MIGRATED_APP_RUN='TestDefaultWorkflowConfigYAMLIncludesTreeParallelHelpers' \
     go test ./tests/app -run TestMigratedAppTestsRunWithGoToolchain -count=1
 
 cat > tests/app/parallel_prompt_only_contract_test.gotest <<'EOF'

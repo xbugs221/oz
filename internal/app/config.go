@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
-	"strings"
 
-	profilestemplate "github.com/xbugs221/oz/profiles-template"
 	promptstemplate "github.com/xbugs221/oz/prompts-template"
 	"gopkg.in/yaml.v3"
 )
@@ -21,7 +18,6 @@ var (
 	validReasoning   = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
 	validPermissions = map[string]bool{"default": true, "danger-full-access": true, "sandbox": true}
 	stageKinds       = roleStageKinds()
-	iterationStage   = regexp.MustCompile(`^(review|qa|fix)_([1-9][0-9]*)$`)
 )
 
 // StageOptions describes the agent runtime knobs for one effective workflow stage.
@@ -78,95 +74,11 @@ type ValidationCommand struct {
 	Args       []string `json:"args,omitempty" yaml:"args"`
 }
 
-type woConfigFile struct {
-	MC woConfig `yaml:"wo"`
-}
-
-type woConfig struct {
-	Workflow workflowConfigInput `yaml:"workflow"`
-	Prompts  map[string]string   `yaml:"prompts"`
-}
-
-type workflowConfigInput struct {
-	Engine              string                       `yaml:"engine"`
-	MaxReviewIterations *int                         `yaml:"max_review_iterations"`
-	Defaults            stageOptionsInput            `yaml:"defaults"`
-	Stages              map[string]stageOptionsInput `yaml:"stages"`
-	Iterations          map[string]stageOptionsInput `yaml:"iterations"`
-	Parallel            parallelConfigInput          `yaml:"parallel"`
-	Subagents           parallelConfigInput          `yaml:"subagents"`
-	Validation          validationConfigInput        `yaml:"validation"`
-	Prompts             map[string]string            `yaml:"prompts"`
-}
-
-type parallelConfigInput struct {
-	Enabled *bool                               `yaml:"enabled"`
-	Groups  map[string]parallelGroupConfigInput `yaml:"groups"`
-}
-
-// UnmarshalYAML accepts the new KISS `parallel: true|false` scalar while keeping
-// the old object shape available only so it can be rejected with a field name.
-func (input *parallelConfigInput) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind == yaml.ScalarNode {
-		var enabled bool
-		if err := value.Decode(&enabled); err != nil {
-			return err
-		}
-		input.Enabled = &enabled
-		return nil
-	}
-	type raw parallelConfigInput
-	var decoded raw
-	if err := value.Decode(&decoded); err != nil {
-		return err
-	}
-	*input = parallelConfigInput(decoded)
-	return nil
-}
-
-type parallelGroupConfigInput struct {
-	Mode    string                      `yaml:"mode"`
-	Members []parallelMemberConfigInput `yaml:"members"`
-}
-
-type parallelMemberConfigInput struct {
-	Name     string `yaml:"name"`
-	Purpose  string `yaml:"purpose"`
-	Stage    string `yaml:"stage"`
-	CLI      string `yaml:"cli"`
-	Tool     string `yaml:"tool"`
-	Agent    string `yaml:"agent"`
-	Model    string `yaml:"model"`
-	Subagent string `yaml:"subagent"`
-	Required bool   `yaml:"required"`
-}
-
-type validationConfigInput struct {
-	Commands            []ValidationCommand `yaml:"commands"`
-	MaxAttemptsPerStage *int                `yaml:"max_attempts_per_stage"`
-	Limit               *int                `yaml:"limit"`
-}
-
-type stageOptionsInput struct {
-	CLI         *string                     `yaml:"cli"`
-	Tool        *string                     `yaml:"tool"`
-	Agent       *string                     `yaml:"agent"`
-	Model       *string                     `yaml:"model"`
-	Reasoning   *string                     `yaml:"reasoning"`
-	Fast        *bool                       `yaml:"fast"`
-	Permissions *string                     `yaml:"permissions"`
-	Before      []parallelMemberConfigInput `yaml:"before"`
-}
-
 // WorkflowProfile describes one built-in profile visible from `wo config`.
 type WorkflowProfile struct {
 	Name        string
 	Description string
 	Scenario    string
-}
-
-func (input stageOptionsInput) hasValues() bool {
-	return input.CLI != nil || input.Tool != nil || input.Agent != nil || input.Model != nil || input.Reasoning != nil || input.Fast != nil || input.Permissions != nil || input.Before != nil
 }
 
 // DefaultWorkflowConfigYAML is kept for tests that compare the generated config text.
@@ -297,28 +209,6 @@ func WriteWorkflowConfigProfile(repo string, global bool, profile string) (strin
 	return path, nil
 }
 
-// BuiltInWorkflowProfiles returns the ordered profile registry shown by the CLI.
-func BuiltInWorkflowProfiles() []WorkflowProfile {
-	return []WorkflowProfile{
-		{Name: "default", Description: "默认代码工作流", Scenario: "通用 oz 提案执行、审查和 QA"},
-		{Name: "mada-code", Description: "MADA 代码实现/审查 profile", Scenario: "需要多角色代码侦察、实现审核和回归测试"},
-		{Name: "mada-decision", Description: "MADA 决策 profile", Scenario: "技术选型、推荐、学习路线和取舍评估"},
-		{Name: "mada-research", Description: "MADA 调研 profile", Scenario: "资料调研、证据审计和结论交叉验证"},
-	}
-}
-
-// WorkflowProfileYAML renders a built-in profile template into the final wo.yaml body.
-func WorkflowProfileYAML(profile string) (string, error) {
-	if !knownWorkflowProfile(profile) {
-		return "", fmt.Errorf("未知 profile %q，可用 profile: %s", profile, strings.Join(workflowProfileNames(), ", "))
-	}
-	data, err := profilestemplate.FS.ReadFile(profile + ".yaml")
-	if err != nil {
-		return "", err
-	}
-	return renderWorkflowProfileTemplate(string(data)), nil
-}
-
 func workflowConfigFromProfile(profile string) (WorkflowConfig, error) {
 	body, err := WorkflowProfileYAML(profile)
 	if err != nil {
@@ -359,343 +249,6 @@ func workflowConfigFromYAML(data []byte, source string, baseConfig *WorkflowConf
 	}
 	normalizePromptConfig(next.Prompts)
 	return next, nil
-}
-
-func hasLegacyWorkflowRoot(data []byte) (bool, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return false, err
-	}
-	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
-		return false, nil
-	}
-	for i := 0; i+1 < len(root.Content[0].Content); i += 2 {
-		key := root.Content[0].Content[i].Value
-		value := root.Content[0].Content[i+1]
-		if key == "workflow" {
-			return true, nil
-		}
-		if key == "wo" && mappingHasKey(value, "workflow") {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func mappingHasKey(node *yaml.Node, key string) bool {
-	if node == nil || node.Kind != yaml.MappingNode {
-		return false
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		if node.Content[i].Value == key {
-			return true
-		}
-	}
-	return false
-}
-
-func (input workflowConfigInput) hasValues() bool {
-	return input.Engine != "" || input.MaxReviewIterations != nil || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
-}
-
-func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
-	if input.Defaults.hasValues() {
-		return WorkflowConfig{}, fmt.Errorf("defaults 是旧字段，已删除")
-	}
-	if input.Iterations != nil {
-		return WorkflowConfig{}, fmt.Errorf("iterations 是旧字段，已删除")
-	}
-	if input.Subagents.Enabled != nil || input.Subagents.Groups != nil {
-		return WorkflowConfig{}, fmt.Errorf("subagents 是旧字段，已删除")
-	}
-	if input.Parallel.Groups != nil {
-		return WorkflowConfig{}, fmt.Errorf("parallel.groups 是旧字段，已删除；请使用 stages.<stage>.before")
-	}
-	maxIterations := defaultMaxReviewIterations
-	engine := "go-dag"
-	var basePrompts map[string]string
-	byKind := defaultStageOptionsByKind()
-	validation := ValidationConfig{MaxAttemptsPerStage: 3}
-	parallel := defaultParallelConfig()
-	if baseConfig != nil {
-		engine = baseConfig.Engine
-		maxIterations = baseConfig.MaxReviewIterations
-		basePrompts = clonePrompts(baseConfig.Prompts)
-		validation = baseConfig.Validation
-		parallel = cloneParallelConfig(baseConfig.Parallel)
-		if option, ok := baseConfig.Stages["planning"]; ok {
-			byKind["planning"] = option
-		}
-		if option, ok := baseConfig.Stages["execution"]; ok {
-			byKind["execution"] = option
-		}
-		if option, ok := baseConfig.Stages["fix_1"]; ok {
-			byKind["fix"] = option
-		}
-		if option, ok := baseConfig.Stages["review_1"]; ok {
-			byKind["review"] = option
-		}
-		if option, ok := baseConfig.Stages["qa_1"]; ok {
-			byKind["qa"] = option
-		}
-		if option, ok := baseConfig.Stages["archive"]; ok {
-			byKind["archive"] = option
-		}
-	}
-	if input.MaxReviewIterations != nil {
-		if *input.MaxReviewIterations < 0 {
-			return WorkflowConfig{}, fmt.Errorf("max_review_iterations 必须是非负数")
-		}
-		maxIterations = *input.MaxReviewIterations
-	}
-	if strings.TrimSpace(input.Engine) != "" {
-		return WorkflowConfig{}, fmt.Errorf("engine 是旧字段，已删除")
-	}
-	for _, kind := range stageKinds {
-		base := byKind[kind]
-		if err := mergeStageOptions(&base, input.Defaults); err != nil {
-			return WorkflowConfig{}, fmt.Errorf("defaults: %w", err)
-		}
-		if input.Stages != nil {
-			for key := range input.Stages {
-				if !slices.Contains(stageKinds, key) {
-					return WorkflowConfig{}, fmt.Errorf("未知阶段类型 %q", key)
-				}
-			}
-			if override, ok := input.Stages[kind]; ok {
-				if err := mergeStageOptions(&base, override); err != nil {
-					return WorkflowConfig{}, fmt.Errorf("stages.%s: %w", kind, err)
-				}
-			}
-		}
-		byKind[kind] = base
-	}
-	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
-		"planning":  byKind["planning"],
-		"execution": byKind["execution"],
-		"archive":   byKind["archive"],
-	}, Prompts: basePrompts}
-	validation, err := validationConfigFromInput(input.Validation, validation)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	parallel, err = parallelConfigFromInput(input.Parallel, parallel)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	parallel, err = parallelConfigFromInput(input.Subagents, parallel)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	parallel, err = parallelConfigFromStages(input.Stages, parallel)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	config.Validation = validation
-	config.Parallel = parallel
-	for i := 1; i <= maxIterations; i++ {
-		config.Stages[fmt.Sprintf("review_%d", i)] = byKind["review"]
-		config.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]
-		config.Stages[fmt.Sprintf("fix_%d", i)] = byKind["fix"]
-	}
-	for key, override := range input.Iterations {
-		if !iterationStage.MatchString(key) {
-			return WorkflowConfig{}, fmt.Errorf("未知轮次阶段 %q", key)
-		}
-		base, ok := config.Stages[key]
-		if !ok {
-			return WorkflowConfig{}, fmt.Errorf("轮次阶段 %q 超出 max_review_iterations", key)
-		}
-		if err := mergeStageOptions(&base, override); err != nil {
-			return WorkflowConfig{}, fmt.Errorf("iterations.%s: %w", key, err)
-		}
-		config.Stages[key] = base
-	}
-	return config, nil
-}
-
-// parallelConfigFromInput overlays user-provided parallel helper settings.
-func parallelConfigFromInput(input parallelConfigInput, base ParallelConfig) (ParallelConfig, error) {
-	config := cloneParallelConfig(base)
-	if input.Enabled != nil {
-		config.Enabled = *input.Enabled
-	}
-	if input.Groups != nil {
-		config.Groups = map[string]ParallelGroupConfig{}
-		for name, group := range input.Groups {
-			parsed, err := parallelGroupConfigFromInput(group)
-			if err != nil {
-				return ParallelConfig{}, fmt.Errorf("parallel.groups.%s: %w", name, err)
-			}
-			config.Groups[name] = parsed
-		}
-	}
-	if err := validateParallelConfig(config); err != nil {
-		return ParallelConfig{}, err
-	}
-	return config, nil
-}
-
-func parallelGroupConfigFromInput(input parallelGroupConfigInput) (ParallelGroupConfig, error) {
-	group := ParallelGroupConfig{Mode: input.Mode}
-	group.Members = make([]ParallelMemberConfig, 0, len(input.Members))
-	for i, member := range input.Members {
-		tool := member.Tool
-		if tool == "" {
-			tool = member.CLI
-		}
-		if tool == "" {
-			tool = member.Agent
-		}
-		if tool == "" {
-			tool = "pi"
-		}
-		if strings.TrimSpace(member.Name) == "" {
-			return ParallelGroupConfig{}, fmt.Errorf("members[%d].name 不能为空", i)
-		}
-		if strings.TrimSpace(member.Purpose) == "" {
-			return ParallelGroupConfig{}, fmt.Errorf("members[%d].purpose 不能为空", i)
-		}
-		if tool != "" && !validAgentTool(tool) {
-			return ParallelGroupConfig{}, fmt.Errorf("members[%d].tool 未知 agent tool %q", i, tool)
-		}
-		group.Members = append(group.Members, ParallelMemberConfig{
-			Name:     member.Name,
-			Purpose:  member.Purpose,
-			Stage:    member.Stage,
-			Tool:     tool,
-			Model:    member.Model,
-			Subagent: member.Subagent,
-			Required: member.Required,
-		})
-	}
-	return group, nil
-}
-
-func rejectStageBeforeLegacyMemberFields(member parallelMemberConfigInput, index int) error {
-	// stages.<stage>.before[] is the new tree-shaped config surface and must not
-	// retain legacy aliases or scheduler anchors from parallel.groups.
-	if member.CLI != "" {
-		return fmt.Errorf("members[%d].cli 是旧字段，已删除；请使用 agent", index)
-	}
-	if member.Tool != "" {
-		return fmt.Errorf("members[%d].tool 是旧字段，已删除；请使用 agent", index)
-	}
-	if member.Stage != "" {
-		return fmt.Errorf("members[%d].stage 是旧字段，已删除；stage 由 stages.<stage>.before 自动决定", index)
-	}
-	return nil
-}
-
-func parallelConfigFromStages(stages map[string]stageOptionsInput, base ParallelConfig) (ParallelConfig, error) {
-	config := cloneParallelConfig(base)
-	if stages == nil {
-		return config, validateParallelConfig(config)
-	}
-	stageToGroup := map[string]string{"planning": "planning_context", "execution": "implementation_context", "review": "review", "qa": "qa"}
-	stageToAnchor := map[string]string{"planning": "planning", "execution": "before_execution", "review": "before_review", "qa": "before_qa"}
-	for stage, input := range stages {
-		if len(input.Before) == 0 {
-			continue
-		}
-		groupName, ok := stageToGroup[stage]
-		if !ok {
-			return ParallelConfig{}, fmt.Errorf("stages.%s.before 不支持", stage)
-		}
-		members := make([]parallelMemberConfigInput, 0, len(input.Before))
-		for i, member := range input.Before {
-			if err := rejectStageBeforeLegacyMemberFields(member, i); err != nil {
-				return ParallelConfig{}, fmt.Errorf("stages.%s.before: %w", stage, err)
-			}
-			member.Stage = stageToAnchor[stage]
-			members = append(members, member)
-		}
-		group, err := parallelGroupConfigFromInput(parallelGroupConfigInput{Mode: stageMode(stage), Members: members})
-		if err != nil {
-			return ParallelConfig{}, fmt.Errorf("stages.%s.before: %w", stage, err)
-		}
-		if config.Groups == nil {
-			config.Groups = map[string]ParallelGroupConfig{}
-		}
-		config.Groups[groupName] = group
-	}
-	return config, validateParallelConfig(config)
-}
-
-func stageMode(stage string) string {
-	switch stage {
-	case "planning", "execution":
-		return "advisory"
-	default:
-		return "gate_input"
-	}
-}
-
-func validateParallelConfig(config ParallelConfig) error {
-	for name, group := range config.Groups {
-		allowedStages, ok := allowedParallelMemberStages(name)
-		if !ok {
-			return fmt.Errorf("parallel.groups.%s 未知并行组", name)
-		}
-		switch group.Mode {
-		case "advisory", "gate_input":
-		default:
-			return fmt.Errorf("parallel.groups.%s.mode 无效：%q", name, group.Mode)
-		}
-		if len(group.Members) == 0 {
-			return fmt.Errorf("parallel.groups.%s.members 不能为空", name)
-		}
-		for i, member := range group.Members {
-			stage := strings.TrimSpace(member.Stage)
-			if stage == "" {
-				continue
-			}
-			if !allowedStages[stage] {
-				return fmt.Errorf("parallel.groups.%s.members[%d].stage 不能挂载到 %q", name, i, stage)
-			}
-		}
-	}
-	return nil
-}
-
-// allowedParallelMemberStages defines the only stage anchors the built-in DAG can schedule.
-func allowedParallelMemberStages(groupName string) (map[string]bool, bool) {
-	switch groupName {
-	case "planning_context":
-		return map[string]bool{"planning": true}, true
-	case "implementation_context":
-		return map[string]bool{"before_execution": true, "execution": true}, true
-	case "review":
-		return map[string]bool{"before_review": true, "review": true}, true
-	case "qa":
-		return map[string]bool{"before_qa": true, "qa": true}, true
-	default:
-		return nil, false
-	}
-}
-
-// validationConfigFromInput validates user-supplied quality gate commands.
-func validationConfigFromInput(input validationConfigInput, base ValidationConfig) (ValidationConfig, error) {
-	config := ValidationConfig{Commands: cloneValidationCommands(base.Commands), MaxAttemptsPerStage: base.MaxAttemptsPerStage}
-	if input.Commands != nil {
-		config.Commands = cloneValidationCommands(input.Commands)
-	}
-	for i, command := range config.Commands {
-		if strings.TrimSpace(command.Executable) == "" {
-			return ValidationConfig{}, fmt.Errorf("validation.commands[%d].executable 不能为空", i)
-		}
-	}
-	if input.MaxAttemptsPerStage != nil {
-		return ValidationConfig{}, fmt.Errorf("validation.max_attempts_per_stage 是旧字段，已删除；请使用 validation.limit")
-	}
-	if input.Limit != nil {
-		if *input.Limit < 1 {
-			return ValidationConfig{}, fmt.Errorf("validation.limit 必须是正数")
-		}
-		config.MaxAttemptsPerStage = *input.Limit
-	}
-	normalizeValidationConfig(&config)
-	return config, nil
 }
 
 // normalizeWorkflowConfig backfills fields missing in older state snapshots.
@@ -740,46 +293,6 @@ func normalizeValidationConfig(config *ValidationConfig) {
 	}
 }
 
-func mergeStageOptions(base *StageOptions, override stageOptionsInput) error {
-	if override.CLI != nil {
-		return fmt.Errorf("cli 是旧字段，已删除；请使用 agent")
-	}
-	if override.Tool != nil {
-		return fmt.Errorf("tool 是旧字段，已删除；请使用 agent")
-	}
-	if override.Permissions != nil {
-		return fmt.Errorf("permissions 是旧字段，已删除")
-	}
-	if override.Agent != nil {
-		override.Tool = override.Agent
-	}
-	if override.Tool != nil {
-		if !validAgentTool(*override.Tool) {
-			return fmt.Errorf("未知 agent tool %q", *override.Tool)
-		}
-		base.Tool = *override.Tool
-	}
-	if override.Model != nil {
-		base.Model = *override.Model
-	}
-	if override.Reasoning != nil {
-		if !validReasoning[*override.Reasoning] {
-			return fmt.Errorf("无效 reasoning %q", *override.Reasoning)
-		}
-		base.Reasoning = *override.Reasoning
-	}
-	if override.Fast != nil {
-		base.Fast = *override.Fast
-	}
-	if override.Permissions != nil {
-		if !validPermissions[*override.Permissions] {
-			return fmt.Errorf("无效 permissions %q", *override.Permissions)
-		}
-		base.Permissions = *override.Permissions
-	}
-	return nil
-}
-
 func clonePrompts(prompts map[string]string) map[string]string {
 	if prompts == nil {
 		cloned := defaultPromptSet()
@@ -797,14 +310,6 @@ func cloneParallelConfig(config ParallelConfig) ParallelConfig {
 	for name, group := range config.Groups {
 		members := append([]ParallelMemberConfig(nil), group.Members...)
 		cloned.Groups[name] = ParallelGroupConfig{Mode: group.Mode, Members: members}
-	}
-	return cloned
-}
-
-func cloneValidationCommands(commands []ValidationCommand) []ValidationCommand {
-	cloned := make([]ValidationCommand, 0, len(commands))
-	for _, command := range commands {
-		cloned = append(cloned, ValidationCommand{Executable: command.Executable, Args: append([]string(nil), command.Args...)})
 	}
 	return cloned
 }
@@ -850,45 +355,4 @@ func mustDefaultWorkflowConfigYAML() string {
 		panic(err)
 	}
 	return body
-}
-
-func indentPrompt(body string) string {
-	body = strings.TrimRight(body, "\n")
-	if body == "" {
-		return "      "
-	}
-	lines := strings.Split(body, "\n")
-	for i := range lines {
-		lines[i] = "      " + lines[i]
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderWorkflowProfileTemplate(template string) string {
-	prompts := defaultPromptSet()
-	for _, key := range rolePromptKeys() {
-		template = strings.ReplaceAll(template, fmt.Sprintf(`{{ prompt "%s" }}`, key), indentPrompt(prompts[key]))
-	}
-	if !strings.HasSuffix(template, "\n") {
-		template += "\n"
-	}
-	return template
-}
-
-func knownWorkflowProfile(profile string) bool {
-	for _, item := range BuiltInWorkflowProfiles() {
-		if item.Name == profile {
-			return true
-		}
-	}
-	return false
-}
-
-func workflowProfileNames() []string {
-	profiles := BuiltInWorkflowProfiles()
-	names := make([]string, 0, len(profiles))
-	for _, item := range profiles {
-		names = append(names, item.Name)
-	}
-	return names
 }

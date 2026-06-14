@@ -88,6 +88,13 @@
 - **并且** `internal/app/app.go` 不得重新直接包含 `run`、`resume`、`batch`、`restart`、`status`、`abort`、`clean`、`watch`、`--resume`、`--run` 这些 repo 命令的大 switch case
 - **并且** `internal/app` 与 `cmd/oz` 命令面回归必须通过，证明拆分不改变现有 CLI 行为
 
+### 场景：工作流配置解析边界保持清晰
+
+- **当** 维护者调整 `wo.yaml` schema、profile 模板、parallel 展开或 validation 配置解析
+- **则** `internal/app/config_schema.go`、`internal/app/config_profiles.go`、`internal/app/config_parallel.go` 和 `internal/app/config_validation.go` 必须作为独立边界文件存在
+- **并且** `internal/app/config.go` 不得重新直接定义 schema input、profile 渲染、parallel 展开或 validation 解析 helper
+- **并且** 默认 tree config、legacy 字段拒绝、profile 发现、MADA profile 生成和 parallel 配置合同必须继续通过，证明用户可见配置行为不变
+
 ### 场景：归档阶段按逻辑维护长期规格测试
 
 - **当** 智能体执行归档阶段
