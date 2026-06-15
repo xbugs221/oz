@@ -98,7 +98,6 @@ jobs:
 
       - name: Package Unix binary
         if: matrix.goos != 'windows'
-        env:
         run: |
           set -euo pipefail
           archive="oz_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
@@ -106,7 +105,6 @@ jobs:
 
       - name: Package Windows binary
         if: matrix.goos == 'windows'
-        env:
         run: |
           set -euo pipefail
           archive="oz_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
