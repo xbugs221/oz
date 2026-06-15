@@ -316,6 +316,7 @@ func TestSubagentBoundaryRevertsSiblingRunArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := goDAGContextState(t, repo, runID)
+	state.Workflow.SubagentGuard = subagentGuardModeStrict
 	if err := saveState(repo, state); err != nil {
 		t.Fatal(err)
 	}
@@ -352,6 +353,7 @@ func TestSubagentBoundaryRevertsSourceWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := goDAGContextState(t, repo, runID)
+	state.Workflow.SubagentGuard = subagentGuardModeStrict
 	if err := saveState(repo, state); err != nil {
 		t.Fatal(err)
 	}
@@ -379,6 +381,91 @@ func TestSubagentBoundaryRevertsSourceWrite(t *testing.T) {
 	}
 	if !goDAGContextEvidenceContains(member.Evidence, "boundary reverted: rogue-subagent-write.txt") {
 		t.Fatalf("member evidence = %#v, want reverted source path", member.Evidence)
+	}
+}
+
+// TestSubagentBoundaryAdvisoryReportsSourceWrite lets the main agent judge helper-side changes.
+func TestSubagentBoundaryAdvisoryReportsSourceWrite(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "source-boundary-advisory-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if state.Workflow.SubagentGuard != subagentGuardModeAdvisory {
+		t.Fatalf("default subagent guard = %q, want advisory", state.Workflow.SubagentGuard)
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeOwnMember: true, writeSourceFile: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(repo, "rogue-subagent-write.txt")) {
+		t.Fatal("source write should remain for main agent judgment in advisory mode")
+	}
+	artifact := memberArtifactPath(repo, runID, "implementation_context", 0, "代码库侦察员")
+	member, err := readMemberArtifact(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !goDAGContextEvidenceContains(member.Evidence, "boundary advisory:") || !goDAGContextEvidenceContains(member.Evidence, "rogue-subagent-write.txt") {
+		t.Fatalf("member evidence = %#v, want boundary advisory source path", member.Evidence)
+	}
+	if len(member.Findings) == 0 || member.Findings[0].Severity != "minor" || member.Findings[0].Scope != findingScopeCurrentChange {
+		t.Fatalf("member findings = %#v, want minor current-change advisory", member.Findings)
+	}
+	_, currentDiff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest.BaselineDiff != currentDiff {
+		t.Fatalf("baseline diff was not refreshed after advisory\nstate:\n%s\ncurrent:\n%s", latest.BaselineDiff, currentDiff)
+	}
+	if err := engine.detectManualIntervention(&latest); err != nil {
+		t.Fatalf("manual intervention guard should allow advisory baseline: %v", err)
+	}
+}
+
+// TestSubagentBoundaryOffSkipsSourceWriteReporting lets users fully disable helper guards.
+func TestSubagentBoundaryOffSkipsSourceWriteReporting(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "source-boundary-off-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	state.Workflow.SubagentGuard = subagentGuardModeOff
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeOwnMember: true, writeSourceFile: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(repo, "rogue-subagent-write.txt")) {
+		t.Fatal("source write should remain when subagent guard is off")
+	}
+	artifact := memberArtifactPath(repo, runID, "implementation_context", 0, "代码库侦察员")
+	member, err := readMemberArtifact(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if goDAGContextEvidenceContains(member.Evidence, "boundary advisory:") || len(member.Findings) != 0 {
+		t.Fatalf("member should not contain guard report when disabled, got evidence=%#v findings=%#v", member.Evidence, member.Findings)
 	}
 }
 

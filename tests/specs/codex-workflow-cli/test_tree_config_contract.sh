@@ -56,7 +56,7 @@ git -C "$project" commit -qm init
 note "运行 oz flow config，生成默认 oz-flow.yaml"
 (
   cd "$project"
-  HOME="$empty_home" "$oz_bin" config
+  HOME="$empty_home" "$oz_bin" flow config
 ) >"$result_dir/config.out" 2>"$result_dir/config.err"
 
 cp "$project/oz-flow.yaml" "$generated_yaml"
@@ -79,6 +79,7 @@ do
 done
 
 assert_contains "$generated_yaml" "parallel: true"
+assert_contains "$generated_yaml" "subagent_guard: advisory"
 assert_contains "$generated_yaml" "max_review_iterations: 5"
 assert_contains "$generated_yaml" "stages:"
 assert_contains "$generated_yaml" "execution:"

@@ -13,10 +13,14 @@ import (
 
 type subagentBoundaryRepair struct {
 	Reverted []string
+	Advisory []string
 }
 
-// checkSubagentReadOnlyBoundary reverts illegal yolo-helper writes while preserving the member artifact.
-func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff, beforeContent string, beforeRunFiles map[string]string) (subagentBoundaryRepair, error) {
+// checkSubagentReadOnlyBoundary handles helper writes according to the configured guard mode.
+func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, guardMode, beforeHead, beforeDiff, beforeContent string, beforeRunFiles map[string]string) (subagentBoundaryRepair, error) {
+	if !subagentGuardEnabled(guardMode) {
+		return subagentBoundaryRepair{}, nil
+	}
 	afterContent, err := gitChangeContentSnapshot(e.Repo)
 	if err != nil {
 		return subagentBoundaryRepair{}, err
@@ -30,6 +34,9 @@ func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMembe
 	}
 	guard := classifyGitContentSnapshotChange(e.Repo, beforeContent, afterContent, []string{filepath.Dir(artifactPath)})
 	if guard.Blocked || runGuard.Blocked {
+		if !subagentGuardStrict(guardMode) {
+			return subagentBoundaryRepair{Advisory: subagentBoundaryAdvisories(member, attempt, artifactPath, guard, runGuard)}, nil
+		}
 		repair, repairErr := e.revertSubagentBoundaryChanges(state, beforeHead, beforeDiff, beforeRunFiles, guard, runGuard)
 		if repairErr != nil {
 			detail := guard.Detail()
@@ -64,6 +71,21 @@ func (e *Engine) revertSubagentBoundaryChanges(state State, beforeHead, beforeDi
 		repair.Reverted = append(repair.Reverted, reverted...)
 	}
 	return repair, nil
+}
+
+// subagentBoundaryAdvisories formats non-fatal helper boundary anomalies for fan-in artifacts.
+func subagentBoundaryAdvisories(member ParallelMemberConfig, attempt int, artifactPath string, guard gitSnapshotGuard, runGuard runArtifactGuard) []string {
+	var details []string
+	if guard.Blocked {
+		details = append(details, "git content changed outside ARTIFACT_DIR: "+guard.Detail())
+	}
+	if runGuard.Blocked {
+		details = append(details, "run artifact changed outside ARTIFACT_DIR: "+runGuard.Detail())
+	}
+	if len(details) == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("subagent=%s attempt=%d artifact=%s %s", member.Name, attempt, artifactPath, strings.Join(details, "; "))}
 }
 
 // revertGitBoundaryChanges restores clean-baseline source deltas and refuses ambiguous dirty paths.

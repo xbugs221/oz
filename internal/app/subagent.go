@@ -38,9 +38,13 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		return e.failNodeState(state, err)
 	}
 	artifactPath := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
-	beforeContent, err := gitChangeContentSnapshot(e.Repo)
-	if err != nil {
-		return err
+	guardMode := normalizeSubagentGuardMode(state.Workflow.SubagentGuard)
+	var beforeContent string
+	if subagentGuardStrict(guardMode) {
+		beforeContent, err = gitChangeContentSnapshot(e.Repo)
+		if err != nil {
+			return err
+		}
 	}
 	options, err := e.subagentOptions(state, stage, member)
 	if err != nil {
@@ -68,6 +72,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		Prompt:        prompt,
 		PromptContext: promptContext,
 		Options:       options,
+		GuardMode:     guardMode,
 		Context:       ctx,
 	})
 	if err != nil {
@@ -79,14 +84,16 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	if err := writeMemberArtifact(artifactPath, result); err != nil {
 		return e.failNodeState(state, err)
 	}
-	afterContent, err := gitChangeContentSnapshot(e.Repo)
-	if err != nil {
-		return err
-	}
-	if beforeContent != afterContent {
-		guard := classifyGitContentSnapshotChange(e.Repo, beforeContent, afterContent, []string{filepath.Dir(artifactPath)})
-		if guard.Blocked {
-			return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到当前 run 相关路径实际内容变化（%s），artifact=%s", guard.Detail(), artifactPath))
+	if subagentGuardStrict(guardMode) {
+		afterContent, err := gitChangeContentSnapshot(e.Repo)
+		if err != nil {
+			return err
+		}
+		if beforeContent != afterContent {
+			guard := classifyGitContentSnapshotChange(e.Repo, beforeContent, afterContent, []string{filepath.Dir(artifactPath)})
+			if guard.Blocked {
+				return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到当前 run 相关路径实际内容变化（%s），artifact=%s", guard.Detail(), artifactPath))
+			}
 		}
 	}
 	baselineHead, baselineDiff, err := gitSnapshot(e.Repo)

@@ -1,4 +1,5 @@
 parallel: true
+subagent_guard: advisory
 max_review_iterations: 5
 stages:
   planning:

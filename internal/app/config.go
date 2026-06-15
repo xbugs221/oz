@@ -33,6 +33,7 @@ type StageOptions struct {
 type WorkflowConfig struct {
 	Engine              string                  `json:"engine,omitempty" yaml:"-"`
 	MaxReviewIterations int                     `json:"max_review_iterations" yaml:"max_review_iterations"`
+	SubagentGuard       string                  `json:"subagent_guard,omitempty" yaml:"subagent_guard,omitempty"`
 	Stages              map[string]StageOptions `json:"stages" yaml:"stages"`
 	Parallel            ParallelConfig          `json:"parallel,omitempty" yaml:"parallel"`
 	Validation          ValidationConfig        `json:"validation,omitempty" yaml:"validation"`
@@ -268,6 +269,7 @@ func normalizeWorkflowConfig(config *WorkflowConfig) {
 	if config.Engine == "" {
 		config.Engine = "go-dag"
 	}
+	config.SubagentGuard = normalizeSubagentGuardMode(config.SubagentGuard)
 	normalizeValidationConfig(&config.Validation)
 	if len(config.Parallel.Groups) == 0 {
 		config.Parallel = defaultParallelConfig()

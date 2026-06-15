@@ -128,7 +128,7 @@
 - **则** 当前 run 不得中止
 - **且** 系统必须更新当前 run 的 git baseline，避免同一新增需求在后续阶段重复报错
 - **但** 当前 change、源码和配置变化仍必须中止或阻断当前 run
-- **且** subagent 仍保持只读写保护：从 subagent 会话开始到结束，仓库实际 git change 内容必须保持不变；`git stash/pop` 等中间操作、index/hash/status 抖动或引擎维护的 `state.json` 进度写入不应单独触发越界
+- **且** subagent guard 默认以 advisory 方式报告越界异常：从 subagent 会话开始到结束，仓库实际 git change 内容如发生变化，系统必须把路径和摘要写入 member artifact 交给主智能体判断，不得默认作为硬指标中断流程；`strict` 模式才允许自动撤回或阻断
 
 #### 场景：提案验收合同先行
 
@@ -289,13 +289,14 @@
 - **当** 用户在仓库根目录调用 `oz flow config`
 - **且** 仓库根目录不存在 `oz-flow.yaml` 或 `oz-flow.yml`
 - **则** 系统创建默认 `oz-flow.yaml`
-- **且** 默认配置根节点包含 `parallel`、`max_review_iterations`、`stages`、`validation` 和 `prompts`
+- **且** 默认配置根节点包含 `parallel`、`subagent_guard`、`max_review_iterations`、`stages`、`validation` 和 `prompts`
 - **且** 默认配置包含 `max_review_iterations: 5`
 - **且** 默认配置包含 `stages.planning/execution/review/qa/fix/archive`
 - **且** 每类会话配置包含 `agent` 和 `reasoning`
 - **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`qa.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
 - **且** 默认配置写入 `validation.limit`
 - **且** 默认配置写入空的 `validation.commands: []`
+- **且** 默认配置写入 `subagent_guard: advisory`
 - **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
 - **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:`、`mode:` 或默认 `model:`
 - **且** `stages.execution.before`、`stages.review.before` 和 `stages.qa.before` 包含默认子代理
@@ -445,7 +446,8 @@
 - **则** `oz flow` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE`、`ARTIFACT_DIR` 和 `ARTIFACT_PATH`
 - **且** prompt 必须要求 subagent 先读取当前 run 的 `state.json`、当前 `docs/changes/<change>` 和当前 `acceptance.json`，不得自行把其它活动提案作为当前目标
 - **且** member artifact 路径必须是 `parallel-members/<group>/<iteration>/<member-slug>.artifact/member.json`；非迭代 group 可省略 `<iteration>` 层
-- **且** subagent 必须只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact；会话结束时不得留下源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact 的实际内容变化
+- **且** subagent 应只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact；若会话结束时留下源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact 的实际内容变化，默认 `subagent_guard: advisory` 必须把异常写入该 member artifact 的 evidence/finding，并刷新 baseline 让主智能体继续判断
+- **且** `subagent_guard: strict` 必须保留硬边界行为，检测到实际内容变化时自动撤回可安全撤回的变更或阻断；`subagent_guard: off` 必须跳过该检测
 - **且** subagent 可以执行 `git stash/pop` 等临时 git 操作，但 guard 只应以会话前后实际 git change 内容是否一致作为越界依据；index/hash/status 抖动或引擎维护的 `state.json` 进度写入不得被单独判为越界
 - **且** prompt 必须提供 `oz flow validate-member-artifact --artifact "$ARTIFACT_PATH" --group <group> --member <member> --change <change-name>` 自校验命令
 - **且** 单成员 JSON 顶层只允许 `name`、`change_name`、`purpose`、`status`、`summary`、`evidence`、`findings`、`required`

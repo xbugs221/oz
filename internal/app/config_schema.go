@@ -24,6 +24,7 @@ type woConfig struct {
 type workflowConfigInput struct {
 	Engine              string                       `yaml:"engine"`
 	MaxReviewIterations *int                         `yaml:"max_review_iterations"`
+	SubagentGuard       subagentGuardModeInput       `yaml:"subagent_guard"`
 	Defaults            stageOptionsInput            `yaml:"defaults"`
 	Stages              map[string]stageOptionsInput `yaml:"stages"`
 	Iterations          map[string]stageOptionsInput `yaml:"iterations"`
@@ -36,6 +37,56 @@ type workflowConfigInput struct {
 type parallelConfigInput struct {
 	Enabled *bool                               `yaml:"enabled"`
 	Groups  map[string]parallelGroupConfigInput `yaml:"groups"`
+}
+
+const (
+	subagentGuardModeAdvisory = "advisory"
+	subagentGuardModeStrict   = "strict"
+	subagentGuardModeOff      = "off"
+)
+
+type subagentGuardModeInput struct {
+	Set  bool
+	Mode string
+}
+
+// UnmarshalYAML accepts `subagent_guard: advisory|strict|off` plus bool shorthand.
+func (input *subagentGuardModeInput) UnmarshalYAML(value *yaml.Node) error {
+	input.Set = true
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("subagent_guard 必须是 advisory、strict、off 或 true/false")
+	}
+	mode := strings.ToLower(strings.TrimSpace(value.Value))
+	switch mode {
+	case "true", "on", "enabled", subagentGuardModeAdvisory:
+		input.Mode = subagentGuardModeAdvisory
+	case subagentGuardModeStrict:
+		input.Mode = subagentGuardModeStrict
+	case "false", "disabled", subagentGuardModeOff:
+		input.Mode = subagentGuardModeOff
+	default:
+		return fmt.Errorf("subagent_guard 无效：%q", value.Value)
+	}
+	return nil
+}
+
+func normalizeSubagentGuardMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case subagentGuardModeStrict:
+		return subagentGuardModeStrict
+	case subagentGuardModeOff:
+		return subagentGuardModeOff
+	default:
+		return subagentGuardModeAdvisory
+	}
+}
+
+func subagentGuardEnabled(mode string) bool {
+	return normalizeSubagentGuardMode(mode) != subagentGuardModeOff
+}
+
+func subagentGuardStrict(mode string) bool {
+	return normalizeSubagentGuardMode(mode) == subagentGuardModeStrict
 }
 
 // UnmarshalYAML accepts the KISS `parallel: true|false` scalar config shape.
@@ -98,7 +149,7 @@ func (input stageOptionsInput) hasValues() bool {
 
 // hasValues reports whether the workflow input contains any user field.
 func (input workflowConfigInput) hasValues() bool {
-	return input.Engine != "" || input.MaxReviewIterations != nil || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
+	return input.Engine != "" || input.MaxReviewIterations != nil || input.SubagentGuard.Set || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
 }
 
 func hasLegacyWorkflowRoot(data []byte) (bool, error) {
@@ -149,6 +200,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	}
 	maxIterations := defaultMaxReviewIterations
 	engine := "go-dag"
+	subagentGuard := subagentGuardModeAdvisory
 	var basePrompts map[string]string
 	byKind := defaultStageOptionsByKind()
 	validation := ValidationConfig{MaxAttemptsPerStage: 3}
@@ -156,6 +208,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if baseConfig != nil {
 		engine = baseConfig.Engine
 		maxIterations = baseConfig.MaxReviewIterations
+		subagentGuard = normalizeSubagentGuardMode(baseConfig.SubagentGuard)
 		basePrompts = clonePrompts(baseConfig.Prompts)
 		validation = baseConfig.Validation
 		parallel = cloneParallelConfig(baseConfig.Parallel)
@@ -187,6 +240,9 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if strings.TrimSpace(input.Engine) != "" {
 		return WorkflowConfig{}, fmt.Errorf("engine 是旧字段，已删除")
 	}
+	if input.SubagentGuard.Set {
+		subagentGuard = input.SubagentGuard.Mode
+	}
 	for _, kind := range stageKinds {
 		base := byKind[kind]
 		if err := mergeStageOptions(&base, input.Defaults); err != nil {
@@ -206,7 +262,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		byKind[kind] = base
 	}
-	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
+	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, SubagentGuard: subagentGuard, Stages: map[string]StageOptions{
 		"planning":  byKind["planning"],
 		"execution": byKind["execution"],
 		"archive":   byKind["archive"],

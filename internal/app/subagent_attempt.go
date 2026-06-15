@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -39,6 +40,7 @@ type subagentAttemptsRequest struct {
 	Prompt        string
 	PromptContext subagentContext
 	Options       StageOptions
+	GuardMode     string
 	Context       context.Context
 }
 
@@ -67,17 +69,22 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 				return subagentAttemptsResult{}, e.failNodeState(request.State, err)
 			}
 		}
-		attemptHead, attemptDiff, err := gitSnapshot(e.Repo)
-		if err != nil {
-			return subagentAttemptsResult{}, err
-		}
-		attemptContent, err := gitChangeContentSnapshot(e.Repo)
-		if err != nil {
-			return subagentAttemptsResult{}, err
-		}
-		attemptRunFiles, err := runArtifactFileSnapshot(runDir(e.Repo, request.State.RunID))
-		if err != nil {
-			return subagentAttemptsResult{}, e.failNodeState(request.State, err)
+		var attemptHead, attemptDiff, attemptContent string
+		var attemptRunFiles map[string]string
+		if subagentGuardEnabled(request.GuardMode) {
+			var err error
+			attemptHead, attemptDiff, err = gitSnapshot(e.Repo)
+			if err != nil {
+				return subagentAttemptsResult{}, err
+			}
+			attemptContent, err = gitChangeContentSnapshot(e.Repo)
+			if err != nil {
+				return subagentAttemptsResult{}, err
+			}
+			attemptRunFiles, err = runArtifactFileSnapshot(runDir(e.Repo, request.State.RunID))
+			if err != nil {
+				return subagentAttemptsResult{}, e.failNodeState(request.State, err)
+			}
 		}
 		attemptResult := e.runSubagentAttempt(subagentAttemptRequest{
 			Tool:           request.Tool,
@@ -95,8 +102,9 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			AttemptContext: request.Context,
 		})
 		sessionID = attemptResult.SessionID
-		attemptRepair, boundaryErr := e.checkSubagentReadOnlyBoundary(request.State, request.Member, attempt, request.ArtifactPath, attemptHead, attemptDiff, attemptContent, attemptRunFiles)
+		attemptRepair, boundaryErr := e.checkSubagentReadOnlyBoundary(request.State, request.Member, attempt, request.ArtifactPath, request.GuardMode, attemptHead, attemptDiff, attemptContent, attemptRunFiles)
 		boundaryRepair.Reverted = append(boundaryRepair.Reverted, attemptRepair.Reverted...)
+		boundaryRepair.Advisory = append(boundaryRepair.Advisory, attemptRepair.Advisory...)
 		if boundaryErr != nil {
 			return subagentAttemptsResult{}, boundaryErr
 		}
@@ -166,10 +174,23 @@ func subagentAttemptContext(parent context.Context) (context.Context, context.Ca
 	return context.WithTimeout(parent, subagentAttemptTimeout)
 }
 
-// resultWithBoundaryRepairEvidence records reverted yolo-helper writes for the main agent.
+// resultWithBoundaryRepairEvidence records boundary events for the main agent.
 func resultWithBoundaryRepairEvidence(result ParallelMemberResult, repair subagentBoundaryRepair) ParallelMemberResult {
 	for _, path := range uniqueSortedPaths(repair.Reverted) {
 		result.Evidence = append(result.Evidence, "boundary reverted: "+path)
+	}
+	advisories := uniqueSortedPaths(repair.Advisory)
+	for _, advisory := range advisories {
+		result.Evidence = append(result.Evidence, "boundary advisory: "+advisory)
+	}
+	if len(advisories) > 0 {
+		result.Findings = append(result.Findings, Finding{
+			Title:          "Subagent boundary advisory",
+			Severity:       "minor",
+			Scope:          findingScopeCurrentChange,
+			Evidence:       strings.Join(advisories, " | "),
+			Recommendation: "主智能体判断这些 subagent 变更是否符合当前提案；如不符合，回滚或修正相关文件。",
+		})
 	}
 	return result
 }

@@ -14,6 +14,7 @@ func TestDefaultWorkflowConfigYAMLIncludesTreeParallelHelpers(t *testing.T) {
 
 	required := []string{
 		"parallel: true",
+		"subagent_guard: advisory",
 		"stages:",
 		"before:",
 		"execution:",
@@ -46,6 +47,34 @@ func TestDefaultWorkflowConfigYAMLIncludesTreeParallelHelpers(t *testing.T) {
 		if strings.Contains(yaml, "name: "+name) {
 			t.Fatalf("DefaultWorkflowConfigYAML exposes mythological agent name %q as a primary user-visible member name", name)
 		}
+	}
+}
+
+func TestSubagentGuardConfigModes(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "default", body: "parallel: true\n", want: subagentGuardModeAdvisory},
+		{name: "advisory", body: "parallel: true\nsubagent_guard: advisory\n", want: subagentGuardModeAdvisory},
+		{name: "strict", body: "parallel: true\nsubagent_guard: strict\n", want: subagentGuardModeStrict},
+		{name: "off", body: "parallel: true\nsubagent_guard: off\n", want: subagentGuardModeOff},
+		{name: "false", body: "parallel: true\nsubagent_guard: false\n", want: subagentGuardModeOff},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			workflow, err := workflowConfigFromYAML([]byte(tt.body), tt.name+".yaml", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if workflow.SubagentGuard != tt.want {
+				t.Fatalf("subagent guard = %q, want %q", workflow.SubagentGuard, tt.want)
+			}
+		})
+	}
+	if _, err := workflowConfigFromYAML([]byte("parallel: true\nsubagent_guard: maybe\n"), "bad.yaml", nil); err == nil {
+		t.Fatal("invalid subagent_guard should fail")
 	}
 }
 
