@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -69,13 +70,19 @@ func validateChange(root, change string) validationResult {
 	} else if entries, err := os.ReadDir(testsDir); err != nil {
 		result.Errors = append(result.Errors, "无法读取 tests："+err.Error())
 	} else {
-		if len(entries) == 0 {
-			result.Errors = append(result.Errors, "tests 必须包含至少一个测试文件")
-		}
+		visibleEntries := 0
 		for _, entry := range entries {
+			path := filepath.Join(testsDir, entry.Name())
+			if isGitIgnored(filepath.Dir(root), path) {
+				continue
+			}
+			visibleEntries++
 			if entry.IsDir() || !looksLikeTestCode(entry.Name()) {
 				result.Errors = append(result.Errors, "tests 包含非测试代码："+entry.Name())
 			}
+		}
+		if visibleEntries == 0 {
+			result.Errors = append(result.Errors, "tests 必须包含至少一个测试文件")
 		}
 	}
 	if data, err := os.ReadFile(filepath.Join(changeDir, "spec.md")); err == nil {
@@ -94,6 +101,16 @@ func validateChange(root, change string) validationResult {
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0
 	return result
+}
+
+func isGitIgnored(projectRoot, path string) bool {
+	// isGitIgnored asks git whether a generated test artifact should be invisible to validation.
+	rel, err := filepath.Rel(projectRoot, path)
+	if err != nil || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return false
+	}
+	cmd := exec.Command("git", "-C", projectRoot, "check-ignore", "--quiet", "--", filepath.ToSlash(rel))
+	return cmd.Run() == nil
 }
 
 func validateAcceptanceFiles(root string, contract acceptance.Contract) []string {

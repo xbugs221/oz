@@ -574,6 +574,30 @@ func TestValidateRejectsTestResultsGitignoreException(t *testing.T) {
 	}
 }
 
+func TestValidateIgnoresGitignoredTestCache(t *testing.T) {
+	// TestValidateIgnoresGitignoredTestCache keeps generated cache directories out of tests/ validation.
+	project := newProject(t)
+	if err := exec.Command("git", "-C", project, "init").Run(); err != nil {
+		t.Fatal(err)
+	}
+	change := "2-重写-oz-go-cli"
+	writeValidChange(t, project, change)
+	if err := os.WriteFile(filepath.Join(project, ".gitignore"), []byte("__pycache__/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := filepath.Join(project, "docs", "changes", change, "tests", "__pycache__")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "test_contract.cpython-312.pyc"), []byte("cache"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLI(t, project, "validate", change, "--json")
+	if result.code != 0 {
+		t.Fatalf("validate should ignore gitignored test cache:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+}
+
 func TestValidateReportsUnreadableTestsDirectory(t *testing.T) {
 	// TestValidateReportsUnreadableTestsDirectory keeps JSON validation reliable for scripts.
 	if os.Getuid() == 0 {
