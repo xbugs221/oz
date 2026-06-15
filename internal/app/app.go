@@ -24,6 +24,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return nil
 		case "validate-review":
 			return runValidateReviewArtifact(args[1:], stdout)
+		case "validate-qa":
+			return runValidateQAArtifact(args[1:], stdout)
 		case "validate-member-artifact":
 			return runValidateMemberArtifact(args[1:], stdout)
 		case "update":
@@ -116,7 +118,7 @@ func commandNeedsWorkflowTools(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "--help", "-h", "--version", "config", "init", "install", "contract", "validate-review", "list-changes", "status", "update", "abort", "watch", "clean", "graph", "--list-changes":
+	case "--help", "-h", "--version", "config", "init", "install", "contract", "validate-review", "validate-qa", "list-changes", "status", "update", "abort", "watch", "clean", "graph", "--list-changes":
 		return false
 	default:
 		return true
@@ -402,6 +404,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  oz flow --run <change-name>")
 	fmt.Fprintln(stdout, "  oz flow --resume")
 	fmt.Fprintln(stdout, "  oz flow validate-review --artifact <artifact-path> [--json]")
+	fmt.Fprintln(stdout, "  oz flow validate-qa --artifact <artifact-path> --acceptance <acceptance-path> [--json]")
 	fmt.Fprintln(stdout, "  oz flow --version")
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "人类交互命令：")
@@ -420,6 +423,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Runner JSON 命令：")
 	fmt.Fprintln(stdout, "  oz flow validate-review --artifact <artifact-path> [--json]")
+	fmt.Fprintln(stdout, "  oz flow validate-qa --artifact <artifact-path> --acceptance <acceptance-path> [--json]")
 	fmt.Fprintln(stdout, "  oz flow contract --json")
 	fmt.Fprintln(stdout, "  oz flow list-changes --json")
 	fmt.Fprintln(stdout, "  oz flow run --change <change-name> --json")

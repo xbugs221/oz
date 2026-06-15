@@ -39,6 +39,8 @@ Fix summary: `{{.LatestPreviousFixSummaryPath}}`
 {{.ReviewPath}}
 ```
 
+写入后运行：`oz flow validate-review --artifact "{{.ReviewPath}}" --json`
+
 {{if .IsFirstRoleTurn}}
 严格 JSON：只写一个 JSON object，字段规则：
 

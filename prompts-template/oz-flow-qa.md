@@ -31,6 +31,8 @@
 {{.QAPath}}
 ```
 
+写入后运行：`oz flow validate-qa --artifact "{{.QAPath}}" --acceptance "{{.AcceptancePath}}" --json`
+
 {{if .IsFirstRoleTurn}}
 只写一个 JSON object，字段规则：
 
