@@ -3,13 +3,20 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type stageArtifactExpectation struct {
 	Path        string
 	Description string
+}
+
+type stageArtifactResult struct {
+	Review Review
+	QA     QA
 }
 
 // stageArtifactExpectation describes the durable output that proves one stage completed.
@@ -25,19 +32,19 @@ func (e *Engine) stageArtifactExpectation(state State) stageArtifactExpectation 
 		n := strings.TrimPrefix(state.Stage, "review_")
 		return stageArtifactExpectation{
 			Path:        filepath.Join(base, "review-"+n+".json"),
-			Description: "review JSON schema、parallel gate 和 review 合同",
+			Description: "review JSON schema 和 review decision 合同",
 		}
 	case strings.HasPrefix(state.Stage, "fix_"):
 		n := strings.TrimPrefix(state.Stage, "fix_")
 		return stageArtifactExpectation{
 			Path:        filepath.Join(base, "fix-"+n+"-summary.md"),
-			Description: "非空 fix summary",
+			Description: "fix 阶段进度记录",
 		}
 	case strings.HasPrefix(state.Stage, "qa_"):
 		n := strings.TrimPrefix(state.Stage, "qa_")
 		return stageArtifactExpectation{
 			Path:        filepath.Join(base, "qa-"+n+".json"),
-			Description: "QA JSON schema、acceptance matrix 和 parallel gate",
+			Description: "QA JSON schema、acceptance matrix 和 QA helper 输入检查",
 		}
 	case state.Stage == "archive":
 		return stageArtifactExpectation{
@@ -49,9 +56,76 @@ func (e *Engine) stageArtifactExpectation(state State) stageArtifactExpectation 
 	}
 }
 
+// validateStageArtifact performs the single durable-output check for the active stage.
+func (e *Engine) validateStageArtifact(state State) (stageArtifactResult, bool, error) {
+	base := runDir(e.Repo, state.RunID)
+	switch {
+	case state.Stage == "execution":
+		done, err := ChangeTasksDone(e.Repo, state.ChangeName)
+		return stageArtifactResult{}, done, err
+	case strings.HasPrefix(state.Stage, "review_"):
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		review, err := ReadReview(filepath.Join(base, "review-"+strconv.Itoa(iteration)+".json"))
+		if os.IsNotExist(err) {
+			return stageArtifactResult{}, false, nil
+		}
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{Review: review}, true, nil
+	case strings.HasPrefix(state.Stage, "fix_"):
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{}, fileExists(filepath.Join(base, "fix-"+strconv.Itoa(iteration)+"-summary.md")), nil
+	case strings.HasPrefix(state.Stage, "qa_"):
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		qa, err := ReadQA(filepath.Join(base, "qa-"+strconv.Itoa(iteration)+".json"))
+		if os.IsNotExist(err) {
+			return stageArtifactResult{}, false, nil
+		}
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		acceptance, err := readAcceptanceForState(e.Repo, state)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		if err := ValidateQAAgainstAcceptance(qa, acceptance); err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		if err := ValidateParallelQAGate(base, state.Workflow, iteration, qa); err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{QA: qa}, true, nil
+	case state.Stage == "archive":
+		if !fileExists(filepath.Join(base, "delivery-summary.md")) || !archiveExists(e.Repo, state.ChangeName) {
+			return stageArtifactResult{}, false, nil
+		}
+		if err := e.validateArchiveReadiness(state); err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{}, true, nil
+	}
+	return stageArtifactResult{}, false, fmt.Errorf("未知阶段 %q", state.Stage)
+}
+
+// artifactDone reports whether the current stage already has a valid durable output.
+func (e *Engine) artifactDone(state State) (bool, error) {
+	_, done, err := e.validateStageArtifact(state)
+	return done, err
+}
+
 // checkStageArtifactGate converts missing or invalid stage output into a same-stage retry error.
 func (e *Engine) checkStageArtifactGate(state State) (bool, error) {
-	done, err := e.artifactDone(state)
+	_, done, err := e.validateStageArtifact(state)
 	if err != nil {
 		return false, e.stageArtifactGateError(state, err)
 	}

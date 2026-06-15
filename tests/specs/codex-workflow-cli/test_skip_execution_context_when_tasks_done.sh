@@ -210,7 +210,7 @@ SUBAGENT_MARKER="$subagent_marker" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "$3" --json' _ "$project" "$wo" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
+  bash -c 'cd "$1" && "$2" flow run --change "$3" --json' _ "$project" "$wo" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
     fail "已完成 task 场景不应因为 execution context subagent 被调用而失败"
   }

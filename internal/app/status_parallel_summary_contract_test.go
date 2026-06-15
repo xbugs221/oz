@@ -87,57 +87,6 @@ func TestHumanStatusHidesParallelFanInSummary(t *testing.T) {
 	}
 }
 
-// TestParallelReviewGateAllowsMissingOrInvalidArtifact 验证 helper artifact 交付问题不覆盖主审核决策。
-func TestParallelReviewGateAllowsMissingOrInvalidArtifact(t *testing.T) {
-	repo := gitRepo(t)
-	workflow := statusParallelWorkflowForTest()
-	runPath := runDir(repo, "parallel-status-missing")
-	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err != nil {
-		t.Fatalf("missing helper artifact must not block clean review: %v", err)
-	}
-
-	artifactPath := filepath.Join(runPath, "parallel-review-1.json")
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(artifactPath, []byte("{not-json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err != nil {
-		t.Fatalf("invalid helper artifact must not block clean review: %v", err)
-	}
-}
-
-// TestParallelReviewGateAllowsUnconfiguredParallelMembers 验证未配置 helper 噪声不覆盖主审核决策。
-func TestParallelReviewGateAllowsUnconfiguredParallelMembers(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		status string
-	}{
-		{name: "extra-success", status: "success"},
-		{name: "extra-failed", status: "failed"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := gitRepo(t)
-			workflow := statusParallelWorkflowForTest()
-			runPath := runDir(repo, "parallel-status-unconfigured-"+tc.name)
-			statusWriteParallelArtifact(t, filepath.Join(runPath, "parallel-review-1.json"), ParallelArtifact{
-				Group:   "review",
-				Mode:    "gate_input",
-				Summary: "review helpers completed",
-				Members: []ParallelMemberResult{
-					{Name: "目标核对审核员", Purpose: "核对目标", Status: "success", Summary: "target matches"},
-					{Name: "安全风险审核员", Purpose: "检查风险", Status: "success", Summary: "no risk found"},
-					{Name: "未配置审核员", Purpose: "should not be visible", Status: tc.status, Summary: "poisoned member"},
-				},
-			})
-			if err := ValidateParallelReviewGate(runPath, workflow, 1, cleanReviewForParallelStatusTest()); err != nil {
-				t.Fatalf("unconfigured helper member must not block clean review: %v", err)
-			}
-		})
-	}
-}
-
 // TestBatchHumanStatusHidesParallelSummaryUnderChange 验证 batch status 保持 change 层级且不展示 fan-in 摘要。
 func TestBatchHumanStatusHidesParallelSummaryUnderChange(t *testing.T) {
 	repo := gitRepo(t)
@@ -221,26 +170,6 @@ func statusWriteParallelArtifact(t *testing.T, path string, artifact ParallelArt
 	t.Helper()
 	if err := writeJSONFile(path, artifact); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// cleanReviewForParallelStatusTest 构造 clean review，专门触发 parallel gate 对 fan-in artifact 的校验。
-func cleanReviewForParallelStatusTest() Review {
-	return Review{
-		Summary:  "review clean",
-		Decision: "clean",
-		Checks: ReviewChecks{
-			OzAligned:                true,
-			TasksVerified:            true,
-			TestsMeaningful:          true,
-			ImplementationScoped:     true,
-			RuntimeBehaviorVerified:  true,
-			PreviousFindingsResolved: true,
-		},
-		Evidence: []string{
-			"validation artifact passed: validation-review-1.json",
-			"runtime evidence: QA trace test-results/status-parallel.json",
-		},
 	}
 }
 

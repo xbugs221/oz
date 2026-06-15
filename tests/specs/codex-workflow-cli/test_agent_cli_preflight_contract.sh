@@ -114,7 +114,7 @@ ln -s "$OZ" "$FAKEBIN/oz"
 set +e
 (
   cd "$PROJECT"
-  HOME="$TMP/home-missing-pi" XDG_STATE_HOME="$TMP/state-missing-pi" PATH="$FAKEBIN" "$WO" run --change "$CHANGE" --json
+  HOME="$TMP/home-missing-pi" XDG_STATE_HOME="$TMP/state-missing-pi" PATH="$FAKEBIN" "$WO" flow run --change "$CHANGE" --json
 ) >"$TMP/missing-pi.out" 2>"$TMP/missing-pi.err"
 code=$?
 set -e
@@ -142,7 +142,7 @@ ln -s "$OZ" "$FAKEBIN/oz"
 set +e
 (
   cd "$PROJECT"
-  HOME="$TMP/home-missing-agy" XDG_STATE_HOME="$TMP/state-missing-agy" PATH="$FAKEBIN" "$WO" run --change "$CHANGE" --json
+  HOME="$TMP/home-missing-agy" XDG_STATE_HOME="$TMP/state-missing-agy" PATH="$FAKEBIN" "$WO" flow run --change "$CHANGE" --json
 ) >"$TMP/missing-agy.out" 2>"$TMP/missing-agy.err"
 code=$?
 set -e
@@ -170,7 +170,7 @@ ln -s "$OZ" "$FAKEBIN/oz"
 set +e
 (
   cd "$PROJECT"
-  HOME="$TMP/home-missing-codex" XDG_STATE_HOME="$TMP/state-missing-codex" PATH="$FAKEBIN" "$WO" run --change "$CHANGE" --json
+  HOME="$TMP/home-missing-codex" XDG_STATE_HOME="$TMP/state-missing-codex" PATH="$FAKEBIN" "$WO" flow run --change "$CHANGE" --json
 ) >"$TMP/missing-codex.out" 2>"$TMP/missing-codex.err"
 code=$?
 set -e
@@ -184,15 +184,18 @@ printf 'missing codex: no run state created\n' >>"$STATE_SNAPSHOT"
 note "第三后端配置必须按未知工具失败"
 legacy_tool="open""code"
 cat >"$PROJECT/oz-flow.yaml" <<YAML
-wo:
-  workflow:
-    defaults:
-      tool: ${legacy_tool}
+max_review_iterations: 0
+parallel: false
+stages:
+  execution:
+    agent: ${legacy_tool}
+  archive:
+    agent: codex
 YAML
 set +e
 (
   cd "$PROJECT"
-  HOME="$TMP/home-invalid-tool" XDG_STATE_HOME="$TMP/state-invalid-tool" PATH="$TMP/bin-missing-pi" "$WO" run --change "$CHANGE" --json
+  HOME="$TMP/home-invalid-tool" XDG_STATE_HOME="$TMP/state-invalid-tool" PATH="$TMP/bin-missing-pi" "$WO" flow run --change "$CHANGE" --json
 ) >"$TMP/invalid-tool.out" 2>"$TMP/invalid-tool.err"
 code=$?
 set -e

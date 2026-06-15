@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sources: 12-收窄验收gate到提案范围
-# 文件功能目的：验证 parallel review gate 由主审核归一化决定，原始子代理 finding 不能直接制造修复轮。
+# 文件功能目的：验证 parallel review artifact 只作为主审核输入，原始子代理 finding 不能直接制造修复轮。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -23,9 +23,9 @@ note() {
 
 cd "$repo_root"
 
-note "写入 internal/app 包级合同测试，覆盖真实 ValidateParallelReviewGate"
+note "写入 internal/app 包级合同测试，覆盖真实 parallel review artifact 合同"
 cat >"$test_file" <<'GO'
-// Package app validates scoped parallel gate behavior.
+// Package app validates scoped parallel review artifact behavior.
 package app
 
 import (
@@ -35,10 +35,10 @@ import (
 	"testing"
 )
 
-// TestParallelReviewGateAllowsOutOfScopeExistingSevereFinding keeps historical debt non-blocking.
-func TestParallelReviewGateAllowsOutOfScopeExistingSevereFinding(t *testing.T) {
+// TestParallelReviewArtifactAcceptsOutOfScopeExistingSevereFinding keeps historical debt as reviewer input.
+func TestParallelReviewArtifactAcceptsOutOfScopeExistingSevereFinding(t *testing.T) {
 	runPath := t.TempDir()
-	writeParallelReviewArtifact(t, runPath, `{
+	path := writeParallelReviewArtifact(t, runPath, `{
       "title": "历史状态文件缺少旧字段迁移说明",
       "severity": "major",
       "scope": "out_of_scope_existing",
@@ -46,15 +46,15 @@ func TestParallelReviewGateAllowsOutOfScopeExistingSevereFinding(t *testing.T) {
       "recommendation": "track as a separate documentation debt change"
     }`)
 
-	if err := ValidateParallelReviewGate(runPath, DefaultWorkflowConfig(), 1, cleanReviewForScopeGate()); err != nil {
-		t.Fatalf("out-of-scope existing severe finding must not block clean review: %v", err)
+	if _, err := ReadParallelArtifact(path); err != nil {
+		t.Fatalf("out-of-scope existing severe finding must remain readable reviewer input: %v", err)
 	}
 }
 
-// TestParallelReviewGateLetsMainReviewerNormalizeCurrentChangeFinding keeps raw helper findings advisory.
-func TestParallelReviewGateLetsMainReviewerNormalizeCurrentChangeFinding(t *testing.T) {
+// TestParallelReviewArtifactAcceptsCurrentChangeFindingAsInput keeps raw helper findings advisory.
+func TestParallelReviewArtifactAcceptsCurrentChangeFindingAsInput(t *testing.T) {
 	runPath := t.TempDir()
-	writeParallelReviewArtifact(t, runPath, `{
+	path := writeParallelReviewArtifact(t, runPath, `{
       "title": "当前 diff 未满足 acceptance 合同",
       "severity": "major",
       "scope": "current_change",
@@ -62,22 +62,22 @@ func TestParallelReviewGateLetsMainReviewerNormalizeCurrentChangeFinding(t *test
       "recommendation": "fix the current implementation before review clean"
     }`)
 
-	if err := ValidateParallelReviewGate(runPath, DefaultWorkflowConfig(), 1, cleanReviewForScopeGate()); err != nil {
-		t.Fatalf("raw parallel review finding must not override the main review decision: %v", err)
+	if _, err := ReadParallelArtifact(path); err != nil {
+		t.Fatalf("raw parallel review finding must remain readable reviewer input: %v", err)
 	}
 }
 
-// TestParallelReviewGateAllowsLegacyMissingScopeAsReviewerInput preserves legacy parsing without raw blocking.
-func TestParallelReviewGateAllowsLegacyMissingScopeAsReviewerInput(t *testing.T) {
+// TestParallelReviewArtifactAcceptsLegacyMissingScopeAsReviewerInput preserves legacy parsing.
+func TestParallelReviewArtifactAcceptsLegacyMissingScopeAsReviewerInput(t *testing.T) {
 	runPath := t.TempDir()
-	writeParallelReviewArtifact(t, runPath, `{
+	path := writeParallelReviewArtifact(t, runPath, `{
       "title": "旧格式 major finding",
       "severity": "major",
       "evidence": "legacy parallel artifact has no scope field",
       "recommendation": "treat missing scope as current_change for backward compatibility"
     }`)
 
-	if err := ValidateParallelReviewGate(runPath, DefaultWorkflowConfig(), 1, cleanReviewForScopeGate()); err != nil {
+	if _, err := ReadParallelArtifact(path); err != nil {
 		t.Fatalf("legacy missing scope remains parse-compatible reviewer input: %v", err)
 	}
 }
@@ -111,8 +111,9 @@ func TestParallelArtifactRejectsNoActionBlockingFinding(t *testing.T) {
 }
 
 // writeParallelReviewArtifact writes a complete configured parallel-review artifact.
-func writeParallelReviewArtifact(t *testing.T, runPath string, findingJSON string) {
+func writeParallelReviewArtifact(t *testing.T, runPath string, findingJSON string) string {
 	t.Helper()
+	path := filepath.Join(runPath, "parallel-review-1.json")
 	body := `{
   "group": "review",
   "mode": "gate_input",
@@ -125,34 +126,14 @@ func writeParallelReviewArtifact(t *testing.T, runPath string, findingJSON strin
     {"name":"上下文一致性审核员","purpose":"检查是否违背现有架构约定","status":"success","summary":"context checked"}
   ]
 }`
-	if err := os.WriteFile(filepath.Join(runPath, "parallel-review-1.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// cleanReviewForScopeGate returns a review artifact that is otherwise ready to pass.
-func cleanReviewForScopeGate() Review {
-	return Review{
-		Summary:  "当前提案合同已满足",
-		Decision: "clean",
-		Checks: ReviewChecks{
-			OzAligned:                true,
-			TasksVerified:            true,
-			TestsMeaningful:          true,
-			ImplementationScoped:     true,
-			RuntimeBehaviorVerified:  true,
-			PreviousFindingsResolved: true,
-		},
-		Evidence: []string{
-			"validation artifact passed: test-results/12-scope-gate/validation-review.json",
-			"runtime evidence: QA trace test-results/12-scope-gate/parallel-scope.zip",
-		},
-		Findings: []Finding{},
-	}
+	return path
 }
 GO
 
-note "运行 Go 合同测试；当前实现必须允许主审核归一化 parallel review 输入，并拒绝无操作 blocker"
-go test ./internal/app -run 'TestParallelReviewGateAllowsOutOfScopeExistingSevereFinding|TestParallelReviewGateLetsMainReviewerNormalizeCurrentChangeFinding|TestParallelReviewGateAllowsLegacyMissingScopeAsReviewerInput|TestParallelArtifactRejectsNoActionBlockingFinding' -count=1 2>&1 | tee -a "$log"
+note "运行 Go 合同测试；当前实现必须保留 parallel review 输入，并拒绝无操作 blocker"
+go test ./internal/app -run 'TestParallelReviewArtifactAcceptsOutOfScopeExistingSevereFinding|TestParallelReviewArtifactAcceptsCurrentChangeFindingAsInput|TestParallelReviewArtifactAcceptsLegacyMissingScopeAsReviewerInput|TestParallelArtifactRejectsNoActionBlockingFinding' -count=1 2>&1 | tee -a "$log"
 
 note "PASS"

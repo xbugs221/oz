@@ -60,7 +60,7 @@ fi
 note "default graph contains implementation subagent nodes without duplicated planning helpers"
 (
   cd "$PROJECT"
-  "$WO_BIN" graph --change demo --format json
+  "$WO_BIN" flow graph --change demo --format json
 ) >"$RESULT_DIR/graph.json" 2>"$RESULT_DIR/graph.err"
 grep -q 'implementation_context' "$RESULT_DIR/graph.json" || fail "graph should include implementation_context nodes"
 grep -q '代码库侦察员' "$RESULT_DIR/graph.json" || fail "graph should include the code exploration subagent"

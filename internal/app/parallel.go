@@ -129,11 +129,6 @@ func ValidateParallelArtifact(artifact ParallelArtifact) error {
 	return nil
 }
 
-// ValidateParallelReviewGate leaves the hard review decision to the main reviewer.
-func ValidateParallelReviewGate(runPath string, workflow WorkflowConfig, iteration int, review Review) error {
-	return nil
-}
-
 // ValidateParallelQAGate blocks clean QA only when available helper output reports hard current-change findings.
 func ValidateParallelQAGate(runPath string, workflow WorkflowConfig, iteration int, qa QA) error {
 	artifact, ok, err := readEnabledParallelArtifact(runPath, workflow, "qa", iteration)
@@ -144,46 +139,6 @@ func ValidateParallelQAGate(runPath string, workflow WorkflowConfig, iteration i
 		return fmt.Errorf("clean qa 不得忽略 parallel-qa-%d.json 中的 gate_input finding", iteration)
 	}
 	return nil
-}
-
-// ValidateParallelContextGate leaves execution gating to the main stage and deterministic validation.
-func ValidateParallelContextGate(runPath string, workflow WorkflowConfig) error {
-	return nil
-}
-
-// validateExecutionParallelContextGate preserves required helper gates unless completed tasks skipped execution helpers.
-func (e *Engine) validateExecutionParallelContextGate(state State) error {
-	workflow := state.Workflow
-	if e.executionImplementationContextWasSkipped(state) {
-		groups := map[string]ParallelGroupConfig{}
-		for name, group := range workflow.Parallel.Groups {
-			groups[name] = group
-		}
-		workflow.Parallel.Groups = groups
-		delete(workflow.Parallel.Groups, "implementation_context")
-	}
-	return ValidateParallelContextGate(runDir(e.Repo, state.RunID), workflow)
-}
-
-// executionImplementationContextWasSkipped reports the go-dag path where already-done tasks skipped advisory helpers.
-func (e *Engine) executionImplementationContextWasSkipped(state State) bool {
-	if state.Engine != "go-dag" && state.Workflow.Engine != "go-dag" {
-		return false
-	}
-	if len(state.DAGNodes) == 0 {
-		return false
-	}
-	if state.Stage != "execution" || !state.Workflow.Parallel.Enabled {
-		return false
-	}
-	if _, ok := state.Workflow.Parallel.Groups["implementation_context"]; !ok {
-		return false
-	}
-	if fileExists(parallelArtifactPath(runDir(e.Repo, state.RunID), "implementation_context", 0)) {
-		return false
-	}
-	done, err := ChangeTasksDone(e.Repo, state.ChangeName)
-	return err == nil && done
 }
 
 func readEnabledParallelArtifact(runPath string, workflow WorkflowConfig, group string, iteration int) (ParallelArtifact, bool, error) {

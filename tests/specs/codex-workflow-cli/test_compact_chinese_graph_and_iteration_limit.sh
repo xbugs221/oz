@@ -54,7 +54,7 @@ grep -q 'engine: go-dag' "$PROJECT/oz-flow.yaml" || fail "default engine should 
 note "render mermaid graph and verify it is compact"
 (
   cd "$PROJECT"
-  "$WO_BIN" graph --change demo --format mermaid
+  "$WO_BIN" flow graph --change demo --format mermaid
 ) >"$RESULT_DIR/graph.mmd" 2>"$RESULT_DIR/graph.err"
 grep -q 'flowchart TD' "$RESULT_DIR/graph.mmd" || fail "mermaid graph should render a flowchart"
 

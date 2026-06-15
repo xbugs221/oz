@@ -105,18 +105,6 @@ func (e stageArtifactGateError) Unwrap() error {
 	return e.Cause
 }
 
-// newStageArtifactGateError marks current-stage artifact failures as retriable.
-func newStageArtifactGateError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var gateErr stageArtifactGateError
-	if errors.As(err, &gateErr) {
-		return err
-	}
-	return stageArtifactGateError{Reason: err.Error(), Cause: err}
-}
-
 // isStageArtifactGateError reports whether a stage may rerun to rewrite its artifact.
 func isStageArtifactGateError(err error) bool {
 	var gateErr stageArtifactGateError
@@ -252,7 +240,7 @@ func validationFailurePrompt(repo string, state State) string {
 		"- Artifact: `" + current.LastArtifact + "`\n"
 	if current.Kind == validationKindArtifact {
 		body = "\n\n# Stage artifact gate failed\n\n" +
-			"The previous attempt for this same stage wrote an artifact that failed wo's deterministic schema or contract gate. " +
+			"The previous attempt for this same stage wrote an artifact that failed the deterministic artifact contract gate. " +
 			"Read the artifact below and rewrite the required stage artifact at the output path from the original stage prompt.\n\n" +
 			"- Artifact: `" + current.LastArtifact + "`\n"
 	}

@@ -271,6 +271,22 @@ PY
 SH
 chmod +x "$FAKEBIN/codex"
 
+cat >"$FAKEBIN/pi" <<'SH'
+#!/usr/bin/env bash
+# 文件功能目的：满足 oz flow agent preflight；本合同禁用 parallel，不会实际调用 pi。
+set -euo pipefail
+printf '{"type":"thread.started","thread_id":"unused-pi"}\n'
+SH
+chmod +x "$FAKEBIN/pi"
+
+cat >"$FAKEBIN/agy" <<'SH'
+#!/usr/bin/env bash
+# 文件功能目的：满足 oz flow agent preflight；本合同禁用 agy，不会实际调用。
+set -euo pipefail
+printf '{"type":"thread.started","thread_id":"unused-agy"}\n'
+SH
+chmod +x "$FAKEBIN/agy"
+
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT/docs/changes/1-stage-artifact-retry/tests"
 (
@@ -318,13 +334,22 @@ chmod +x "$PROJECT/docs/changes/1-stage-artifact-retry/tests/demo.sh"
 cat >"$PROJECT/docs/changes/1-stage-artifact-retry/acceptance.json" <<'JSON'
 {
   "summary": "stage artifact retry acceptance",
+  "coverage": [
+    {
+      "spec": "阶段产物重试",
+      "tests": ["contract-demo"],
+      "evidence": ["runtime-demo"],
+      "risk": "covered by shell workflow contract"
+    }
+  ],
   "required_tests": [
     {
       "id": "contract-demo",
       "source": "change_contract",
       "path": "docs/changes/1-stage-artifact-retry/tests/demo.sh",
       "command": "bash docs/changes/1-stage-artifact-retry/tests/demo.sh",
-      "purpose": "prove change test entry exists"
+      "purpose": "prove change test entry exists",
+      "assertions": ["demo acceptance file exists and test entry produces test-results/demo.zip evidence"]
     }
   ],
   "required_evidence": [
@@ -339,26 +364,22 @@ cat >"$PROJECT/docs/changes/1-stage-artifact-retry/acceptance.json" <<'JSON'
 JSON
 
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
-wo:
-  workflow:
-    engine: go-dag
-    max_review_iterations: 2
-    validation:
-      max_attempts_per_stage: 3
-      commands: []
-    parallel:
-      enabled: false
-    stages:
-      execution:
-        tool: codex
-      review:
-        tool: codex
-      qa:
-        tool: codex
-      fix:
-        tool: codex
-      archive:
-        tool: codex
+max_review_iterations: 2
+parallel: false
+validation:
+  limit: 3
+  commands: []
+stages:
+  execution:
+    agent: codex
+  review:
+    agent: codex
+  qa:
+    agent: codex
+  fix:
+    agent: codex
+  archive:
+    agent: codex
 YAML
 
 git -C "$PROJECT" add .
@@ -371,7 +392,7 @@ CODEX_CALL_LOG="$RESULT_DIR/codex-calls.jsonl" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-stage-artifact-retry" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-stage-artifact-retry" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
 run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/contract.log"

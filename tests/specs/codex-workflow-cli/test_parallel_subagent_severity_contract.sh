@@ -159,17 +159,41 @@ if not name_match:
 name = name_match.group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
 change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
-attempt = int(attempt_file.read_text(encoding="utf-8")) + 1 if attempt_file.exists() else 1
-attempt_file.write_text(str(attempt), encoding="utf-8")
+is_planning_context = "planning_context" in prompt
+attempt = 1
+if is_planning_context:
+    attempt = int(attempt_file.read_text(encoding="utf-8")) + 1 if attempt_file.exists() else 1
+    attempt_file.write_text(str(attempt), encoding="utf-8")
 
 prompt_log.parent.mkdir(parents=True, exist_ok=True)
 with prompt_log.open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({
         "attempt": attempt,
+        "planning_context": is_planning_context,
         "session": session,
         "has_output": "SUBAGENT_OUTPUT=" in prompt,
         "has_severity_guidance": "severity" in prompt or "严重级别" in prompt,
     }, ensure_ascii=False) + "\n")
+
+if not is_planning_context:
+    body = {
+        "name": name,
+        "change_name": change_name,
+        "purpose": purpose,
+        "status": "success",
+        "summary": "checked default implementation context",
+        "evidence": ["default implementation context inspected"],
+        "findings": []
+    }
+    print(json.dumps({"type": "session", "id": "pi-implementation-session"}))
+    print(json.dumps({
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}],
+        },
+    }, ensure_ascii=False))
+    raise SystemExit(0)
 
 severity = "info"
 if attempt > 1:
@@ -268,27 +292,21 @@ cat >"$PROJECT/docs/changes/1-parallel-info-severity/acceptance.json" <<'JSON'
 JSON
 
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
-wo:
-  workflow:
-    engine: go-dag
-    max_review_iterations: 0
-    validation:
-      max_attempts_per_stage: 3
-      commands: []
-    stages:
-      execution:
-        tool: codex
-      archive:
-        tool: codex
-    parallel:
-      enabled: true
-      groups:
-        planning_context:
-          mode: advisory
-          members:
-            - name: 外部资料研究员
-              purpose: 查询外部库文档和开源实现
-              tool: pi
+max_review_iterations: 0
+parallel: true
+validation:
+  limit: 3
+  commands: []
+stages:
+  planning:
+    before:
+      - name: 外部资料研究员
+        purpose: 查询外部库文档和开源实现
+        agent: pi
+  execution:
+    agent: codex
+  archive:
+    agent: codex
 YAML
 
 git -C "$PROJECT" add .
@@ -301,7 +319,7 @@ PI_PROMPT_LOG="$RESULT_DIR/pi-prompts.jsonl" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-parallel-info-severity" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-parallel-info-severity" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
 run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/contract.log"
@@ -324,7 +342,7 @@ if state.get("status") != "done":
     raise SystemExit(f"run status = {state.get('status')!r}, want done")
 run_dir = state_path.parent
 
-member_files = sorted((run_dir / "parallel-members" / "planning_context").glob("*.json"))
+member_files = sorted((run_dir / "parallel-members" / "planning_context").glob("*.artifact/member.json"))
 if len(member_files) != 1:
     raise SystemExit(f"member artifact count = {len(member_files)}, want 1")
 member = json.loads(member_files[0].read_text(encoding="utf-8"))
@@ -337,7 +355,11 @@ if member_severity != "minor":
 if group_severity != "minor":
     raise SystemExit(f"group severity = {group_severity!r}, want minor")
 
-records = [json.loads(line) for line in prompt_log.read_text(encoding="utf-8").splitlines() if line.strip()]
+records = [
+    json.loads(line)
+    for line in prompt_log.read_text(encoding="utf-8").splitlines()
+    if line.strip() and json.loads(line).get("planning_context")
+]
 if len(records) > 2:
     raise SystemExit(f"pi attempts = {len(records)}, want at most 2")
 if len(records) == 2:

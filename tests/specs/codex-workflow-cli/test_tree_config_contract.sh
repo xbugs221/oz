@@ -108,7 +108,7 @@ disabled_graph="$tmp/graph-disabled.json"
 note "导出 parallel:true graph，验证阶段前置子代理存在"
 (
   cd "$project"
-  HOME="$empty_home" "$wo_bin" graph --change demo --format json
+  HOME="$empty_home" "$wo_bin" flow graph --change demo --format json
 ) >"$enabled_graph" 2>"$result_dir/graph-enabled.err"
 
 assert_contains "$enabled_graph" "代码库侦察员"
@@ -140,7 +140,7 @@ YAML
 
 (
   cd "$project"
-  HOME="$empty_home" "$wo_bin" graph --change demo --format json
+  HOME="$empty_home" "$wo_bin" flow graph --change demo --format json
 ) >"$disabled_graph" 2>"$result_dir/graph-disabled.err"
 
 assert_contains "$disabled_graph" "execution"

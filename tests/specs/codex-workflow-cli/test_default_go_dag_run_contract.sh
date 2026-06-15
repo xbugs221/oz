@@ -173,9 +173,7 @@ cat >"$project/docs/changes/1-默认go-dag/acceptance.json" <<'JSON'
 JSON
 
 cat >"$project/oz-flow.yaml" <<'YAML'
-wo:
-  workflow:
-    max_review_iterations: 0
+max_review_iterations: 0
 YAML
 
 git -C "$project" add .
@@ -186,7 +184,7 @@ WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-默认go-dag" --json' _ "$project" "$wo" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
+  bash -c 'cd "$1" && "$2" flow run --change "1-默认go-dag" --json' _ "$project" "$wo" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
     fail "默认 oz flow run 失败"
   }
@@ -219,7 +217,7 @@ WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" status -w1' _ "$project" "$wo" >"$tmp/status.txt"
+  bash -c 'cd "$1" && "$2" flow status -w1' _ "$project" "$wo" >"$tmp/status.txt"
 cat "$tmp/status.txt" >>"$log"
 grep -qF "fake-main-session-execution" "$tmp/status.txt" || fail "oz flow status 必须显示 execution 主阶段 session"
 grep -qF "代码" "$tmp/status.txt" || fail "oz flow status 必须显示 implementation_context 并行成员"
@@ -230,7 +228,7 @@ WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" status --run-id "$3" --json' _ "$project" "$wo" "$run_id" >"$tmp/status.json"
+  bash -c 'cd "$1" && "$2" flow status --run-id "$3" --json' _ "$project" "$wo" "$run_id" >"$tmp/status.json"
 cat "$tmp/status.json" >>"$log"
 python3 - "$tmp/status.json" <<'PY' || exit 1
 import json

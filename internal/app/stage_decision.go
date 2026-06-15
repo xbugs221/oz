@@ -215,126 +215,29 @@ func findingKey(title string) string {
 	return strings.TrimSpace(out.String())
 }
 
-// artifactDone checks whether the current stage already produced its required artifact.
-func (e *Engine) artifactDone(state State) (bool, error) {
-	base := runDir(e.Repo, state.RunID)
-	switch {
-	case state.Stage == "execution":
-		done, err := ChangeTasksDone(e.Repo, state.ChangeName)
-		if err != nil || !done {
-			return done, err
-		}
-		if err := e.validateExecutionParallelContextGate(state); err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		return true, nil
-	case strings.HasPrefix(state.Stage, "review_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return false, err
-		}
-		n := strconv.Itoa(iteration)
-		review, err := ReadReview(filepath.Join(base, "review-"+n+".json"))
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		if err := ValidateParallelReviewGate(base, state.Workflow, iteration, review); err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		return true, nil
-	case strings.HasPrefix(state.Stage, "fix_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return false, err
-		}
-		n := strconv.Itoa(iteration)
-		return fileExists(filepath.Join(base, "fix-"+n+"-summary.md")), nil
-	case strings.HasPrefix(state.Stage, "qa_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return false, err
-		}
-		n := strconv.Itoa(iteration)
-		qa, err := ReadQA(filepath.Join(base, "qa-"+n+".json"))
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		acceptance, err := readAcceptanceForState(e.Repo, state)
-		if err != nil {
-			return false, err
-		}
-		if err := ValidateQAAgainstAcceptance(qa, acceptance); err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		if err := ValidateParallelQAGate(base, state.Workflow, iteration, qa); err != nil {
-			return false, newStageArtifactGateError(err)
-		}
-		return true, nil
-	case state.Stage == "archive":
-		return fileExists(filepath.Join(base, "delivery-summary.md")) && archiveExists(e.Repo, state.ChangeName), nil
-	}
-	return false, fmt.Errorf("未知阶段 %q", state.Stage)
-}
-
 // advance moves state to the next linear stage, honoring review fix decisions.
 func (e *Engine) advance(state *State) error {
 	ensureWorkflowConfig(state)
-	var review Review
-	var qa QA
+	result, done, err := e.validateStageArtifact(*state)
+	if err != nil {
+		return e.stageArtifactGateError(*state, err)
+	}
+	if !done {
+		return e.stageArtifactGateError(*state, fmt.Errorf("%s 阶段 artifact 未完成", state.Stage))
+	}
+	review := result.Review
+	qa := result.QA
 	switch {
 	case state.Stage == "execution":
-		if err := e.validateExecutionParallelContextGate(*state); err != nil {
-			return newStageArtifactGateError(err)
-		}
 	case strings.HasPrefix(state.Stage, "review_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return err
-		}
-		n := strconv.Itoa(iteration)
-		review, err = ReadReview(filepath.Join(runDir(e.Repo, state.RunID), "review-"+n+".json"))
-		if err != nil {
-			return newStageArtifactGateError(err)
-		}
-		if err := ValidateParallelReviewGate(runDir(e.Repo, state.RunID), state.Workflow, iteration, review); err != nil {
-			return newStageArtifactGateError(err)
-		}
 		clearStageValidationFailure(state)
 	case strings.HasPrefix(state.Stage, "qa_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return err
-		}
-		n := strconv.Itoa(iteration)
-		qa, err = ReadQA(filepath.Join(runDir(e.Repo, state.RunID), "qa-"+n+".json"))
-		if err != nil {
-			return newStageArtifactGateError(err)
-		}
-		acceptance, err := readAcceptanceForState(e.Repo, *state)
-		if err != nil {
-			return err
-		}
-		if err := ValidateQAAgainstAcceptance(qa, acceptance); err != nil {
-			return newStageArtifactGateError(err)
-		}
-		if err := ValidateParallelQAGate(runDir(e.Repo, state.RunID), state.Workflow, iteration, qa); err != nil {
-			return newStageArtifactGateError(err)
-		}
 		clearStageValidationFailure(state)
 	case strings.HasPrefix(state.Stage, "fix_"):
 		if _, err := stageIteration(state.Stage); err != nil {
 			return err
 		}
 	case state.Stage == "archive":
-		if err := e.validateArchiveReadiness(*state); err != nil {
-			return e.stageArtifactGateError(*state, err)
-		}
 	default:
 		return fmt.Errorf("未知阶段 %q", state.Stage)
 	}

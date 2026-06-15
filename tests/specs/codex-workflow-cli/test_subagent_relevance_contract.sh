@@ -345,7 +345,7 @@ WO_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "$3" --json' _ "$project" "$wo_bin" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
+  bash -c 'cd "$1" && "$2" flow run --change "$3" --json' _ "$project" "$wo_bin" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
     fail "oz flow run 未能完成树状配置 relevance 场景"
   }

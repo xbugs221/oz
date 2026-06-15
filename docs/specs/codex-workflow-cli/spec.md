@@ -550,7 +550,7 @@
 
 // Sources: 12-收窄验收gate到提案范围
 
-#### 场景：并行 review gate 由主审核归一化
+#### 场景：并行 review 输入由主审核归一化
 
 - **给定** `review` 并行组已启用
 - **当** `parallel-review-i.json` 中任一配置成员报告 blocker/major finding、成员失败或把正向确认误写为 blocker
@@ -562,19 +562,19 @@
 
 - **给定** `parallel-review-1.json` 中所有配置成员均成功
 - **并且**某成员报告 `severity=major`、`scope=out_of_scope_existing` 的历史债务
-- **当**主 review artifact 为 clean
-- **则** `ValidateParallelReviewGate` 必须允许 workflow 继续
+- **当**系统读取 parallel review artifact
+- **则** artifact 必须保持可解析，并作为主 review 输入
 - **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
-- **真实数据来源**：脚本临时写入真实 parallel review artifact JSON，调用真实 `ValidateParallelReviewGate`
+- **真实数据来源**：脚本临时写入真实 parallel review artifact JSON，调用真实 `ReadParallelArtifact`
 - **入口路径**：`internal/app/parallel.go`
-- **关键断言**：out-of-scope major finding 不阻断；成员 status 全部 success
-- **剩余风险**：该 gate 只能校验 artifact 结构，是否采纳为当前提案 finding 由主审核负责
+- **关键断言**：out-of-scope major finding 保持为 reviewer 输入；成员 status 全部 success
+- **剩余风险**：该 artifact 合同只能校验结构，是否采纳为当前提案 finding 由主审核负责
 
 #### 场景：当前变更和旧格式 severe finding 只是主审核输入
 
 - **给定** `parallel-review-1.json` 中存在 `scope=current_change` 的 major finding
-- **当**主 review artifact 为 clean
-- **则** gate 必须允许主 review 的归一化 clean 决策继续
+- **当**系统读取 parallel review artifact
+- **则** artifact 必须保持可解析，并交给主 review 归一化
 - **并且**缺少 `scope` 的旧格式 major finding 也必须保持解析兼容，并作为主审核输入而不是直接阻断
 - **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
 - **真实数据来源**：同一脚本构造 current-change artifact 和 legacy artifact

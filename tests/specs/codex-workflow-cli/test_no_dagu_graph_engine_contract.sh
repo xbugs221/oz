@@ -42,28 +42,28 @@ mkdir -p "$PROJECT"
 note "json graph remains available"
 (
   cd "$PROJECT"
-  "$WO_BIN" graph --change demo --format json
+  "$WO_BIN" flow graph --change demo --format json
 ) >"$RESULT_DIR/graph.json" 2>"$RESULT_DIR/graph-json.err"
 grep -q '"change_name": "demo"' "$RESULT_DIR/graph.json" || fail "json graph did not include the requested change"
 
 note "mermaid graph remains available"
 (
   cd "$PROJECT"
-  "$WO_BIN" graph --change demo --format mermaid
+  "$WO_BIN" flow graph --change demo --format mermaid
 ) >"$RESULT_DIR/graph.mmd" 2>"$RESULT_DIR/graph-mermaid.err"
 grep -q 'flowchart TD' "$RESULT_DIR/graph.mmd" || fail "mermaid graph did not render a flowchart"
 note "unknown graph format is rejected and not advertised as an option"
 set +e
 (
   cd "$PROJECT"
-  "$WO_BIN" graph --change demo --format yaml
+  "$WO_BIN" flow graph --change demo --format yaml
 ) >"$RESULT_DIR/graph-unknown.out" 2>"$RESULT_DIR/graph-unknown.err"
 unknown_graph_code=$?
 set -e
 [[ "$unknown_graph_code" -ne 0 ]] || fail "oz flow graph --format yaml should fail"
 grep -Eiq 'json.*mermaid|mermaid.*json' "$RESULT_DIR/graph-unknown.out" "$RESULT_DIR/graph-unknown.err" || fail "graph error should advertise only current formats"
 
-note "workflow.engine legacy is rejected before graph output"
+note "legacy workflow config shape is rejected before graph output"
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
@@ -72,19 +72,19 @@ YAML
 set +e
 (
   cd "$PROJECT"
-  "$WO_BIN" graph --change demo --format json
+  "$WO_BIN" flow graph --change demo --format json
 ) >"$RESULT_DIR/engine-legacy.out" 2>"$RESULT_DIR/engine-legacy.err"
 legacy_code=$?
 set -e
-[[ "$legacy_code" -ne 0 ]] || fail "workflow.engine legacy should be rejected"
-grep -Eiq 'go-dag' "$RESULT_DIR/engine-legacy.out" "$RESULT_DIR/engine-legacy.err" || fail "legacy rejection should guide the user to go-dag"
+[[ "$legacy_code" -ne 0 ]] || fail "legacy workflow config shape should be rejected"
+grep -Eiq '根节点 stages|root.*stages' "$RESULT_DIR/engine-legacy.out" "$RESULT_DIR/engine-legacy.err" || fail "legacy rejection should guide the user to root stages config"
 
 note "run --engine unknown is rejected with go-dag guidance"
 rm -f "$PROJECT/oz-flow.yaml"
 set +e
 (
   cd "$PROJECT"
-  "$WO_BIN" run --change demo --engine unknown --json
+  "$WO_BIN" flow run --change demo --engine unknown --json
 ) >"$RESULT_DIR/run-engine-unknown.out" 2>"$RESULT_DIR/run-engine-unknown.err"
 run_unknown_code=$?
 set -e

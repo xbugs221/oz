@@ -50,7 +50,7 @@ run_rejection_case() {
   set +e
   (
     cd "$project"
-    HOME="$empty_home" "$wo_bin" graph --change demo --format json
+    HOME="$empty_home" "$wo_bin" flow graph --change demo --format json
   ) >"$tmp/$name.out" 2>"$tmp/$name.err"
   local code=$?
   set -e
@@ -77,7 +77,7 @@ run_global_rejection_case() {
   set +e
   (
     cd "$project"
-    HOME="$home" "$wo_bin" graph --change demo --format json
+    HOME="$home" "$wo_bin" flow graph --change demo --format json
   ) >"$tmp/$name.out" 2>"$tmp/$name.err"
   local code=$?
   set -e

@@ -85,7 +85,7 @@ assert_profile_config() {
   note "运行 oz flow graph 验证 $profile 可加载"
   (
     cd "$repo"
-    "$wo_bin" graph --change "11-${profile}-演示" --format json
+    "$wo_bin" flow graph --change "11-${profile}-演示" --format json
   ) >"$repo/graph.json" 2>>"$log"
 
   assert_contains "$repo/graph.json" '"type": "subagent"'
