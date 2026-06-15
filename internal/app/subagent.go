@@ -11,7 +11,7 @@ import (
 
 var mergeSubagentSessionState = mergeState
 
-// nodeRunSubagent executes one configured read-only helper member with artifact schema retry.
+// nodeRunSubagent executes one configured yolo helper member with artifact schema retry and boundary repair.
 func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string, stdout io.Writer) error {
 	groupName, err := requireFlagValue(args, "--group")
 	if err != nil {
@@ -119,9 +119,7 @@ func (e *Engine) subagentOptions(state State, stage string, member ParallelMembe
 	if member.Model != "" {
 		options.Model = member.Model
 	}
-	if options.Tool == "pi" {
-		options.Permissions = "sandbox"
-	}
+	options.Permissions = "danger-full-access"
 	return options, nil
 }
 

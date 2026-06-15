@@ -80,7 +80,7 @@ while (($#)); do
       session="$2"
       shift 2
       ;;
-    --mode|--model|--thinking)
+    --mode|--model|--thinking|--tools)
       shift 2
       ;;
     *)
@@ -108,6 +108,25 @@ if not name_match:
 name = name_match.group(1).strip()
 purpose = re.search(r"^SUBAGENT_PURPOSE=(.+)$", prompt, re.M).group(1).strip()
 change_name = re.search(r"^CURRENT_CHANGE=(.+)$", prompt, re.M).group(1).strip()
+artifact_path = re.search(r"^ARTIFACT_PATH=(.+)$", prompt, re.M).group(1).strip()
+if "/planning_context/" not in artifact_path:
+    body = {
+        "name": name,
+        "change_name": change_name,
+        "purpose": purpose,
+        "status": "success",
+        "summary": "non-planning helper completed",
+        "evidence": ["non-planning helper evidence"],
+    }
+    print(json.dumps({"type": "session", "id": "pi-subagent-session"}))
+    print(json.dumps({
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}],
+        },
+    }, ensure_ascii=False))
+    raise SystemExit(0)
 count_path = pathlib.Path(os.environ["PI_ATTEMPT_FILE"])
 attempt = int(count_path.read_text(encoding="utf-8")) + 1 if count_path.exists() else 1
 count_path.write_text(str(attempt), encoding="utf-8")
@@ -201,22 +220,32 @@ cat >"$PROJECT/docs/changes/1-子代理artifact重试/tests/test_smoke.sh" <<'SH
 #!/usr/bin/env bash
 set -euo pipefail
 test -f docs/changes/1-子代理artifact重试/acceptance.json
+mkdir -p test-results
+printf 'runtime retry behavior recorded\n' > test-results/subagent-artifact-retry.log
 SH
 chmod +x "$PROJECT/docs/changes/1-子代理artifact重试/tests/test_smoke.sh"
 
 cat >"$PROJECT/docs/changes/1-子代理artifact重试/acceptance.json" <<'JSON'
 {
-  "summary": "subagent artifact retry acceptance",
-  "required_tests": [
-    {
-      "id": "smoke",
-      "source": "change_contract",
-      "path": "docs/changes/1-子代理artifact重试/tests/test_smoke.sh",
-      "command": "bash docs/changes/1-子代理artifact重试/tests/test_smoke.sh",
-      "purpose": "prove change test entry exists",
-      "assertions": ["subagent artifact schema retry resumes the same session and repairs evidence"]
-    }
-  ],
+	  "summary": "subagent artifact retry acceptance",
+	  "coverage": [
+	    {
+	      "spec": "subagent artifact retry",
+	      "tests": ["smoke"],
+	      "evidence": ["runtime"],
+	      "risk": "covered by shell workflow contract"
+	    }
+	  ],
+	  "required_tests": [
+	    {
+	      "id": "smoke",
+	      "source": "change_contract",
+	      "path": "docs/changes/1-子代理artifact重试/tests/test_smoke.sh",
+	      "command": "bash docs/changes/1-子代理artifact重试/tests/test_smoke.sh",
+	      "purpose": "produce runtime at test-results/subagent-artifact-retry.log",
+	      "assertions": ["writes runtime to test-results/subagent-artifact-retry.log", "subagent artifact schema retry resumes the same session and repairs evidence"]
+	    }
+	  ],
   "required_evidence": [
     {
       "id": "runtime",
@@ -229,23 +258,19 @@ cat >"$PROJECT/docs/changes/1-子代理artifact重试/acceptance.json" <<'JSON'
 JSON
 
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
-wo:
-  workflow:
-    max_review_iterations: 0
-    stages:
-      execution:
-        tool: codex
-      archive:
-        tool: codex
-    parallel:
-      enabled: true
-      groups:
-        planning_context:
-          mode: advisory
-          members:
-            - name: 外部资料研究员
-              purpose: 查询外部库文档和开源实现
-              tool: pi
+max_review_iterations: 0
+parallel: true
+stages:
+  planning:
+    agent: codex
+    before:
+      - name: 外部资料研究员
+        purpose: 查询外部库文档和开源实现
+        agent: pi
+  execution:
+    agent: codex
+  archive:
+    agent: codex
 YAML
 
 git -C "$PROJECT" add .
@@ -261,7 +286,7 @@ WO_TEST_REPO="$PROJECT" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-子代理artifact重试" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-子代理artifact重试" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
 run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/test.log"
@@ -299,7 +324,7 @@ PY
 test -s "$run_dir/parallel-planning-context.json" || fail "fanin should continue after repaired member artifact"
 note "contract passed: go-dag subagent artifact schema retry resumes the same session"
 
-note "run go-dag workflow and expect read-only boundary failure before artifact retry"
+note "run go-dag workflow and expect boundary repair before artifact retry"
 set +e
 PI_PROMPT_LOG="$RESULT_DIR/pi-readonly-prompts.log" \
 PI_ATTEMPT_FILE="$TMP/pi-readonly-attempts" \
@@ -308,14 +333,28 @@ WO_TEST_REPO="$PROJECT_READONLY" \
 XDG_STATE_HOME="$TMP/state-readonly" \
 HOME="$TMP/home-readonly" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" run --change "1-子代理artifact重试" --json' _ "$PROJECT_READONLY" "$WO_BIN" >"$RESULT_DIR/readonly-run.jsonl" 2>"$RESULT_DIR/readonly-run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-子代理artifact重试" --json' _ "$PROJECT_READONLY" "$WO_BIN" >"$RESULT_DIR/readonly-run.jsonl" 2>"$RESULT_DIR/readonly-run.err"
 readonly_code=$?
 set -e
 cat "$RESULT_DIR/readonly-run.jsonl" >>"$RESULT_DIR/test.log"
 cat "$RESULT_DIR/readonly-run.err" >>"$RESULT_DIR/test.log"
-[[ "$readonly_code" -ne 0 ]] || fail "go-dag run should fail when subagent mutates the worktree"
+[[ "$readonly_code" -eq 0 ]] || fail "go-dag run should revert subagent worktree mutation and continue"
 readonly_attempts="$(cat "$TMP/pi-readonly-attempts")"
-[[ "$readonly_attempts" == "1" ]] || fail "read-only boundary must stop before artifact retry, got $readonly_attempts attempts"
-grep -q '只读边界' "$RESULT_DIR/readonly-run.jsonl" "$RESULT_DIR/readonly-run.err" || fail "failure output must mention read-only boundary"
-grep -q 'unexpected-source-change.txt' <(git -C "$PROJECT_READONLY" status --porcelain) || fail "fake pi should have created an unexpected worktree change"
-note "contract passed: subagent read-only boundary is checked after each attempt"
+[[ "$readonly_attempts" == "2" ]] || fail "boundary repair should allow schema retry, got $readonly_attempts attempts"
+if git -C "$PROJECT_READONLY" status --porcelain | grep -q 'unexpected-source-change.txt'; then
+  fail "unexpected subagent worktree change should be reverted"
+fi
+readonly_state="$(find "$TMP/state-readonly/oz/flow/repos" -name state.json -type f -print | sort | tail -n 1)"
+test -n "$readonly_state" || fail "missing readonly state.json"
+readonly_run_dir="$(dirname "$readonly_state")"
+readonly_member="$(find "$readonly_run_dir/parallel-members/planning_context" -path '*.artifact/member.json' -type f -print | head -n 1)"
+test -n "$readonly_member" || fail "missing readonly member artifact"
+python3 - "$readonly_member" <<'PY' || exit 1
+import json
+import sys
+artifact = json.load(open(sys.argv[1], encoding="utf-8"))
+evidence = artifact.get("evidence") or []
+if not any("boundary reverted: unexpected-source-change.txt" in item for item in evidence):
+    raise SystemExit("member artifact must record reverted boundary path")
+PY
+note "contract passed: subagent boundary repair reverts illegal writes and preserves artifact retry"

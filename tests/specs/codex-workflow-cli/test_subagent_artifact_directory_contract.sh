@@ -140,5 +140,5 @@ func TestValidateMemberArtifactCommandReportsHelpfulErrors(t *testing.T) {
 GO
 
 note "运行 subagent artifact directory 合同测试"
-go test ./internal/app -run 'TestSubagentArtifactPathUsesDedicatedDirectory|TestSubagentPromptRequiresArtifactFileAndValidationCommand|TestValidateMemberArtifactCommandReportsHelpfulErrors|TestSubagentMalformedArtifactBecomesAdvisoryInput|TestSubagentBoundaryBlocksSiblingRunArtifact|TestSubagentBoundaryAllowsSessionProgressStateWrite' -count=1 2>&1 | tee -a "$LOG"
+go test ./internal/app -run 'TestSubagentArtifactPathUsesDedicatedDirectory|TestSubagentPromptRequiresArtifactFileAndValidationCommand|TestValidateMemberArtifactCommandReportsHelpfulErrors|TestSubagentMalformedArtifactBecomesAdvisoryInput|TestSubagentBoundaryRevertsSiblingRunArtifact|TestSubagentBoundaryRevertsSourceWrite|TestSubagentBoundaryAllowsSessionProgressStateWrite' -count=1 2>&1 | tee -a "$LOG"
 note "PASS"

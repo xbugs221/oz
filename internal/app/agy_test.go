@@ -27,6 +27,25 @@ func TestAgyRunArgsMapSealedPromptConversationAndPermissions(t *testing.T) {
 	}
 }
 
+// TestCodexExecArgsMapDangerPermissionsBeforeSubcommand keeps yolo helpers non-interactive.
+func TestCodexExecArgsMapDangerPermissionsBeforeSubcommand(t *testing.T) {
+	args := codexExecArgs("/tmp/repo", "", StageOptions{Permissions: "danger-full-access"})
+	if len(args) < 2 || args[0] != "--dangerously-bypass-approvals-and-sandbox" || args[1] != "exec" {
+		t.Fatalf("args = %v, want dangerous global flag before exec", args)
+	}
+	if !containsArgPair(args, "--cd", "/tmp/repo") || !containsArg(args, "--json") {
+		t.Fatalf("args = %v, missing exec repo/json flags", args)
+	}
+}
+
+// TestPiCommonArgsMapDangerPermissionsToWriteExecTools keeps subagents able to self-validate.
+func TestPiCommonArgsMapDangerPermissionsToWriteExecTools(t *testing.T) {
+	args := piCommonArgs(StageOptions{Permissions: "danger-full-access"})
+	if !containsArgPair(args, "--tools", "read,bash,edit,write,grep,find,ls") {
+		t.Fatalf("args = %v, want write and bash enabled", args)
+	}
+}
+
 // containsArg reports whether args contains one exact value.
 func containsArg(args []string, want string) bool {
 	for _, arg := range args {

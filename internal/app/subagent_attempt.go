@@ -59,6 +59,7 @@ type subagentAttemptsResult struct {
 func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentAttemptsResult, error) {
 	var result ParallelMemberResult
 	var schemaErr error
+	var boundaryRepair subagentBoundaryRepair
 	sessionID := request.SessionID
 	for attempt := 1; attempt <= 3; attempt++ {
 		if attempt > 1 {
@@ -94,7 +95,9 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			AttemptContext: request.Context,
 		})
 		sessionID = attemptResult.SessionID
-		if boundaryErr := e.checkSubagentReadOnlyBoundary(request.State, request.Member, attempt, request.ArtifactPath, attemptHead, attemptDiff, attemptRunFiles, attemptState, request.SessionKey); boundaryErr != nil {
+		attemptRepair, boundaryErr := e.checkSubagentReadOnlyBoundary(request.State, request.Member, attempt, request.ArtifactPath, attemptHead, attemptDiff, attemptRunFiles, attemptState, request.SessionKey)
+		boundaryRepair.Reverted = append(boundaryRepair.Reverted, attemptRepair.Reverted...)
+		if boundaryErr != nil {
 			return subagentAttemptsResult{}, boundaryErr
 		}
 		if attemptResult.Err != nil {
@@ -124,6 +127,7 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			break
 		}
 	}
+	result = resultWithBoundaryRepairEvidence(result, boundaryRepair)
 	return subagentAttemptsResult{SessionID: sessionID, Member: result}, nil
 }
 
@@ -143,7 +147,7 @@ func (e *Engine) runSubagentAttempt(request subagentAttemptRequest) subagentAtte
 	prompt := request.Prompt
 	sessionID := request.SessionID
 	if request.Attempt > 1 {
-		prompt = artifactRetryPrompt(request.GroupName, request.Member, request.ArtifactPath, request.SchemaErr, request.PromptContext)
+		prompt = artifactRetryPrompt(request.SchemaErr, request.PromptContext)
 	}
 	sessionID, err := runner.Run(attemptCtx, e.Repo, prompt, sessionID, request.Options)
 	if attemptCtx.Err() == context.DeadlineExceeded {
@@ -160,4 +164,12 @@ func subagentAttemptContext(parent context.Context) (context.Context, context.Ca
 		return context.WithCancel(parent)
 	}
 	return context.WithTimeout(parent, subagentAttemptTimeout)
+}
+
+// resultWithBoundaryRepairEvidence records reverted yolo-helper writes for the main agent.
+func resultWithBoundaryRepairEvidence(result ParallelMemberResult, repair subagentBoundaryRepair) ParallelMemberResult {
+	for _, path := range uniqueSortedPaths(repair.Reverted) {
+		result.Evidence = append(result.Evidence, "boundary reverted: "+path)
+	}
+	return result
 }

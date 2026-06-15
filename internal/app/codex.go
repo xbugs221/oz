@@ -111,7 +111,14 @@ func stringsReader(text string) io.Reader {
 
 // codexExecArgs builds shell-free arguments while keeping prompt content on stdin.
 func codexExecArgs(repo, threadID string, options StageOptions) []string {
-	args := []string{"exec", "--json", "--cd", repo}
+	var args []string
+	if options.Permissions == "danger-full-access" {
+		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	}
+	args = append(args, "exec", "--json", "--cd", repo)
+	if options.Permissions == "sandbox" {
+		args = append(args, "--sandbox", "workspace-write")
+	}
 	if options.Model != "" {
 		args = append(args, "-m", options.Model)
 	}

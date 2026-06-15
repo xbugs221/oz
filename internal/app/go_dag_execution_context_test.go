@@ -39,6 +39,7 @@ type goDAGContextFakeRunner struct {
 	emitSessionProgress bool
 	writeOwnMember      bool
 	writeSiblingMember  bool
+	writeSourceFile     bool
 	captureMalformed    bool
 }
 
@@ -188,6 +189,12 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 				return "", err
 			}
 		}
+		if r.writeSourceFile {
+			source := filepath.Join(repo, "rogue-subagent-write.txt")
+			if err := os.WriteFile(source, []byte("unexpected source write\n"), 0o644); err != nil {
+				return "", err
+			}
+		}
 		if r.capture != nil && r.captureMalformed {
 			r.capture.Append("not a member artifact\n")
 		} else if r.capture != nil {
@@ -248,8 +255,8 @@ func TestSubagentMalformedArtifactBecomesAdvisoryInput(t *testing.T) {
 	}
 }
 
-// TestSubagentBoundaryBlocksSiblingRunArtifact proves repo-external run writes are guarded.
-func TestSubagentBoundaryBlocksSiblingRunArtifact(t *testing.T) {
+// TestSubagentBoundaryRevertsSiblingRunArtifact proves illegal run writes are discarded.
+func TestSubagentBoundaryRevertsSiblingRunArtifact(t *testing.T) {
 	repo := goDAGContextRepo(t)
 	goDAGContextChange(t, repo, "- [ ] task\n")
 	runID := "sibling-runtime-artifact-run"
@@ -264,12 +271,62 @@ func TestSubagentBoundaryBlocksSiblingRunArtifact(t *testing.T) {
 	engine := NewEngine(repo, goDAGContextRegistry(runner))
 	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
 
-	err := engine.runGoDAGNode(context.Background(), runID, node)
-	if err == nil {
-		t.Fatal("sibling run artifact write was not blocked")
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "只读边界") || !strings.Contains(err.Error(), "sibling.artifact/probe.txt") {
-		t.Fatalf("error = %v, want read-only boundary failure mentioning sibling artifact", err)
+	artifact := memberArtifactPath(repo, runID, "implementation_context", 0, "代码库侦察员")
+	if !fileExists(artifact) {
+		t.Fatalf("member artifact %s was not preserved", artifact)
+	}
+	sibling := filepath.Join(filepath.Dir(filepath.Dir(artifact)), "sibling.artifact", "probe.txt")
+	if fileExists(sibling) {
+		t.Fatalf("sibling run artifact %s was not reverted", sibling)
+	}
+	member, err := readMemberArtifact(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !goDAGContextEvidenceContains(member.Evidence, "boundary reverted: parallel-members/implementation_context/sibling.artifact/probe.txt") {
+		t.Fatalf("member evidence = %#v, want reverted sibling path", member.Evidence)
+	}
+}
+
+// TestSubagentBoundaryRevertsSourceWrite keeps yolo helpers from leaving source changes behind.
+func TestSubagentBoundaryRevertsSourceWrite(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "source-boundary-repair-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeOwnMember: true, writeSourceFile: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(repo, "rogue-subagent-write.txt")) {
+		t.Fatal("source write was not reverted")
+	}
+	_, diff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff != state.BaselineDiff {
+		t.Fatalf("git diff = %q, want baseline %q", diff, state.BaselineDiff)
+	}
+	artifact := memberArtifactPath(repo, runID, "implementation_context", 0, "代码库侦察员")
+	member, err := readMemberArtifact(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !goDAGContextEvidenceContains(member.Evidence, "boundary reverted: rogue-subagent-write.txt") {
+		t.Fatalf("member evidence = %#v, want reverted source path", member.Evidence)
 	}
 }
 
@@ -417,6 +474,16 @@ func goDAGContextPromptValue(prompt, key string) string {
 		}
 	}
 	return ""
+}
+
+// goDAGContextEvidenceContains reports whether a helper artifact recorded expected evidence.
+func goDAGContextEvidenceContains(evidence []string, want string) bool {
+	for _, item := range evidence {
+		if strings.Contains(item, want) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestGoDAGSkipsExecutionContextWhenTasksAlreadyDone verifies completed changes skip execution helpers.

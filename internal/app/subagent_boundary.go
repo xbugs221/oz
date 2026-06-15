@@ -3,41 +3,156 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff string, beforeRunFiles map[string]string, beforeState State, sessionKey string) error {
+type subagentBoundaryRepair struct {
+	Reverted []string
+}
+
+// checkSubagentReadOnlyBoundary reverts illegal yolo-helper writes while preserving the member artifact.
+func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff string, beforeRunFiles map[string]string, beforeState State, sessionKey string) (subagentBoundaryRepair, error) {
 	afterHead, afterDiff, err := gitSnapshot(e.Repo)
 	if err != nil {
-		return err
+		return subagentBoundaryRepair{}, err
 	}
 	runGuard, err := classifyRunArtifactChanges(runDir(e.Repo, state.RunID), beforeRunFiles, filepath.Dir(artifactPath), beforeState, sessionKey)
 	if err != nil {
-		return e.failNodeState(state, err)
+		return subagentBoundaryRepair{}, e.failNodeState(state, err)
 	}
 	if beforeHead == afterHead && beforeDiff == afterDiff && !runGuard.Blocked {
-		return nil
+		return subagentBoundaryRepair{}, nil
 	}
 	guard, err := classifyGitSnapshotChangeWithAllowed(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff, []string{filepath.Dir(artifactPath)})
 	if err != nil {
-		return e.failNodeState(state, err)
+		return subagentBoundaryRepair{}, e.failNodeState(state, err)
 	}
 	if guard.Blocked || runGuard.Blocked {
-		detail := guard.Detail()
-		if runGuard.Blocked {
-			detail = runGuard.Detail()
-			if guard.Blocked {
-				detail = guard.Detail() + "; " + runGuard.Detail()
+		repair, repairErr := e.revertSubagentBoundaryChanges(state, beforeHead, beforeDiff, beforeRunFiles, guard, runGuard)
+		if repairErr != nil {
+			detail := guard.Detail()
+			if runGuard.Blocked {
+				detail = runGuard.Detail()
+				if guard.Blocked {
+					detail = guard.Detail() + "; " + runGuard.Detail()
+				}
 			}
+			return repair, e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界且自动撤回失败：检测到当前 run 相关路径或源码变化（%s），artifact=%s：%v", member.Name, attempt, detail, artifactPath, repairErr))
 		}
-		return e.failNodeState(state, fmt.Errorf("subagent %s 第 %d 次尝试破坏只读边界：检测到当前 run 相关路径或源码变化（%s），artifact=%s", member.Name, attempt, detail, artifactPath))
+		return repair, nil
 	}
-	return nil
+	return subagentBoundaryRepair{}, nil
+}
+
+// revertSubagentBoundaryChanges removes only illegal deltas created during this helper attempt.
+func (e *Engine) revertSubagentBoundaryChanges(state State, beforeHead, beforeDiff string, beforeRunFiles map[string]string, guard gitSnapshotGuard, runGuard runArtifactGuard) (subagentBoundaryRepair, error) {
+	var repair subagentBoundaryRepair
+	if guard.Blocked {
+		reverted, err := revertGitBoundaryChanges(e.Repo, beforeHead, beforeDiff, guard.Paths)
+		if err != nil {
+			return repair, err
+		}
+		repair.Reverted = append(repair.Reverted, reverted...)
+	}
+	if runGuard.Blocked {
+		reverted, err := revertRunArtifactBoundaryChanges(runDir(e.Repo, state.RunID), beforeRunFiles, runGuard.Paths)
+		if err != nil {
+			return repair, err
+		}
+		repair.Reverted = append(repair.Reverted, reverted...)
+	}
+	return repair, nil
+}
+
+// revertGitBoundaryChanges restores clean-baseline source deltas and refuses ambiguous dirty paths.
+func revertGitBoundaryChanges(repo, beforeHead, beforeDiff string, paths []string) ([]string, error) {
+	if strings.TrimSpace(beforeHead) == "" {
+		return nil, fmt.Errorf("缺少 subagent 前置 HEAD，不能安全撤回源码变化")
+	}
+	beforeLines := statusLineByPath(beforeDiff)
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return nil, err
+	}
+	headCmd := commandContext(context.Background(), gitPath, "rev-parse", "--verify", "HEAD^{commit}")
+	headCmd.Dir = repo
+	headOut, err := headCmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	if currentHead := strings.TrimSpace(string(headOut)); currentHead != beforeHead {
+		return nil, fmt.Errorf("HEAD 已从 %s 变化为 %s，不能自动撤回 subagent commit", shortCommit(beforeHead), shortCommit(currentHead))
+	}
+	var reverted []string
+	for _, path := range uniqueSortedPaths(paths) {
+		if beforeLines[path] != "" {
+			return reverted, fmt.Errorf("路径 %s 在 subagent 运行前已有未提交变化，不能自动撤回", path)
+		}
+		status, err := gitStatusLineForPath(repo, gitPath, path)
+		if err != nil {
+			return reverted, err
+		}
+		if strings.HasPrefix(status, "?? ") {
+			if err := os.RemoveAll(filepath.Join(repo, filepath.FromSlash(path))); err != nil {
+				return reverted, err
+			}
+			reverted = append(reverted, path)
+			continue
+		}
+		cmd := commandContext(context.Background(), gitPath, "restore", "--worktree", "--staged", "--", path)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail != "" {
+				return reverted, fmt.Errorf("git restore %s 失败：%s", path, detail)
+			}
+			return reverted, err
+		}
+		reverted = append(reverted, path)
+	}
+	return reverted, nil
+}
+
+// gitStatusLineForPath returns current porcelain status for one path.
+func gitStatusLineForPath(repo, gitPath, path string) (string, error) {
+	cmd := commandContext(context.Background(), gitPath, "-c", "core.quotePath=false", "status", "--porcelain", "--", path)
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(out))
+		if detail != "" {
+			return "", fmt.Errorf("git status %s 失败：%s", path, detail)
+		}
+		return "", err
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			return line, nil
+		}
+	}
+	return "", nil
+}
+
+// revertRunArtifactBoundaryChanges deletes only newly-created illegal run artifacts.
+func revertRunArtifactBoundaryChanges(root string, before map[string]string, paths []string) ([]string, error) {
+	var reverted []string
+	for _, path := range uniqueSortedPaths(paths) {
+		if before[path] != "" {
+			return reverted, fmt.Errorf("run artifact %s 在 subagent 运行前已存在，不能自动撤回", path)
+		}
+		if err := os.RemoveAll(filepath.Join(root, filepath.FromSlash(path))); err != nil {
+			return reverted, err
+		}
+		reverted = append(reverted, path)
+	}
+	return reverted, nil
 }
 
 type runArtifactGuard struct {
