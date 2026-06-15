@@ -549,7 +549,7 @@ func startDetachedBatchResumeCommand(repo, batchID string) error {
 	if err != nil {
 		return fmt.Errorf("解析 oz flow 可执行文件失败：%w", err)
 	}
-	cmd := exec.Command(exe, "batch", "--batch-id", batchID, "--json")
+	cmd := exec.Command(exe, flowWorkerCommandArgs("batch", "--batch-id", batchID, "--json")...)
 	cmd.Dir = repo
 	configureDetachedCommand(cmd)
 	if err := cmd.Start(); err != nil {

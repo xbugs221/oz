@@ -246,7 +246,7 @@ func startDetachedResumeCommand(repo, runID string) error {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return err
 	}
-	cmd := exec.Command(exe, "resume", "--run-id", runID, "--json")
+	cmd := exec.Command(exe, flowWorkerCommandArgs("resume", "--run-id", runID, "--json")...)
 	cmd.Dir = repo
 	configureDetachedCommand(cmd)
 	if err := cmd.Start(); err != nil {
