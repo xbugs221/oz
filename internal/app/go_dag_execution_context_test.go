@@ -40,6 +40,8 @@ type goDAGContextFakeRunner struct {
 	writeOwnMember      bool
 	writeSiblingMember  bool
 	writeSourceFile     bool
+	stashAndPop         bool
+	stagePath           string
 	captureMalformed    bool
 }
 
@@ -161,9 +163,15 @@ func (r *goDAGContextFakeRunner) SetProgress(progress io.Writer) {
 // Run writes either a subagent artifact or the execution task completion marker.
 func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID string, _ StageOptions) (string, error) {
 	// SUBAGENT_NAME marks helper prompts; main execution prompts update task.md.
-	if name := goDAGContextPromptValue(prompt, "SUBAGENT_NAME"); name != "" {
+	if name := goDAGContextPromptValue(prompt, "SUBAGENT_NAME"); name != "" || strings.HasPrefix(threadID, "subagent-") {
+		if name == "" {
+			name = "retry-helper"
+		}
 		purpose := goDAGContextPromptValue(prompt, "SUBAGENT_PURPOSE")
 		changeName := goDAGContextPromptValue(prompt, "CURRENT_CHANGE")
+		if changeName == "" {
+			changeName = "demo"
+		}
 		body := `{"name":"` + name + `","change_name":"` + changeName + `","purpose":"` + purpose + `","status":"success","summary":"context ready","evidence":["unit-test"]}` + "\n"
 		if r.emitSessionProgress && r.progress != nil {
 			if _, err := fmt.Fprintln(r.progress, "agent session started: tool=codex session=session-from-progress"); err != nil {
@@ -195,6 +203,16 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 				return "", err
 			}
 		}
+		if r.stashAndPop {
+			if err := goDAGContextStashAndPop(repo); err != nil {
+				return "", err
+			}
+		}
+		if r.stagePath != "" {
+			if err := goDAGContextStagePath(repo, r.stagePath); err != nil {
+				return "", err
+			}
+		}
 		if r.capture != nil && r.captureMalformed {
 			r.capture.Append("not a member artifact\n")
 		} else if r.capture != nil {
@@ -208,6 +226,40 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 	r.mainCalls++
 	task := filepath.Join(repo, "docs", "changes", "demo", "task.md")
 	return "executor-thread", os.WriteFile(task, []byte("- [x] task\n"), 0o644)
+}
+
+// goDAGContextStashAndPop simulates helper-side git plumbing that preserves final content.
+func goDAGContextStashAndPop(repo string) error {
+	status := exec.Command("git", "-c", "core.quotePath=false", "status", "--porcelain")
+	status.Dir = repo
+	out, err := status.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git status before stash failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		return nil
+	}
+	push := exec.Command("git", "stash", "push", "-u", "-m", "subagent-boundary-test")
+	push.Dir = repo
+	if out, err := push.CombinedOutput(); err != nil {
+		return fmt.Errorf("git stash push failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	pop := exec.Command("git", "stash", "pop")
+	pop.Dir = repo
+	if out, err := pop.CombinedOutput(); err != nil {
+		return fmt.Errorf("git stash pop failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// goDAGContextStagePath simulates index-only helper activity over unchanged worktree content.
+func goDAGContextStagePath(repo, path string) error {
+	cmd := exec.Command("git", "add", "--", path)
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add %s failed: %w: %s", path, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // TestSubagentMalformedArtifactBecomesAdvisoryInput keeps helper delivery failures from blocking QA.
@@ -327,6 +379,91 @@ func TestSubagentBoundaryRevertsSourceWrite(t *testing.T) {
 	}
 	if !goDAGContextEvidenceContains(member.Evidence, "boundary reverted: rogue-subagent-write.txt") {
 		t.Fatalf("member evidence = %#v, want reverted source path", member.Evidence)
+	}
+}
+
+// TestSubagentBoundaryAllowsContentPreservingGitPlumbing permits stash/pop when final changes match.
+func TestSubagentBoundaryAllowsContentPreservingGitPlumbing(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "content-preserving-git-plumbing-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	beforeContent, err := gitChangeContentSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeOwnMember: true, stashAndPop: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
+	}
+	afterContent, err := gitChangeContentSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterContent != beforeContent {
+		t.Fatalf("git content snapshot changed after stash/pop\nbefore:\n%s\nafter:\n%s", beforeContent, afterContent)
+	}
+	artifact := memberArtifactPath(repo, runID, "implementation_context", 0, "代码库侦察员")
+	if !fileExists(artifact) {
+		t.Fatalf("member artifact %s was not preserved", artifact)
+	}
+}
+
+// TestSubagentBoundaryRefreshesBaselineAfterIndexOnlyChurn prevents a later manual guard false positive.
+func TestSubagentBoundaryRefreshesBaselineAfterIndexOnlyChurn(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\nhelper context\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runID := "index-only-git-plumbing-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	beforeContent, err := gitChangeContentSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{writeOwnMember: true, stagePath: "README.md"}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+	node := WorkflowNode{ID: "implementation_context_1", Type: "subagent", Group: "before_execution", Stage: "execution", Member: "代码库侦察员"}
+
+	if err := engine.runGoDAGNode(context.Background(), runID, node); err != nil {
+		t.Fatal(err)
+	}
+	afterContent, err := gitChangeContentSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterContent != beforeContent {
+		t.Fatalf("git content snapshot changed after index-only churn\nbefore:\n%s\nafter:\n%s", beforeContent, afterContent)
+	}
+	_, currentDiff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest.BaselineDiff != currentDiff {
+		t.Fatalf("baseline diff was not refreshed\nstate:\n%s\ncurrent:\n%s", latest.BaselineDiff, currentDiff)
+	}
+	if err := engine.detectManualIntervention(&latest); err != nil {
+		t.Fatalf("manual intervention guard should accept refreshed index-only baseline: %v", err)
 	}
 }
 

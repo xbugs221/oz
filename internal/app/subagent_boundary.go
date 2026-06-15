@@ -2,10 +2,8 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,22 +16,19 @@ type subagentBoundaryRepair struct {
 }
 
 // checkSubagentReadOnlyBoundary reverts illegal yolo-helper writes while preserving the member artifact.
-func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff string, beforeRunFiles map[string]string, beforeState State, sessionKey string) (subagentBoundaryRepair, error) {
-	afterHead, afterDiff, err := gitSnapshot(e.Repo)
+func (e *Engine) checkSubagentReadOnlyBoundary(state State, member ParallelMemberConfig, attempt int, artifactPath, beforeHead, beforeDiff, beforeContent string, beforeRunFiles map[string]string) (subagentBoundaryRepair, error) {
+	afterContent, err := gitChangeContentSnapshot(e.Repo)
 	if err != nil {
 		return subagentBoundaryRepair{}, err
 	}
-	runGuard, err := classifyRunArtifactChanges(runDir(e.Repo, state.RunID), beforeRunFiles, filepath.Dir(artifactPath), beforeState, sessionKey)
+	runGuard, err := classifyRunArtifactChanges(runDir(e.Repo, state.RunID), beforeRunFiles, filepath.Dir(artifactPath))
 	if err != nil {
 		return subagentBoundaryRepair{}, e.failNodeState(state, err)
 	}
-	if beforeHead == afterHead && beforeDiff == afterDiff && !runGuard.Blocked {
+	if beforeContent == afterContent && !runGuard.Blocked {
 		return subagentBoundaryRepair{}, nil
 	}
-	guard, err := classifyGitSnapshotChangeWithAllowed(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff, []string{filepath.Dir(artifactPath)})
-	if err != nil {
-		return subagentBoundaryRepair{}, e.failNodeState(state, err)
-	}
+	guard := classifyGitContentSnapshotChange(e.Repo, beforeContent, afterContent, []string{filepath.Dir(artifactPath)})
 	if guard.Blocked || runGuard.Blocked {
 		repair, repairErr := e.revertSubagentBoundaryChanges(state, beforeHead, beforeDiff, beforeRunFiles, guard, runGuard)
 		if repairErr != nil {
@@ -212,8 +207,8 @@ func runArtifactFileSnapshot(root string) (map[string]string, error) {
 	return files, nil
 }
 
-// classifyRunArtifactChanges blocks run-local writes outside subagent-owned artifact/progress paths.
-func classifyRunArtifactChanges(root string, before map[string]string, allowedDir string, beforeState State, sessionKey string) (runArtifactGuard, error) {
+// classifyRunArtifactChanges blocks run-local writes outside subagent-owned artifacts.
+func classifyRunArtifactChanges(root string, before map[string]string, allowedDir string) (runArtifactGuard, error) {
 	after, err := runArtifactFileSnapshot(root)
 	if err != nil {
 		return runArtifactGuard{}, err
@@ -232,13 +227,9 @@ func classifyRunArtifactChanges(root string, before map[string]string, allowedDi
 			continue
 		}
 		if path == "state.json" {
-			ok, err := stateJSONOnlySubagentProgressChange(root, beforeState, sessionKey)
-			if err != nil {
-				return runArtifactGuard{}, err
-			}
-			if ok {
-				continue
-			}
+			// state.json is owned by the workflow engine; concurrent progress persistence
+			// must not be attributed to a read-only helper process.
+			continue
 		}
 		blocked = append(blocked, path)
 	}
@@ -257,124 +248,6 @@ func isWritableParallelMemberArtifact(path string, after map[string]string) bool
 	return parts[len(parts)-1] == "member.json" && strings.HasSuffix(parts[len(parts)-2], ".artifact")
 }
 
-// stateJSONOnlySubagentProgressChange allows framework-owned subagent progress persistence.
-func stateJSONOnlySubagentProgressChange(root string, before State, sessionKey string) (bool, error) {
-	if strings.TrimSpace(sessionKey) == "" {
-		return false, nil
-	}
-	data, err := os.ReadFile(filepath.Join(root, "state.json"))
-	if err != nil {
-		return false, err
-	}
-	var after State
-	if err := json.Unmarshal(data, &after); err != nil {
-		return false, err
-	}
-	if after.Sessions == nil {
-		return false, nil
-	}
-	if !subagentSessionChangesAllowed(before.Sessions, after.Sessions) {
-		return false, nil
-	}
-	if !subagentDAGNodeChangesAllowed(before.Workflow, before.DAGNodes, after.DAGNodes) {
-		return false, nil
-	}
-	normalized := after
-	normalized.Sessions = copyStringMap(before.Sessions)
-	normalized.DAGNodes = copyDAGNodeMap(before.DAGNodes)
-	normalized.Processes = append([]ProcessState(nil), before.Processes...)
-	beforeData, err := json.Marshal(before)
-	if err != nil {
-		return false, err
-	}
-	normalizedData, err := json.Marshal(normalized)
-	if err != nil {
-		return false, err
-	}
-	return bytes.Equal(beforeData, normalizedData), nil
-}
-
-// copyStringMap duplicates state maps before normalizing allowed deltas.
-func copyStringMap(values map[string]string) map[string]string {
-	if values == nil {
-		return nil
-	}
-	copied := make(map[string]string, len(values))
-	for key, value := range values {
-		copied[key] = value
-	}
-	return copied
-}
-
-// copyDAGNodeMap duplicates DAG node state before normalizing framework progress deltas.
-func copyDAGNodeMap(values map[string]DAGNodeState) map[string]DAGNodeState {
-	if values == nil {
-		return nil
-	}
-	copied := make(map[string]DAGNodeState, len(values))
-	for key, value := range values {
-		copied[key] = value
-	}
-	return copied
-}
-
-// subagentSessionChangesAllowed limits state.json deltas to subagent session additions or updates.
-func subagentSessionChangesAllowed(before, after map[string]string) bool {
-	for key, value := range before {
-		if after[key] != value {
-			return false
-		}
-	}
-	for key, value := range after {
-		if before != nil && before[key] == value {
-			continue
-		}
-		if value == "" || !isSubagentSessionKey(key) {
-			return false
-		}
-	}
-	return true
-}
-
-// isSubagentSessionKey reports whether a persisted session belongs to a helper member.
-func isSubagentSessionKey(key string) bool {
-	_, role, ok := strings.Cut(key, ":")
-	return ok && strings.HasPrefix(role, "subagent:")
-}
-
-// subagentDAGNodeChangesAllowed limits state.json DAG progress deltas to configured subagent nodes.
-func subagentDAGNodeChangesAllowed(workflow WorkflowConfig, before, after map[string]DAGNodeState) bool {
-	for key, value := range before {
-		afterValue, ok := after[key]
-		if !ok {
-			return false
-		}
-		if afterValue != value && !workflowSubagentNodeID(workflow, key) {
-			return false
-		}
-	}
-	for key := range after {
-		if _, ok := before[key]; ok {
-			continue
-		}
-		if !workflowSubagentNodeID(workflow, key) {
-			return false
-		}
-	}
-	return true
-}
-
-// workflowSubagentNodeID reports whether a DAG node id belongs to a configured helper member.
-func workflowSubagentNodeID(workflow WorkflowConfig, id string) bool {
-	spec := BuildWorkflowSpec("", workflow)
-	for _, node := range spec.Nodes {
-		if node.ID == id && node.Type == "subagent" {
-			return true
-		}
-	}
-	return false
-}
-
 // changedRunArtifactPaths returns files whose content appeared, disappeared, or changed.
 func changedRunArtifactPaths(before, after map[string]string) []string {
 	seen := map[string]bool{}
@@ -391,82 +264,6 @@ func changedRunArtifactPaths(before, after map[string]string) []string {
 		}
 	}
 	return uniqueSortedPaths(changed)
-}
-
-func readOnlyBoundaryDetail(beforeHead, beforeDiff, afterHead, afterDiff string) string {
-	var parts []string
-	if beforeHead != afterHead {
-		parts = append(parts, fmt.Sprintf("HEAD %s -> %s", shortCommit(beforeHead), shortCommit(afterHead)))
-	}
-	if diff := statusDeltaSummary(beforeDiff, afterDiff); diff != "" {
-		parts = append(parts, diff)
-	}
-	if len(parts) == 0 {
-		return "worktree changed"
-	}
-	return strings.Join(parts, "；")
-}
-
-// statusDeltaSummary returns added and removed porcelain status lines.
-func statusDeltaSummary(before, after string) string {
-	added, removed := statusDelta(before, after)
-	var parts []string
-	if len(added) > 0 {
-		parts = append(parts, "新增/变更："+strings.Join(limitStatusLines(added), " | "))
-	}
-	if len(removed) > 0 {
-		parts = append(parts, "消失："+strings.Join(limitStatusLines(removed), " | "))
-	}
-	return strings.Join(parts, "；")
-}
-
-// statusDelta compares git porcelain status strings while preserving display order.
-func statusDelta(before, after string) ([]string, []string) {
-	beforeLines := statusLines(before)
-	afterLines := statusLines(after)
-	beforeSet := map[string]bool{}
-	for _, line := range beforeLines {
-		beforeSet[line] = true
-	}
-	afterSet := map[string]bool{}
-	for _, line := range afterLines {
-		afterSet[line] = true
-	}
-	var added []string
-	for _, line := range afterLines {
-		if !beforeSet[line] {
-			added = append(added, line)
-		}
-	}
-	var removed []string
-	for _, line := range beforeLines {
-		if !afterSet[line] {
-			removed = append(removed, line)
-		}
-	}
-	return added, removed
-}
-
-// statusLines splits a porcelain status snapshot into non-empty lines.
-func statusLines(status string) []string {
-	var lines []string
-	for _, line := range strings.Split(status, "\n") {
-		if strings.TrimSpace(line) != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines
-}
-
-// limitStatusLines caps diagnostics so workflow errors stay readable.
-func limitStatusLines(lines []string) []string {
-	const maxLines = 8
-	if len(lines) <= maxLines {
-		return lines
-	}
-	limited := append([]string{}, lines[:maxLines]...)
-	limited = append(limited, fmt.Sprintf("... 还有 %d 项", len(lines)-maxLines))
-	return limited
 }
 
 // shortCommit returns a readable prefix for full git commit ids.

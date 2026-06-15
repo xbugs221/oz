@@ -128,7 +128,7 @@
 - **则** 当前 run 不得中止
 - **且** 系统必须更新当前 run 的 git baseline，避免同一新增需求在后续阶段重复报错
 - **但** 当前 change、源码和配置变化仍必须中止或阻断当前 run
-- **且** subagent 仍保持只读写保护，不能写入当前 run 相关路径、源码、配置或测试文件
+- **且** subagent 仍保持只读写保护：从 subagent 会话开始到结束，仓库实际 git change 内容必须保持不变；`git stash/pop` 等中间操作、index/hash/status 抖动或引擎维护的 `state.json` 进度写入不应单独触发越界
 
 #### 场景：提案验收合同先行
 
@@ -445,7 +445,8 @@
 - **则** `oz flow` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE`、`ARTIFACT_DIR` 和 `ARTIFACT_PATH`
 - **且** prompt 必须要求 subagent 先读取当前 run 的 `state.json`、当前 `docs/changes/<change>` 和当前 `acceptance.json`，不得自行把其它活动提案作为当前目标
 - **且** member artifact 路径必须是 `parallel-members/<group>/<iteration>/<member-slug>.artifact/member.json`；非迭代 group 可省略 `<iteration>` 层
-- **且** subagent 必须只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact，不能修改源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact
+- **且** subagent 必须只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact；会话结束时不得留下源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact 的实际内容变化
+- **且** subagent 可以执行 `git stash/pop` 等临时 git 操作，但 guard 只应以会话前后实际 git change 内容是否一致作为越界依据；index/hash/status 抖动或引擎维护的 `state.json` 进度写入不得被单独判为越界
 - **且** prompt 必须提供 `oz flow validate-member-artifact --artifact "$ARTIFACT_PATH" --group <group> --member <member> --change <change-name>` 自校验命令
 - **且** 单成员 JSON 顶层只允许 `name`、`change_name`、`purpose`、`status`、`summary`、`evidence`、`findings`、`required`
 - **且** `change_name` 必须等于当前 run 的 `state.change_name`，否则必须按 artifact 格式错误重试或失败

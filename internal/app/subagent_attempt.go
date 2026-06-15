@@ -71,11 +71,11 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 		if err != nil {
 			return subagentAttemptsResult{}, err
 		}
-		attemptRunFiles, err := runArtifactFileSnapshot(runDir(e.Repo, request.State.RunID))
+		attemptContent, err := gitChangeContentSnapshot(e.Repo)
 		if err != nil {
-			return subagentAttemptsResult{}, e.failNodeState(request.State, err)
+			return subagentAttemptsResult{}, err
 		}
-		attemptState, err := loadState(e.Repo, request.State.RunID)
+		attemptRunFiles, err := runArtifactFileSnapshot(runDir(e.Repo, request.State.RunID))
 		if err != nil {
 			return subagentAttemptsResult{}, e.failNodeState(request.State, err)
 		}
@@ -95,7 +95,7 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			AttemptContext: request.Context,
 		})
 		sessionID = attemptResult.SessionID
-		attemptRepair, boundaryErr := e.checkSubagentReadOnlyBoundary(request.State, request.Member, attempt, request.ArtifactPath, attemptHead, attemptDiff, attemptRunFiles, attemptState, request.SessionKey)
+		attemptRepair, boundaryErr := e.checkSubagentReadOnlyBoundary(request.State, request.Member, attempt, request.ArtifactPath, attemptHead, attemptDiff, attemptContent, attemptRunFiles)
 		boundaryRepair.Reverted = append(boundaryRepair.Reverted, attemptRepair.Reverted...)
 		if boundaryErr != nil {
 			return subagentAttemptsResult{}, boundaryErr

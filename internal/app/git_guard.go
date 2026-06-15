@@ -3,7 +3,10 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -70,7 +73,7 @@ func filterRuntimeStatus(status string) string {
 			continue
 		}
 		path := strings.TrimSpace(line[3:])
-		if path == ".wo" || strings.HasPrefix(path, ".wo/") || path == "test-results" || strings.HasPrefix(path, "test-results/") {
+		if isRuntimeGitPath(path) {
 			continue
 		}
 		kept = append(kept, line)
@@ -122,6 +125,173 @@ func classifyGitSnapshotChangeWithAllowed(repo, changeName, beforeHead, beforeDi
 	return gitSnapshotGuard{Blocked: len(blocked) > 0, Paths: blocked, Allowed: allowed}, nil
 }
 
+// gitChangeContentSnapshot captures the actual repository change content, ignoring index-only churn.
+func gitChangeContentSnapshot(repo string) (string, error) {
+	gitPath, err := resolveCommand("git")
+	if err != nil {
+		return "", err
+	}
+	diffCmd := commandContext(
+		context.Background(),
+		gitPath,
+		"-c", "core.quotePath=false",
+		"diff", "--no-ext-diff", "--binary", "HEAD", "--",
+		".",
+		":(exclude).wo",
+		":(exclude).wo/**",
+		":(exclude)test-results",
+		":(exclude)test-results/**",
+	)
+	diffCmd.Dir = repo
+	diff, err := diffCmd.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(diff))
+		if detail != "" {
+			return "", fmt.Errorf("git diff HEAD 失败：%s", detail)
+		}
+		return "", err
+	}
+	untracked, err := untrackedContentSnapshot(repo, gitPath)
+	if err != nil {
+		return "", err
+	}
+	if len(untracked) == 0 {
+		return string(diff), nil
+	}
+	return string(diff) + "\n-- oz untracked content --\n" + strings.Join(untracked, "\n"), nil
+}
+
+// classifyGitContentSnapshotChange reports paths whose actual repository change content changed.
+func classifyGitContentSnapshotChange(repo, before, after string, allowedDirs []string) gitSnapshotGuard {
+	paths := gitContentSnapshotChangedPaths(before, after)
+	allowedPrefixes := gitRelativeAllowedPrefixes(repo, allowedDirs)
+	var blocked []string
+	var allowed []string
+	for _, path := range uniqueSortedPaths(paths) {
+		if isAllowedGitPath(path, allowedPrefixes) {
+			allowed = append(allowed, path)
+			continue
+		}
+		blocked = append(blocked, path)
+	}
+	if len(blocked) == 0 && before != after && len(paths) == 0 {
+		return gitSnapshotGuard{Blocked: true}
+	}
+	return gitSnapshotGuard{Blocked: len(blocked) > 0, Paths: blocked, Allowed: allowed}
+}
+
+// untrackedContentSnapshot records untracked file contents without considering generated runtime paths.
+func untrackedContentSnapshot(repo, gitPath string) ([]string, error) {
+	cmd := commandContext(context.Background(), gitPath, "-c", "core.quotePath=false", "ls-files", "-z", "--others", "--exclude-standard", "--", ".")
+	cmd.Dir = repo
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(out))
+		if detail != "" {
+			return nil, fmt.Errorf("git ls-files --others 失败：%s", detail)
+		}
+		return nil, err
+	}
+	var entries []string
+	for _, rawPath := range strings.Split(string(out), "\x00") {
+		path := filepath.ToSlash(strings.TrimSpace(rawPath))
+		if path == "" || isRuntimeGitPath(path) {
+			continue
+		}
+		full := filepath.Join(repo, filepath.FromSlash(path))
+		info, err := os.Lstat(full)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if info.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(full)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(data)
+		entries = append(entries, fmt.Sprintf("UNTRACKED\t%s\t%d:%s", path, len(data), hex.EncodeToString(sum[:])))
+	}
+	sort.Strings(entries)
+	return entries, nil
+}
+
+// gitContentSnapshotChangedPaths extracts affected paths from two content snapshots.
+func gitContentSnapshotChangedPaths(before, after string) []string {
+	beforePaths := gitContentSnapshotPathMap(before)
+	afterPaths := gitContentSnapshotPathMap(after)
+	seen := map[string]bool{}
+	var paths []string
+	for path, beforeValue := range beforePaths {
+		seen[path] = true
+		if afterPaths[path] != beforeValue {
+			paths = append(paths, path)
+		}
+	}
+	for path, afterValue := range afterPaths {
+		if seen[path] {
+			continue
+		}
+		if beforePaths[path] != afterValue {
+			paths = append(paths, path)
+		}
+	}
+	return uniqueSortedPaths(paths)
+}
+
+// gitContentSnapshotPathMap indexes each path by its content-bearing snapshot lines.
+func gitContentSnapshotPathMap(snapshot string) map[string]string {
+	paths := map[string][]string{}
+	var current string
+	for _, line := range strings.Split(snapshot, "\n") {
+		if path, ok := diffGitLinePath(line); ok {
+			current = path
+			paths[current] = append(paths[current], line)
+			continue
+		}
+		if strings.HasPrefix(line, "UNTRACKED\t") {
+			fields := strings.SplitN(line, "\t", 3)
+			if len(fields) >= 2 {
+				path := filepath.ToSlash(fields[1])
+				paths[path] = append(paths[path], line)
+			}
+			current = ""
+			continue
+		}
+		if current != "" {
+			paths[current] = append(paths[current], line)
+		}
+	}
+	out := map[string]string{}
+	for path, lines := range paths {
+		out[path] = strings.Join(lines, "\n")
+	}
+	return out
+}
+
+// diffGitLinePath extracts the destination path from a git diff header.
+func diffGitLinePath(line string) (string, bool) {
+	const prefix = "diff --git "
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(line, prefix)
+	marker := " b/"
+	idx := strings.LastIndex(rest, marker)
+	if idx < 0 {
+		return "", false
+	}
+	path := strings.TrimSpace(rest[idx+len(marker):])
+	if path == "/dev/null" || path == "" {
+		return "", false
+	}
+	return filepath.ToSlash(path), true
+}
+
 // gitRelativeAllowedPrefixes converts absolute artifact directories to git status path prefixes.
 func gitRelativeAllowedPrefixes(repo string, dirs []string) []string {
 	var prefixes []string
@@ -140,6 +310,12 @@ func gitRelativeAllowedPrefixes(repo string, dirs []string) []string {
 		}
 	}
 	return prefixes
+}
+
+// isRuntimeGitPath reports paths owned by workflow/test runtime output.
+func isRuntimeGitPath(path string) bool {
+	path = strings.TrimPrefix(filepath.ToSlash(path), "./")
+	return path == ".wo" || strings.HasPrefix(path, ".wo/") || path == "test-results" || strings.HasPrefix(path, "test-results/")
 }
 
 // isAllowedGitPath checks whether a changed file is inside the current member artifact directory.

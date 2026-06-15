@@ -38,7 +38,7 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 		return e.failNodeState(state, err)
 	}
 	artifactPath := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
-	beforeHead, beforeDiff, err := gitSnapshot(e.Repo)
+	beforeContent, err := gitChangeContentSnapshot(e.Repo)
 	if err != nil {
 		return err
 	}
@@ -79,30 +79,29 @@ func (e *Engine) nodeRunSubagent(ctx context.Context, state State, args []string
 	if err := writeMemberArtifact(artifactPath, result); err != nil {
 		return e.failNodeState(state, err)
 	}
-	afterHead, afterDiff, err := gitSnapshot(e.Repo)
+	afterContent, err := gitChangeContentSnapshot(e.Repo)
 	if err != nil {
 		return err
 	}
-	if beforeHead != afterHead || beforeDiff != afterDiff {
-		guard, err := classifyGitSnapshotChangeWithAllowed(e.Repo, state.ChangeName, beforeHead, beforeDiff, afterHead, afterDiff, []string{filepath.Dir(artifactPath)})
-		if err != nil {
-			return e.failNodeState(state, err)
-		}
+	if beforeContent != afterContent {
+		guard := classifyGitContentSnapshotChange(e.Repo, beforeContent, afterContent, []string{filepath.Dir(artifactPath)})
 		if guard.Blocked {
-			return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到当前 run 相关路径或源码变化（%s），artifact=%s", guard.Detail(), artifactPath))
+			return e.failNodeState(state, fmt.Errorf("subagent 只读边界被破坏：检测到当前 run 相关路径实际内容变化（%s），artifact=%s", guard.Detail(), artifactPath))
 		}
 	}
-	if sessionID != "" {
-		if state.Sessions == nil {
-			state.Sessions = map[string]string{}
-		}
-		state.Sessions[sessionKey] = sessionID
-		if err := mergeSubagentSessionState(e.Repo, state.RunID, func(latest *State) {
+	baselineHead, baselineDiff, err := gitSnapshot(e.Repo)
+	if err != nil {
+		return err
+	}
+	if err := mergeSubagentSessionState(e.Repo, state.RunID, func(latest *State) {
+		latest.BaselineHead = baselineHead
+		latest.BaselineDiff = baselineDiff
+		if sessionID != "" {
 			latest.Sessions[sessionKey] = sessionID
-		}); err != nil {
-			warnWorkflowWrite("record subagent session", err)
-			return e.failNodeState(state, fmt.Errorf("record subagent session: %w", err))
 		}
+	}); err != nil {
+		warnWorkflowWrite("record subagent state", err)
+		return e.failNodeState(state, fmt.Errorf("record subagent state: %w", err))
 	}
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage, Group: groupName, Member: memberName, Artifact: artifactPath})
 }
