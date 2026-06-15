@@ -196,7 +196,7 @@ func hasExactCompactLine(output string, want string) bool {
 // saveMultiroundStatusResult 保存 compact lines，作为 acceptance runtime log 的可复查证据。
 func saveMultiroundStatusResult(t *testing.T, text string) {
 	t.Helper()
-	resultDir := os.Getenv("WO_STATUS_MULTIRUN_RESULT_DIR")
+	resultDir := os.Getenv("OZ_STATUS_MULTIRUN_RESULT_DIR")
 	if resultDir == "" {
 		return
 	}

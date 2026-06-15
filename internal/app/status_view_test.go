@@ -291,7 +291,6 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 	var payload struct {
 		Observability struct {
 			DisplayID string `json:"display_id"`
-			Engine    string `json:"engine"`
 			Rows      []struct {
 				Kind   string `json:"kind"`
 				Name   string `json:"name"`
@@ -302,8 +301,11 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Observability.DisplayID != "w1" || payload.Observability.Engine != "go-dag" {
+	if payload.Observability.DisplayID != "w1" {
 		t.Fatalf("unexpected observability identity: %#v", payload.Observability)
+	}
+	if bytes.Contains(data, []byte(`"engine"`)) {
+		t.Fatalf("observability must not expose internal engine: %s", data)
 	}
 	for _, row := range payload.Observability.Rows {
 		if row.Kind == "stage" && row.Name == "执行阶段" && row.Marker == "→" {

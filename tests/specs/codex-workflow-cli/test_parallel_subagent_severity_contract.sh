@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 parallel subagent 写出 severity=info 时会被归一化为 minor，不会中断 go-dag workflow。
+# 文件功能目的：验证 parallel subagent 写出 severity=info 时会被归一化为 minor，不会中断 内嵌工作流 workflow。
 # Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同
 set -euo pipefail
 
@@ -27,9 +27,9 @@ trap cleanup EXIT
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
-WO_BIN="$TMP/wo"
+OZ_BIN="$TMP/wo"
 note "build real oz flow binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
+(cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
@@ -319,7 +319,7 @@ PI_PROMPT_LOG="$RESULT_DIR/pi-prompts.jsonl" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" flow run --change "1-parallel-info-severity" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-parallel-info-severity" --json' _ "$PROJECT" "$OZ_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
 run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/contract.log"

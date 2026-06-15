@@ -151,9 +151,9 @@ func (e *Engine) runSubagentAttempt(request subagentAttemptRequest) subagentAtte
 	}
 	sessionID, err := runner.Run(attemptCtx, e.Repo, prompt, sessionID, request.Options)
 	if attemptCtx.Err() == context.DeadlineExceeded {
-		err = fmt.Errorf("%w: subagent %s 第 %d 次执行超过 %s，可由 go-dag 重试", errGoDAGRetryableNode, request.Member.Name, request.Attempt, subagentAttemptTimeout)
+		err = fmt.Errorf("%w: subagent %s 第 %d 次执行超过 %s，可由系统重试", errGoDAGRetryableNode, request.Member.Name, request.Attempt, subagentAttemptTimeout)
 	} else if err != nil {
-		err = fmt.Errorf("%w: subagent %s 第 %d 次执行失败，可由 go-dag 重试：%v", errGoDAGRetryableNode, request.Member.Name, request.Attempt, err)
+		err = fmt.Errorf("%w: subagent %s 第 %d 次执行失败，可由系统重试：%v", errGoDAGRetryableNode, request.Member.Name, request.Attempt, err)
 	}
 	return subagentAttemptResult{SessionID: sessionID, Capture: capture, Err: err}
 }

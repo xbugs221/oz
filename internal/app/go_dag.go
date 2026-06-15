@@ -24,7 +24,7 @@ func (e *Engine) StartGoDAGJSON(ctx context.Context, changeName string, stdout i
 		return err
 	}
 	flushWriter(stdout)
-	if state.Engine != "go-dag" {
+	if !stateUsesGoDAG(state) {
 		return e.run(ctx, state)
 	}
 	if err := e.runGoDAG(ctx, state); err != nil {
@@ -80,14 +80,14 @@ func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
 			}
 		}
 		if len(ready) == 0 {
-			return fmt.Errorf("go-dag workflow has unresolved dependencies")
+			return fmt.Errorf("workflow has unresolved dependencies")
 		}
 		results := e.runGoDAGReadyNodes(ctx, state.RunID, ready)
 		for result := range results {
 			if errors.Is(result.err, errGoDAGValidationRetry) {
 				retries[result.nodeID]++
 				if retries[result.nodeID] >= maxRetries {
-					return fmt.Errorf("go-dag node %s validation retry limit reached", result.nodeID)
+					return fmt.Errorf("workflow node %s validation retry limit reached", result.nodeID)
 				}
 				continue
 			}

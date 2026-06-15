@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# 文件目的：验证默认配置、DAG 图和人类 status 都能清晰表达 go-dag 与并行 subagents。
-# Sources: 3-默认启用-纯go-dag并行subagents
+# 文件目的：验证默认配置、DAG 图和人类 status 都能清晰表达 内嵌工作流 与并行 subagents。
+# Sources: 3-默认启用-纯内嵌工作流并行subagents
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-log_dir="$repo_root/test-results/go-dag"
+log_dir="$repo_root/test-results/workflow"
 mkdir -p "$log_dir"
-log="$log_dir/go-dag-graph-status-contract.log"
+log="$log_dir/内嵌工作流-graph-status-contract.log"
 : >"$log"
 
 note() { printf '%s
@@ -30,7 +30,7 @@ printf 'initial
 git -C "$project" add README.md
 git -C "$project" commit -q -m initial
 
-note "oz flow config 应生成默认 go-dag 与 parallel enabled 配置"
+note "oz flow config 应生成默认工作流 与 parallel enabled 配置"
 (cd "$project" && "$wo" flow config) >"$tmp/config.out"
 cat "$tmp/config.out" >>"$log"
 cat "$project/oz-flow.yaml" >>"$log"

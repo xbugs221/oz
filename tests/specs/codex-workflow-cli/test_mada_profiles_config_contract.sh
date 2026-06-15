@@ -47,7 +47,7 @@ assert_contains() {
 }
 
 assert_profile_config() {
-  local wo_bin="$1"
+  local oz_bin="$1"
   local profile="$2"
   local repo
   repo="$(new_repo "$profile")"
@@ -60,7 +60,7 @@ assert_profile_config() {
   note "运行 oz flow config --profile $profile"
   (
     cd "$repo"
-    "$wo_bin" config --profile "$profile"
+    "$oz_bin" config --profile "$profile"
   ) 2>&1 | tee -a "$log"
 
   local yaml="$repo/oz-flow.yaml"
@@ -78,14 +78,14 @@ assert_profile_config() {
   pi_agent_count="$(grep -c '^        agent: pi$' "$yaml" || true)"
   [[ "$member_count" -gt 0 ]] || fail "$profile oz-flow.yaml 缺少 subagent members"
   [[ "$pi_agent_count" -eq "$member_count" ]] || fail "$profile oz-flow.yaml 必须为每个 subagent member 显式写 agent: pi，当前 $pi_agent_count/$member_count"
-  if grep -Eq '^[[:space:]]+agent: legacy-agent$' "$yaml"; then
-    fail "$profile oz-flow.yaml 不应包含 legacy-agent subagent"
+  if grep -Eq '^[[:space:]]+agent: pi$' "$yaml"; then
+    fail "$profile oz-flow.yaml 不应包含 pi subagent"
   fi
 
   note "运行 oz flow graph 验证 $profile 可加载"
   (
     cd "$repo"
-    "$wo_bin" flow graph --change "11-${profile}-演示" --format json
+    "$oz_bin" flow graph --change "11-${profile}-演示" --format json
   ) >"$repo/graph.json" 2>>"$log"
 
   assert_contains "$repo/graph.json" '"type": "subagent"'
@@ -93,12 +93,12 @@ assert_profile_config() {
   assert_contains "$repo/graph.json" "implementation_context"
 }
 
-wo_bin="$tmpdir/wo"
-note "构建真实 oz flow 二进制: $wo_bin"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
+oz_bin="$tmpdir/wo"
+note "构建真实 oz flow 二进制: $oz_bin"
+go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 for profile in mada-code mada-decision mada-research; do
-  assert_profile_config "$wo_bin" "$profile"
+  assert_profile_config "$oz_bin" "$profile"
 done
 
 decision_repo="$tmpdir/mada-decision"

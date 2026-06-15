@@ -36,13 +36,13 @@ tmpdir="$(mktemp -d)"
 
 export XDG_STATE_HOME="$tmpdir/state"
 tty_repo="$tmpdir/repo"
-wo_bin="$tmpdir/wo"
+oz_bin="$tmpdir/wo"
 raw_capture="$result_dir/watch-tty.raw"
 screen_capture="$result_dir/watch-tty-screen.txt"
 long_change="9-这是一个非常非常长的中文提案名称用于触发窄终端自动换行并验证watch不会残留旧首行"
 
 note "构建真实 oz flow 二进制并创建窄 TTY watch 场景"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
+go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 mkdir -p "$tty_repo"
 cd "$tty_repo"
 git init >/dev/null
@@ -75,7 +75,7 @@ def write_json(path, payload):
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 workflow = {
-    "engine": "go-dag",
+    "engine": "内嵌工作流",
     "max_review_iterations": 1,
     "stages": {},
     "prompts": {},
@@ -88,7 +88,7 @@ write_json(base / "runs" / run_id / "state.json", {
     "sealed": True,
     "status": "running",
     "stage": "execution",
-    "engine": "go-dag",
+    "engine": "内嵌工作流",
     "sessions": {"codex:executor": "writer-session"},
     "stages": {"planning": "completed"},
     "paths": {},
@@ -104,7 +104,7 @@ write_json(base / "batches" / batch_id / "state.json", {
 PY
 
 note "用 script 分配窄伪 TTY，捕获多个 watch 刷新帧"
-COLUMNS=24 timeout -s INT 3s script -q -c "$wo_bin flow watch" /dev/null >"$raw_capture" 2>/dev/null || true
+COLUMNS=24 timeout -s INT 3s script -q -c "$oz_bin flow watch" /dev/null >"$raw_capture" 2>/dev/null || true
 
 note "解析终端控制序列，还原最终屏幕"
 python3 - "$raw_capture" "$screen_capture" "$long_change" <<'PY' 2>&1 | tee -a "$log"

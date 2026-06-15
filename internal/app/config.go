@@ -31,7 +31,7 @@ type StageOptions struct {
 
 // WorkflowConfig is the effective sealed-run workflow snapshot stored in state.json.
 type WorkflowConfig struct {
-	Engine              string                  `json:"engine,omitempty" yaml:"engine"`
+	Engine              string                  `json:"engine,omitempty" yaml:"-"`
 	MaxReviewIterations int                     `json:"max_review_iterations" yaml:"max_review_iterations"`
 	Stages              map[string]StageOptions `json:"stages" yaml:"stages"`
 	Parallel            ParallelConfig          `json:"parallel,omitempty" yaml:"parallel"`

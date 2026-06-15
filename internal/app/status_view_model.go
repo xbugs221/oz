@@ -14,7 +14,7 @@ type statusView struct {
 	DisplayID      string            `json:"display_id"`
 	Indicator      string            `json:"-"`
 	RunStatus      string            `json:"-"`
-	Engine         string            `json:"engine"`
+	Engine         string            `json:"engine,omitempty"`
 	Rows           []statusViewRow   `json:"rows"`
 	Artifacts      map[string]string `json:"artifacts"`
 	RunArtifactDir string            `json:"-"`
@@ -108,15 +108,9 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 	return view
 }
 
-// statusViewEngine reports the effective workflow engine for JSON observability.
+// statusViewEngine keeps the internal engine out of public JSON observability.
 func statusViewEngine(state State) string {
-	if state.Engine != "" {
-		return state.Engine
-	}
-	if state.Workflow.Engine != "" {
-		return state.Workflow.Engine
-	}
-	return "go-dag"
+	return ""
 }
 
 // statusStageRow builds one main-stage row, aggregating repeated review or QA rounds.

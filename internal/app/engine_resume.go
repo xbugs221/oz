@@ -113,6 +113,7 @@ func (e *Engine) resumeRun(ctx context.Context, runID string, allowUnknownLock b
 		return fmt.Errorf("run %s 缺少 workflow_config 快照", runID)
 	}
 	normalizeWorkflowConfig(&state.Workflow)
+	state.Engine = publicEngineLabel(state.Workflow.Engine)
 	if err := e.Registry.ResolveForWorkflow(state.Workflow); err != nil {
 		return err
 	}
@@ -125,7 +126,7 @@ func (e *Engine) resumeRun(ctx context.Context, runID string, allowUnknownLock b
 		}
 		flushWriter(startupJSON)
 	}
-	if state.Engine == "go-dag" {
+	if stateUsesGoDAG(state) {
 		return e.runGoDAGLocked(ctx, state)
 	}
 	return e.runLoop(ctx, state)

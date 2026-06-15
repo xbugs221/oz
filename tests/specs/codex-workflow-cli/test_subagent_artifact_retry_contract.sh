@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 go-dag subagent 正常退出但 artifact 字段类型错误时会 resume 原会话修正。
+# 文件功能目的：验证 内嵌工作流 subagent 正常退出但 artifact 字段类型错误时会 resume 原会话修正。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-RESULT_DIR="$ROOT/test-results/go-dag/subagent-artifact-retry"
+RESULT_DIR="$ROOT/test-results/workflow/subagent-artifact-retry"
 TMP="$(mktemp -d)"
 
 cleanup() {
@@ -23,10 +23,10 @@ trap cleanup EXIT
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
-WO_BIN="$TMP/wo"
+OZ_BIN="$TMP/wo"
 OZ_BIN="$TMP/oz"
 note "build real oz flow binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
+(cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 (cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
@@ -47,7 +47,7 @@ if not states:
     raise SystemExit("no state.json found")
 state_path = states[-1]
 state = json.loads(state_path.read_text(encoding="utf-8"))
-repo = pathlib.Path(os.environ["WO_TEST_REPO"])
+repo = pathlib.Path(os.environ["OZ_TEST_REPO"])
 run_dir = state_path.parent
 change = state["change_name"]
 stage = state["stage"]
@@ -65,7 +65,7 @@ print(json.dumps({"type": "thread.started", "thread_id": "codex-" + stage}))
 PY
 SH
 chmod +x "$FAKEBIN/codex"
-cp "$FAKEBIN/codex" "$FAKEBIN/legacy-agent"
+cp "$FAKEBIN/codex" "$FAKEBIN/pi"
 cp "$FAKEBIN/codex" "$FAKEBIN/agy"
 
 cat >"$FAKEBIN/pi" <<'SH'
@@ -181,13 +181,13 @@ cat >"$PROJECT/docs/changes/1-子代理artifact重试/proposal.md" <<'MD'
 
 ## 问题
 
-验证 go-dag subagent artifact schema retry。
+验证 内嵌工作流 subagent artifact schema retry。
 MD
 
 cat >"$PROJECT/docs/changes/1-子代理artifact重试/brief.md" <<'MD'
 # subagent artifact retry
 
-验证 go-dag 对 subagent artifact schema 错误执行同会话重试，并在只读边界被破坏时停止。
+验证 内嵌工作流 对 subagent artifact schema 错误执行同会话重试，并在只读边界被破坏时停止。
 MD
 
 cat >"$PROJECT/docs/changes/1-子代理artifact重试/design.md" <<'MD'
@@ -206,7 +206,7 @@ cat >"$PROJECT/docs/changes/1-子代理artifact重试/spec.md" <<'MD'
 #### 场景：同会话修复 artifact
 
 - **当** subagent 首次写出 schema 错误 artifact
-- **则** go-dag 必须复用原 subagent session 重试
+- **则** 内嵌工作流 必须复用原 subagent session 重试
 - **且** 修复后的 fan-in artifact 必须继续推进
 MD
 
@@ -278,20 +278,20 @@ git -C "$PROJECT" commit -q -m initial
 PROJECT_READONLY="$TMP/project-readonly"
 cp -a "$PROJECT" "$PROJECT_READONLY"
 
-note "run default go-dag workflow and expect subagent artifact retry"
+note "run default 内嵌工作流 workflow and expect subagent artifact retry"
 set +e
 PI_PROMPT_LOG="$RESULT_DIR/pi-prompts.log" \
 PI_ATTEMPT_FILE="$TMP/pi-attempts" \
-WO_TEST_REPO="$PROJECT" \
+OZ_TEST_REPO="$PROJECT" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" flow run --change "1-子代理artifact重试" --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-子代理artifact重试" --json' _ "$PROJECT" "$OZ_BIN" >"$RESULT_DIR/run.jsonl" 2>"$RESULT_DIR/run.err"
 run_code=$?
 set -e
 cat "$RESULT_DIR/run.jsonl" >>"$RESULT_DIR/test.log"
 cat "$RESULT_DIR/run.err" >>"$RESULT_DIR/test.log"
-[[ "$run_code" -eq 0 ]] || fail "go-dag run should repair malformed subagent artifact instead of failing"
+[[ "$run_code" -eq 0 ]] || fail "内嵌工作流 run should repair malformed subagent artifact instead of failing"
 
 attempts="$(cat "$TMP/pi-attempts")"
 [[ "$attempts" == "2" ]] || fail "expected exactly toz flow pi subagent attempts, got $attempts"
@@ -322,23 +322,23 @@ if not isinstance(artifact.get("evidence"), list) or not all(isinstance(item, st
 PY
 
 test -s "$run_dir/parallel-planning-context.json" || fail "fanin should continue after repaired member artifact"
-note "contract passed: go-dag subagent artifact schema retry resumes the same session"
+note "contract passed: 内嵌工作流 subagent artifact schema retry resumes the same session"
 
-note "run go-dag workflow and expect boundary repair before artifact retry"
+note "run 内嵌工作流 workflow and expect boundary repair before artifact retry"
 set +e
 PI_PROMPT_LOG="$RESULT_DIR/pi-readonly-prompts.log" \
 PI_ATTEMPT_FILE="$TMP/pi-readonly-attempts" \
 PI_MUTATE_FIRST_FILE="$PROJECT_READONLY/unexpected-source-change.txt" \
-WO_TEST_REPO="$PROJECT_READONLY" \
+OZ_TEST_REPO="$PROJECT_READONLY" \
 XDG_STATE_HOME="$TMP/state-readonly" \
 HOME="$TMP/home-readonly" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" flow run --change "1-子代理artifact重试" --json' _ "$PROJECT_READONLY" "$WO_BIN" >"$RESULT_DIR/readonly-run.jsonl" 2>"$RESULT_DIR/readonly-run.err"
+  bash -c 'cd "$1" && "$2" flow run --change "1-子代理artifact重试" --json' _ "$PROJECT_READONLY" "$OZ_BIN" >"$RESULT_DIR/readonly-run.jsonl" 2>"$RESULT_DIR/readonly-run.err"
 readonly_code=$?
 set -e
 cat "$RESULT_DIR/readonly-run.jsonl" >>"$RESULT_DIR/test.log"
 cat "$RESULT_DIR/readonly-run.err" >>"$RESULT_DIR/test.log"
-[[ "$readonly_code" -eq 0 ]] || fail "go-dag run should revert subagent worktree mutation and continue"
+[[ "$readonly_code" -eq 0 ]] || fail "内嵌工作流 run should revert subagent worktree mutation and continue"
 readonly_attempts="$(cat "$TMP/pi-readonly-attempts")"
 [[ "$readonly_attempts" == "2" ]] || fail "boundary repair should allow schema retry, got $readonly_attempts attempts"
 if git -C "$PROJECT_READONLY" status --porcelain | grep -q 'unexpected-source-change.txt'; then

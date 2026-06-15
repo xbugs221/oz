@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证迁移测试层已收敛，根测试门禁代表当前真实业务合同。
-# Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同, 35-迁移动态gotest合同
+# Sources: 14-精简后端为-codex-pi-并迁移测试, 20-收敛迁移测试合同, 35-迁移动态gotest合同, 36-清理历史垃圾并隐藏内部引擎信息
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -48,6 +48,24 @@ fi
 note "检查 tests/app 或 tests/specs 至少存在一个分组"
 if [[ ! -d "$ROOT/tests/app" && ! -d "$ROOT/tests/specs" ]]; then
   fail "根目录 tests 缺少 app 或 specs 分组"
+fi
+
+note "检查根目录 tests 不再保留 dated legacy shell 测试"
+dated_tests="$(cd "$ROOT" && fd -t f '^2026-.*\.sh$' tests 2>/dev/null || true)"
+if [[ -n "$dated_tests" ]]; then
+  printf '%s\n' "$dated_tests" | tee -a "$LOG"
+  fail "根目录仍存在 dated 历史 shell 测试，应删除或迁移到当前测试层"
+fi
+
+legacy_cli="w""o"
+legacy_env="W""O"
+legacy_pattern="cmd/${legacy_cli}|\\./cmd/${legacy_cli}|${legacy_cli}\\.yaml|(^|/)\\.${legacy_cli}(/|$)|/${legacy_cli}/repos|XDG_STATE_HOME[^[:space:]]*/${legacy_cli}|\\b${legacy_cli} (status|watch|run|clean|config|restart|resume|batch|abort|update|graph|contract|list-changes)\\b|\\b${legacy_env}_TEST_|\\b${legacy_env}_PLANNING|\\b${legacy_env}="
+
+note "检查根测试层不再引用旧命令行产品面"
+root_hits="$(cd "$ROOT" && rg -n --glob '!tests/specs/**' "$legacy_pattern" tests 2>/dev/null || true)"
+if [[ -n "$root_hits" ]]; then
+  printf '%s\n' "$root_hits" | tee -a "$LOG"
+  fail "根测试层仍引用旧命令、配置、状态目录或环境变量"
 fi
 
 note "检查核心真实测试包可单独运行"

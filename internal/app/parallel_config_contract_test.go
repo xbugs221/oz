@@ -103,7 +103,7 @@ func TestParallelPromptExplainsPromptOnlySubagentContract(t *testing.T) {
 			t.Fatalf("execution prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	for _, forbidden := range []string{"--subagent", "--agent", "legacy-agent agent", "pi --subagent"} {
+	for _, forbidden := range []string{"--subagent", "--agent", "old-agent agent", "pi --subagent"} {
 		if strings.Contains(prompt, forbidden) {
 			t.Fatalf("execution prompt should not bind subagent to backend CLI via %q:\n%s", forbidden, prompt)
 		}

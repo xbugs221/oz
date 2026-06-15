@@ -22,11 +22,11 @@ fail() {
   exit 1
 }
 
-wo_bin="$tmp/wo"
+oz_bin="$tmp/wo"
 empty_home="$tmp/empty-home"
 mkdir -p "$empty_home"
 note "构建真实 oz flow binary"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
+go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 init_project() {
   local project="$1"
@@ -50,7 +50,7 @@ run_rejection_case() {
   set +e
   (
     cd "$project"
-    HOME="$empty_home" "$wo_bin" flow graph --change demo --format json
+    HOME="$empty_home" "$oz_bin" flow graph --change demo --format json
   ) >"$tmp/$name.out" 2>"$tmp/$name.err"
   local code=$?
   set -e
@@ -77,7 +77,7 @@ run_global_rejection_case() {
   set +e
   (
     cd "$project"
-    HOME="$home" "$wo_bin" flow graph --change demo --format json
+    HOME="$home" "$oz_bin" flow graph --change demo --format json
   ) >"$tmp/$name.out" 2>"$tmp/$name.err"
   local code=$?
   set -e
@@ -109,7 +109,7 @@ workflow:
 YAML
 
 run_rejection_case "old-engine" "engine" <<'YAML'
-engine: go-dag
+engine: 内嵌工作流
 max_review_iterations: 0
 stages:
   execution:

@@ -45,9 +45,9 @@ assert_text() {
   fi
 }
 
-wo_bin="$tmpdir/wo"
-note "构建真实 oz flow 二进制: $wo_bin"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
+oz_bin="$tmpdir/wo"
+note "构建真实 oz flow 二进制: $oz_bin"
+go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 repo="$(make_repo)"
 list_out="$tmpdir/list-profiles.out"
 bad_out="$tmpdir/bad-profile.out"
@@ -55,7 +55,7 @@ bad_out="$tmpdir/bad-profile.out"
 note "运行 oz flow config --list-profiles"
 (
   cd "$repo"
-  "$wo_bin" config --list-profiles
+  "$oz_bin" config --list-profiles
 ) >"$list_out" 2>&1
 cat "$list_out" | tee -a "$log"
 
@@ -73,7 +73,7 @@ note "运行未知 profile 错误路径"
 set +e
 (
   cd "$repo"
-  "$wo_bin" config --profile not-real
+  "$oz_bin" config --profile not-real
 ) >"$bad_out" 2>&1
 status=$?
 set -e

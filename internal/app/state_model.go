@@ -8,6 +8,8 @@ import (
 )
 
 const (
+	internalGoDAGEngine             = "go-dag"
+	publicWorkflowEngineLabel       = "内嵌工作流"
 	statusRunning                   = "running"
 	statusFailed                    = "failed"
 	statusStale                     = "stale"
@@ -20,6 +22,19 @@ const (
 	statusAcceptanceContractBlocked = "blocked_acceptance_contract"
 	errNoInitialCommit              = "首次 git commit 前不能启动 oz flow run，请创建初始提交后重试"
 )
+
+// publicEngineLabel returns the durable user-facing engine label for run state.
+func publicEngineLabel(internalEngine string) string {
+	if internalEngine == internalGoDAGEngine || internalEngine == "" {
+		return publicWorkflowEngineLabel
+	}
+	return internalEngine
+}
+
+// stateUsesGoDAG reports whether a run should use the built-in DAG scheduler.
+func stateUsesGoDAG(state State) bool {
+	return state.Workflow.Engine == internalGoDAGEngine || state.Workflow.Engine == ""
+}
 
 // State is the durable source of truth for one sealed run.
 type State struct {

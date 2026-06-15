@@ -63,7 +63,7 @@ if not states:
     raise SystemExit("no oz flow state.json found")
 state_path = states[-1]
 state = json.loads(state_path.read_text(encoding="utf-8"))
-repo = pathlib.Path(os.environ["WO_TEST_REPO"])
+repo = pathlib.Path(os.environ["OZ_TEST_REPO"])
 run_dir = state_path.parent
 change = state["change_name"]
 stage = state["stage"]
@@ -169,7 +169,7 @@ JSON
 cat >"$project/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
-    engine: go-dag
+    engine: 内嵌工作流
     max_review_iterations: 0
     stages:
       execution:
@@ -205,7 +205,7 @@ git -C "$project" add .
 git -C "$project" commit -q -m initial
 
 note "运行 oz flow run：task 已完成时不应启动 execution context subagents"
-WO_TEST_REPO="$project" \
+OZ_TEST_REPO="$project" \
 SUBAGENT_MARKER="$subagent_marker" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \

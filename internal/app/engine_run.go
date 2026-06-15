@@ -104,7 +104,7 @@ func (e *Engine) createRun(changeName string) (State, error) {
 		Sealed:       true,
 		Status:       statusRunning,
 		Stage:        "execution",
-		Engine:       workflow.Engine,
+		Engine:       publicEngineLabel(workflow.Engine),
 		BaselineHead: head,
 		BaselineDiff: diff,
 		Sessions:     map[string]string{},
@@ -136,7 +136,7 @@ func (e *Engine) run(ctx context.Context, state State) error {
 	if !hasWorkflowConfig(state) {
 		return fmt.Errorf("run %s 缺少 workflow_config 快照", state.RunID)
 	}
-	if state.Engine != "go-dag" {
+	if !stateUsesGoDAG(state) {
 		unlock, err := acquireLock(e.Repo, state.RunID)
 		if err != nil {
 			return err

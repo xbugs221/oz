@@ -38,11 +38,11 @@ assert_not_regex() {
   fi
 }
 
-wo_bin="$tmp/wo"
+oz_bin="$tmp/wo"
 empty_home="$tmp/empty-home"
 mkdir -p "$empty_home"
 note "构建真实 oz flow binary"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
+go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 project="$tmp/project"
 mkdir -p "$project"
@@ -56,7 +56,7 @@ git -C "$project" commit -qm init
 note "运行 oz flow config，生成默认 oz-flow.yaml"
 (
   cd "$project"
-  HOME="$empty_home" "$wo_bin" config
+  HOME="$empty_home" "$oz_bin" config
 ) >"$result_dir/config.out" 2>"$result_dir/config.err"
 
 cp "$project/oz-flow.yaml" "$generated_yaml"
@@ -108,7 +108,7 @@ disabled_graph="$tmp/graph-disabled.json"
 note "导出 parallel:true graph，验证阶段前置子代理存在"
 (
   cd "$project"
-  HOME="$empty_home" "$wo_bin" flow graph --change demo --format json
+  HOME="$empty_home" "$oz_bin" flow graph --change demo --format json
 ) >"$enabled_graph" 2>"$result_dir/graph-enabled.err"
 
 assert_contains "$enabled_graph" "代码库侦察员"
@@ -140,7 +140,7 @@ YAML
 
 (
   cd "$project"
-  HOME="$empty_home" "$wo_bin" flow graph --change demo --format json
+  HOME="$empty_home" "$oz_bin" flow graph --change demo --format json
 ) >"$disabled_graph" 2>"$result_dir/graph-disabled.err"
 
 assert_contains "$disabled_graph" "execution"

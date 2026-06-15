@@ -23,10 +23,10 @@ fail() {
   exit 1
 }
 
-wo_bin="$tmp/wo"
+oz_bin="$tmp/wo"
 oz_bin="$tmp/oz"
 note "构建真实 wo/oz binary"
-go build -C "$repo_root" -o "$wo_bin" ./cmd/oz 2>&1 | tee -a "$log"
+go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 fakebin="$tmp/fakebin"
@@ -56,7 +56,7 @@ if not states:
     raise SystemExit("no state.json found for fake codex")
 state_path = states[-1]
 state = json.loads(state_path.read_text(encoding="utf-8"))
-repo = pathlib.Path(os.environ["WO_TEST_REPO"])
+repo = pathlib.Path(os.environ["OZ_TEST_REPO"])
 run_dir = state_path.parent
 change = state["change_name"]
 stage = state["stage"]
@@ -341,11 +341,11 @@ git -C "$project" commit -qm init
 
 note "运行 oz flow run，验证 stages.before 子代理默认启动与 relevant:false"
 AGENT_CALL_LOG="$agent_log" \
-WO_TEST_REPO="$project" \
+OZ_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" flow run --change "$3" --json' _ "$project" "$wo_bin" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
+  bash -c 'cd "$1" && "$2" flow run --change "$3" --json' _ "$project" "$oz_bin" "$change" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
     fail "oz flow run 未能完成树状配置 relevance 场景"
   }

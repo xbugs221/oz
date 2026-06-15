@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sources: 10-合并并行subagent会话状态并修正status观测
-# 文件功能目的：验证 go-dag 并发 subagent 保存 state.json 时不会丢失 sibling session/DAG node，并且 running session 能提前观测。
+# 文件功能目的：验证 内嵌工作流 并发 subagent 保存 state.json 时不会丢失 sibling session/DAG node，并且 running session 能提前观测。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"

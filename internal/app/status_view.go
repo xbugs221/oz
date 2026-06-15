@@ -20,15 +20,7 @@ func stageChecklistLinesWithParallel(repo string, state State, runtime map[strin
 
 // stageChecklistLinesForRepo formats workflow status and optionally attaches run-local artifacts.
 func stageChecklistLinesForRepo(repo string, state State, runtime map[string]stageRuntime) []string {
-	engine := state.Engine
-	if engine == "" {
-		engine = state.Workflow.Engine
-	}
-	if engine == "" {
-		engine = "go-dag"
-	}
 	var lines []string
-	lines = append(lines, "- 引擎 "+engine)
 	for _, item := range visibleSessionItems(state, runtime) {
 		parts := []string{"-", item.label}
 		if item.sessionID != "" {

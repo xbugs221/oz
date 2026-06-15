@@ -38,7 +38,7 @@ func runPlanning(ctx context.Context, repo string) (string, string, error) {
 	if env == nil {
 		env = os.Environ()
 	}
-	cmd.Env = append(env, "WO_PLANNING_SESSION_FILE="+sessionPath)
+	cmd.Env = append(env, "OZ_PLANNING_SESSION_FILE="+sessionPath)
 	cmd.Dir = repo
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

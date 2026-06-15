@@ -40,8 +40,8 @@ func TestStatusJSONObservabilityArtifactsContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("JSON must include observability object:\n%s", got)
 	}
-	if observability["engine"] != "go-dag" {
-		t.Fatalf("observability.engine must be go-dag:\n%s", got)
+	if _, ok := observability["engine"]; ok {
+		t.Fatalf("observability.engine must not expose internal engine:\n%s", got)
 	}
 	rows, ok := observability["rows"].([]interface{})
 	if !ok || len(rows) == 0 {

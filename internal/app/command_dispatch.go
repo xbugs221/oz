@@ -102,7 +102,7 @@ func dispatchRunCommand(ctx context.Context, args []string, stdout io.Writer, re
 		return submitAllActiveChanges(ctx, stdout, repo, engine)
 	}
 	if !hasFlag(args[1:], "--json") {
-		return fmt.Errorf("用法：oz flow run --change <change-name> [--engine go-dag] --json")
+		return fmt.Errorf("用法：oz flow run --change <change-name> --json")
 	}
 	changeName, err := requireFlagValue(args[1:], "--change")
 	if err != nil {
@@ -110,9 +110,7 @@ func dispatchRunCommand(ctx context.Context, args []string, stdout io.Writer, re
 	}
 	engine.Output = nil
 	if engineName, _ := optionalFlagValue(args[1:], "--engine"); engineName != "" {
-		if engineName != "go-dag" {
-			return fmt.Errorf("workflow.engine 只支持 go-dag")
-		}
+		return fmt.Errorf("engine 参数已移除，请直接运行 oz flow run")
 	}
 	return engine.StartJSON(ctx, changeName, stdout)
 }

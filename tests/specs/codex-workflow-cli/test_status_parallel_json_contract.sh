@@ -9,4 +9,4 @@ rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 cd "$ROOT"
 
-WO_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR"   go test ./internal/app -run TestStatusJSONDoesNotExposeParallelHumanSummary -count=1 -v | tee "$RESULT_DIR/contract.log"
+OZ_STATUS_PARALLEL_RESULT_DIR="$RESULT_DIR"   go test ./internal/app -run TestStatusJSONDoesNotExposeParallelHumanSummary -count=1 -v | tee "$RESULT_DIR/contract.log"

@@ -175,7 +175,7 @@ func statusWriteParallelArtifact(t *testing.T, path string, artifact ParallelArt
 
 func statusSaveResult(t *testing.T, name string, text string) {
 	t.Helper()
-	resultDir := os.Getenv("WO_STATUS_PARALLEL_RESULT_DIR")
+	resultDir := os.Getenv("OZ_STATUS_PARALLEL_RESULT_DIR")
 	if resultDir == "" {
 		return
 	}

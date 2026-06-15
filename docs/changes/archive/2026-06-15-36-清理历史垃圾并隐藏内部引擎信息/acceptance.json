@@ -1,0 +1,101 @@
+{
+  "summary": "验收历史垃圾清理完成：非开发用户看不到内部 go-dag 引擎名，根目录历史 wo 测试层退出活跃维护面，当前源码/文档/测试/模板不再保留旧 wo、Dagu 或 legacy 产品合同。",
+  "coverage": [
+    {
+      "spec": "需求：内部引擎名称不进入用户可见面 / 场景：用户可见面不暴露内部引擎名称",
+      "tests": ["no-internal-engine-user-surface-contract"],
+      "evidence": ["internal-engine-user-surface-log"],
+      "risk": "不扫描 Go 源码内部 go_dag 文件名和函数名，只约束非开发用户可见面"
+    },
+    {
+      "spec": "需求：根历史测试层退出活跃维护面 / 场景：根目录历史测试层已清理",
+      "tests": ["no-legacy-root-tests-contract"],
+      "evidence": ["legacy-root-tests-log"],
+      "risk": "测试只证明历史层已退出，执行阶段仍需人工确认有价值场景已迁移"
+    },
+    {
+      "spec": "需求：活跃维护面不保留旧产品合同 / 场景：活跃维护面不保留旧产品合同",
+      "tests": ["current-surface-cleanup-contract", "go-test-all"],
+      "evidence": ["current-surface-cleanup-log", "go-test-all-log"],
+      "risk": "旧输入拒绝 fixture 可能需要窄白名单；白名单不得覆盖默认配置、用户文档或运行输出"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "no-internal-engine-user-surface-contract",
+      "source": "change_contract",
+      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh",
+      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh",
+      "purpose": "证明 go-dag 是内部实现细节，不再出现在用户文档、默认配置、graph/status/help 或错误输出中。",
+      "assertions": [
+        "README、当前规格、模板和 tests/specs 不包含 go-dag 或 Dagu 用户叙述",
+        "oz flow config 生成的 oz-flow.yaml 不包含 engine 字段或 go-dag",
+        "oz flow help、graph、status 和 unknown engine 错误不输出 go-dag"
+      ],
+      "expected_initial_failure": "当前实现应失败于 docs/specs、tests/specs 或 CLI 错误输出仍暴露 go-dag"
+    },
+    {
+      "id": "no-legacy-root-tests-contract",
+      "source": "change_contract",
+      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh",
+      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh",
+      "purpose": "证明根目录 dated 历史 shell 测试已经删除或迁移，不再把 wo 旧产品面作为活跃测试入口。",
+      "assertions": [
+        "tests/ 根目录下不存在 2026-* 历史 shell 测试",
+        "根测试层不引用 cmd/wo、wo.yaml、.wo、/wo/repos 或旧 wo 命令",
+        "tests/specs 仍存在作为当前业务合同入口"
+      ],
+      "expected_initial_failure": "当前实现应失败于 tests/2026-* 仍存在且大量引用旧 wo 产品面"
+    },
+    {
+      "id": "current-surface-cleanup-contract",
+      "source": "change_contract",
+      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh",
+      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh",
+      "purpose": "证明活跃源码、文档、测试、模板和发布面不再保留旧 wo、Dagu、legacy-agent/opencode 产品合同。",
+      "assertions": [
+        "活跃维护面不存在 cmd/wo、wo.yaml、.wo、/wo/repos、旧 wo 命令提示或 WO_* 产品变量",
+        "活跃维护面不存在 Dagu 运行时或 Dagu 用户合同",
+        "legacy-agent/opencode 不出现在默认配置、文档或 profile 模板中"
+      ],
+      "expected_initial_failure": "当前实现应失败于 internal/tests/specs/docs 中旧命名或旧产品合同残留"
+    },
+    {
+      "id": "go-test-all",
+      "source": "change_contract",
+      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh",
+      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh",
+      "purpose": "证明清理历史垃圾没有破坏当前 Go 包和 CLI 回归测试。",
+      "assertions": [
+        "所有当前 Go 包测试通过"
+      ],
+      "expected_initial_failure": "如果清理误删当前业务逻辑或测试引用未迁移，go test ./... 会失败"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "internal-engine-user-surface-log",
+      "kind": "runtime_log",
+      "path": "test-results/36-cleanup/internal-engine-user-surface.log",
+      "purpose": "记录用户可见文档扫描、真实 oz flow 输出检查和失败命中；该文件是本地运行产物，不进入 git。"
+    },
+    {
+      "id": "legacy-root-tests-log",
+      "kind": "runtime_log",
+      "path": "test-results/36-cleanup/legacy-root-tests.log",
+      "purpose": "记录根历史测试层扫描结果；该文件是本地运行产物，不进入 git。"
+    },
+    {
+      "id": "current-surface-cleanup-log",
+      "kind": "runtime_log",
+      "path": "test-results/36-cleanup/current-surface-cleanup.log",
+      "purpose": "记录活跃维护面旧产品合同扫描结果；该文件是本地运行产物，不进入 git。"
+    },
+    {
+      "id": "go-test-all-log",
+      "kind": "runtime_log",
+      "path": "test-results/36-cleanup/go-test-all.log",
+      "purpose": "记录 go test ./... 输出；该文件是本地运行产物，不进入 git。"
+    }
+  ]
+}

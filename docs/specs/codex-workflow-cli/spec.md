@@ -299,7 +299,7 @@
 - **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
 - **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:`、`mode:` 或默认 `model:`
 - **且** `stages.execution.before`、`stages.review.before` 和 `stages.qa.before` 包含默认子代理
-- **且** 不创建 `.wo/`
+- **且** 不创建 legacy repo dir
 - **且** 后续规划、graph 或 sealed run 能读取其中的根节点配置
 - **测试**：`tests/specs/codex-workflow-cli/test_tree_config_contract.sh`
 
@@ -308,7 +308,7 @@
 - **当** 用户调用 `oz flow config --global`
 - **且** `~/oz-flow.yaml` 不存在
 - **则** 系统创建 `~/oz-flow.yaml`
-- **且** 不创建 `~/.wo/`
+- **且** 不创建 legacy home dir
 
 #### 场景：避免覆盖配置
 
@@ -426,17 +426,17 @@
 - **且** 不得直接拼接 `codex exec` 或 `pi --mode json`
 - **且** 导出图时不得创建 run、batch 或 agent session
 
-#### 场景：workflow engine 只支持 go-dag
+#### 场景：workflow engine 是内部实现细节
 
 - **给定** 当前仓库存在 active change 和合法 `acceptance.json`
 - **当** 用户运行 `oz flow run --change demo --json`
-- **则** 默认 engine 必须是内嵌 `go-dag`
-- **且** `oz flow run --change demo --engine unknown --json` 必须被拒绝，并引导用户使用 `go-dag`
-- **且** `workflow.engine` 只允许为空或 `go-dag`
+- **则** 默认 workflow 必须使用内置执行路径推进
+- **且** `oz flow run --change demo --engine unknown --json` 必须被拒绝，并说明该参数不可用或已删除
+- **且** 默认配置、帮助、graph、status 和错误输出不得暴露内部 engine 名称
 
-#### 场景：go-dag subagent artifact schema retry
+#### 场景：内嵌工作流 subagent artifact schema retry
 
-- **给定** go-dag 在进程内调度 `before_review` 的 subagent 节点，参数包含 run id、member name、stage 和 iteration
+- **给定** 内嵌工作流 在进程内调度 `before_review` 的 subagent 节点，参数包含 run id、member name、stage 和 iteration
 - **当** subagent 正常退出但写出的 member artifact 中 `evidence` 为对象数组而非字符串数组
 - **则** 系统必须 resume 同一 subagent session 要求只重写 `ARTIFACT_PATH`
 - **且** 修正 prompt 必须包含字段名、期望类型、`ARTIFACT_DIR` 和 artifact 路径
@@ -455,9 +455,9 @@
 - **且** prompt 必须明确禁止 `category`、`description`、`detail`、`location`、`level`、`type` 等额外字段
 - **且** `findings[].severity` 最终只允许 `blocker`、`major`、`minor`
 - **且** `critical/blocker` 归一为 `blocker`，`high/medium/major` 归一为 `major`，`low/nit/minor/info/informational/note/warning` 归一为 `minor`
-- **当** go-dag 在进程内执行 fan-in 节点
+- **当** 内嵌工作流 在进程内执行 fan-in 节点
 - **则** `oz flow` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
-- **当** go-dag 在进程内执行 gate 节点
+- **当** 内嵌工作流 在进程内执行 gate 节点
 - **则** review clean 必须由主审核归一化 gate_input subagent 结论后决定，原始 subagent finding 或成员失败不得直接覆盖主 review artifact
 - **且** QA clean 不得忽略已有 gate_input subagent artifact 中当前提案 blocker/major finding
 - **且** helper artifact 缺失、格式错误、成员失败或 required helper 未产出证据只作为主阶段证据完整性输入，不得直接覆盖主 QA/Review 决策
@@ -471,7 +471,7 @@
 
 #### 场景：subagent 执行边界拆分
 
-- **当** go-dag 调度 subagent member 执行 retry、只读边界、artifact 处理和 prompt 组装
+- **当** 内嵌工作流 调度 subagent member 执行 retry、只读边界、artifact 处理和 prompt 组装
 - **则** retry/attempt 执行必须位于 `internal/app/subagent_attempt.go`
 - **且** 只读边界检查必须位于 `internal/app/subagent_boundary.go`
 - **且** member artifact 读写、schema 校验和 captured text 兜底生成必须位于 `internal/app/subagent_artifact.go`
@@ -821,7 +821,7 @@
 
 ### 需求：命名 prompt 模板
 
-系统必须从 YAML 的 `prompts.planning/execution/review/qa/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `.wo/cmd` 或 `~/.wo/cmd`。未知 prompt 键必须在配置读取阶段被拒绝。
+系统必须从 YAML 的 `prompts.planning/execution/review/qa/fix/archive` 读取 prompt，不再读取固定编号的 `1.md` 到 `9.md`，也不再读取 `legacy prompt dir` 或 `~/legacy prompt dir`。未知 prompt 键必须在配置读取阶段被拒绝。
 
 // Sources: 18-修复GitHub-CI并更新仓库文档
 
@@ -923,7 +923,7 @@
 - **且** 新 run 不创建 `runs/<run-id>/prompts/` 目录
 - **当** 用户恢复该 run
 - **则** 系统优先使用 `prompt-snapshot.yaml` 中的 run 快照
-- **且** 不重新读取当前 `oz-flow.yaml`、`~/oz-flow.yaml`、`.wo/cmd` 或 `~/.wo/cmd`
+- **且** 不重新读取当前 `oz-flow.yaml`、`~/oz-flow.yaml`、`legacy prompt dir` 或 `~/legacy prompt dir`
 - **且** 当 `prompt-snapshot.yaml` 缺失时，系统必须报错而不是回退当前配置或历史 prompt 文件
 
 #### 场景：历史 sealed run 旧写作阶段快照失败关闭
@@ -1010,7 +1010,7 @@
 
 #### 场景：所有主阶段产物缺失或非法都会同会话重试
 
-- **给定** 默认 `go-dag` workflow 正在执行 execution、review、fix、QA 或 archive
+- **给定** 默认 `内嵌工作流` workflow 正在执行 execution、review、fix、QA 或 archive
 - **当** 当前阶段 agent 返回后未完成该阶段产物，或写出的 artifact 不满足 schema / acceptance / readiness 合同
 - **则** 系统必须记录同阶段 artifact gate 失败
 - **且** 下一次运行必须 resume 同一角色 session
@@ -2323,11 +2323,11 @@
 - **当** 用户在临时 git 仓库中运行 `oz flow config`
 - **则** 仓库根目录必须生成 `oz-flow.yaml`
 - **且** 配置内容必须包含默认 workflow、validation 和 prompts 设置
-- **且** 不创建 `.wo/`
+- **且** 不创建 legacy repo dir
 - **当** 用户在非 git 目录运行 `oz flow config --global`
 - **则** 用户主目录必须生成 `~/oz-flow.yaml`
-- **且** 不创建 `~/.wo/`
-- **且** 后续 prompt 读取必须证明仓库 YAML 优先于全局 YAML，并忽略旧 `.wo/cmd`
+- **且** 不创建 legacy home dir
+- **且** 后续 prompt 读取必须证明仓库 YAML 优先于全局 YAML，并忽略旧 `legacy prompt dir`
 
 #### 场景：旧配置命令返回迁移错误
 
@@ -2539,17 +2539,35 @@
 - **关键断言**：当前轮次 subagent session 正确，不包含旧轮次 session，helper 独立于主阶段 node 状态
 - **剩余风险**：不要求展示所有历史轮次 subagent，仅要求当前代表轮次正确
 
-### 需求：默认纯 Go DAG engine
+### 需求：默认内置 workflow
 
-系统必须把默认 `oz flow run --change <change> --json` 执行路径设为内嵌纯 Go DAG engine。
+// Sources: 36-清理历史垃圾并隐藏内部引擎信息
 
-#### 场景：默认 run 使用 go-dag
+系统必须把默认 `oz flow run --change <change> --json` 执行路径设为内置 workflow，同时把内部调度实现名视为非用户合同。
+
+#### 场景：默认 run 使用 内嵌工作流
 
 - **当** 用户在真实 active change 上运行 `oz flow run --change <change> --json`
 - **则** 默认运行必须成功推进 workflow
-- **且** run state 必须记录 `engine: go-dag`
+- **且** run state 必须记录 `engine: 内嵌工作流`
 - **且** 默认 workflow 配置必须启用 `parallel.enabled: true`
-- **且** `oz flow status -wN` 必须展示 `引擎 go-dag`，不得展示并行 group fan-in summary
+- **且** `oz flow status -wN` 必须使用公开 workflow 标签展示运行方式，不得展示内部实现名或并行 group fan-in summary
+- **测试**：`tests/specs/codex-workflow-cli/test_default_go_dag_run_contract.sh`
+
+#### 场景：用户可见面不暴露内部实现和旧产品合同
+
+- **当** 用户查看 README、当前规格、prompt/profile 模板、发布门禁、规格测试、帮助、默认配置、graph、status 或 engine 参数错误输出
+- **则** 这些用户可见面不得出现内部 engine 名称、旧调度器合同、旧命令行产品面、旧产品环境变量或已移除后端合同
+- **且** 默认生成的 `oz-flow.yaml` 不得包含用户需要选择的 `engine` 字段
+- **测试**：`tests/specs/codex-workflow-cli/test_user_visible_surface_cleanup_contract.sh`
+
+#### 场景：根目录历史测试层退出活跃维护面
+
+- **当** 开发者运行根测试布局规格
+- **则** `tests/` 根目录下不得保留 `2026-*` dated shell 测试
+- **且** 根测试层不得继续引用旧命令、配置、状态目录或环境变量
+- **且** `tests/specs` 和 Go 测试继续作为当前业务测试入口
+- **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
 
 ### 需求：默认 parallel subagents 与 DAG 图
 
@@ -2558,8 +2576,8 @@
 #### 场景：默认配置启用 parallel
 
 - **当** 用户运行 `oz flow config`
-- **则** 生成的 `oz-flow.yaml` 必须包含 `engine: go-dag`
-- **且** 必须包含 `parallel.enabled: true`
+- **则** 生成的 `oz-flow.yaml` 必须包含 `parallel.enabled: true`
+- **且** 不得包含用户需要选择的 `engine` 字段
 
 #### 场景：Mermaid 图展示 fan-out/fan-in
 
@@ -2568,9 +2586,9 @@
 - **且** 图中必须包含 archive gate
 - **且** 默认图不得要求任何外部 workflow scheduler
 
-#### 场景：默认 go-dag status 保持 JSON contract 兼容
+#### 场景：默认工作流 status 保持 JSON contract 兼容
 
-- **当** 默认 go-dag run 完成后，用户运行 `oz flow status --run-id <run-id> --json`
+- **当** 默认工作流 run 完成后，用户运行 `oz flow status --run-id <run-id> --json`
 - **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
 - **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`
 

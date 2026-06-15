@@ -27,9 +27,9 @@ trap cleanup EXIT
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
-WO_BIN="$TMP/wo"
+OZ_BIN="$TMP/wo"
 note "build real oz flow binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
+(cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/contract.log" 2>&1
 
 FAKEBIN="$TMP/fakebin"
 mkdir -p "$FAKEBIN"
@@ -210,7 +210,7 @@ done
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
 wo:
   workflow:
-    engine: go-dag
+    engine: 内嵌工作流
     max_review_iterations: 0
     validation:
       max_attempts_per_stage: 3
@@ -256,7 +256,7 @@ CODEX_CALL_LOG="$RESULT_DIR/codex-calls.jsonl" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" batch --batch-id batch-artifact-retry --json' _ "$PROJECT" "$WO_BIN" >"$RESULT_DIR/batch.jsonl" 2>"$RESULT_DIR/batch.err"
+  bash -c 'cd "$1" && "$2" batch --batch-id batch-artifact-retry --json' _ "$PROJECT" "$OZ_BIN" >"$RESULT_DIR/batch.jsonl" 2>"$RESULT_DIR/batch.err"
 batch_code=$?
 set -e
 cat "$RESULT_DIR/batch.jsonl" >>"$RESULT_DIR/contract.log"

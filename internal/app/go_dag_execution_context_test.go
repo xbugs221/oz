@@ -846,7 +846,7 @@ func goDAGContextInstallFakeOz(t *testing.T) {
 	previousPrefix := ozCommandPrefix
 	ozCommand = os.Args[0]
 	ozCommandPrefix = []string{"-test.run=TestGoDAGContextFakeOzCommand", "--"}
-	t.Setenv("WO_GO_DAG_CONTEXT_FAKE_OZ", "1")
+	t.Setenv("OZ_GO_DAG_CONTEXT_FAKE_OZ", "1")
 	t.Cleanup(func() {
 		ozCommand = previous
 		ozCommandPrefix = previousPrefix
@@ -855,7 +855,7 @@ func goDAGContextInstallFakeOz(t *testing.T) {
 
 // TestGoDAGContextFakeOzCommand serves oz status JSON in a child test process.
 func TestGoDAGContextFakeOzCommand(t *testing.T) {
-	if os.Getenv("WO_GO_DAG_CONTEXT_FAKE_OZ") != "1" {
+	if os.Getenv("OZ_GO_DAG_CONTEXT_FAKE_OZ") != "1" {
 		return
 	}
 	args := os.Args

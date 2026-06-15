@@ -28,10 +28,10 @@ legacy_title="Open""Code"
 [[ -f "$RELEASE_SPEC" ]] || fail "缺少发布规格 $RELEASE_SPEC"
 
 note "主规格不得再承诺第三后端"
-if grep -n -E "$legacy_lower|$legacy_title|legacy-agent|LegacyAgent" "$SPEC" | tee -a "$LOG"; then
+if grep -n -E "$legacy_lower|$legacy_title|old-agent|OldAgent" "$SPEC" | tee -a "$LOG"; then
   fail "主规格仍包含第三后端描述"
 fi
-if grep -n -E 'codex.*pi.*legacy-agent|codex.*legacy-agent.*pi|legacy-agent.*codex.*pi' "$SPEC" | tee -a "$LOG"; then
+if grep -n -E 'codex.*pi.*old-agent|codex.*old-agent.*pi|old-agent.*codex.*pi' "$SPEC" | tee -a "$LOG"; then
   fail "主规格仍包含三后端枚举"
 fi
 

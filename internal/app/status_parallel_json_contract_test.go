@@ -78,7 +78,7 @@ func TestStatusJSONDoesNotExposeParallelHumanSummary(t *testing.T) {
 
 func statusSaveJSONResult(t *testing.T, text string) {
 	t.Helper()
-	resultDir := os.Getenv("WO_STATUS_PARALLEL_RESULT_DIR")
+	resultDir := os.Getenv("OZ_STATUS_PARALLEL_RESULT_DIR")
 	if resultDir == "" {
 		return
 	}

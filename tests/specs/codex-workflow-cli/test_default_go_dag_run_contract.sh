@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# 文件目的：通过真实 oz flow run/status 入口验证默认执行使用内嵌 go-dag engine。
-# Sources: 3-默认启用-纯go-dag并行subagents
+# 文件目的：通过真实 oz flow run/status 入口验证默认执行使用内嵌 内嵌工作流 engine。
+# Sources: 3-默认启用-纯内嵌工作流并行subagents
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-log_dir="$repo_root/test-results/go-dag"
+log_dir="$repo_root/test-results/workflow"
 mkdir -p "$log_dir"
-log="$log_dir/default-go-dag-run-contract.log"
+log="$log_dir/default-内嵌工作流-run-contract.log"
 : >"$log"
 
 # note 把关键验证步骤同时写到 stdout 和 runtime log，方便 QA 复查失败点。
@@ -63,7 +63,7 @@ if name:
         "purpose": purpose.group(1).strip() if purpose else "执行并行成员职责",
         "status": "success",
         "summary": "fake agent completed the configured read-only subagent task",
-        "evidence": ["test-results/go-dag/default-go-dag-run-contract.log"]
+        "evidence": ["test-results/workflow/default-内嵌工作流-run-contract.log"]
     }
     print(json.dumps({"type": "thread.started", "thread_id": "fake-subagent-session"}))
     print(json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": json.dumps(body, ensure_ascii=False)}]}}, ensure_ascii=False))
@@ -75,7 +75,7 @@ if not states:
     raise SystemExit("no oz flow state.json found")
 state_path = states[-1]
 state = json.loads(state_path.read_text(encoding="utf-8"))
-repo = pathlib.Path(os.environ["WO_TEST_REPO"])
+repo = pathlib.Path(os.environ["OZ_TEST_REPO"])
 run_dir = state_path.parent
 change = state["change_name"]
 stage = state["stage"]
@@ -84,88 +84,88 @@ if stage == "execution":
     task = repo / "docs" / "changes" / change / "task.md"
     text = task.read_text(encoding="utf-8")
     task.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
-    evidence = repo / "test-results" / "go-dag" / "temporary.log"
+    evidence = repo / "test-results" / "内嵌工作流" / "temporary.log"
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text("execution evidence\n", encoding="utf-8")
 elif stage == "archive":
     archive = repo / "docs" / "changes" / "archive" / ("2026-06-09-" + change)
     archive.mkdir(parents=True, exist_ok=True)
     (archive / "acceptance.json").write_text((repo / "docs" / "changes" / change / "acceptance.json").read_text(encoding="utf-8"), encoding="utf-8")
-    (run_dir / "delivery-summary.md").write_text("fake go-dag archive completed\n", encoding="utf-8")
+    (run_dir / "delivery-summary.md").write_text("fake 内嵌工作流 archive completed\n", encoding="utf-8")
 
 print(json.dumps({"type": "thread.started", "thread_id": "fake-main-session-" + stage}))
 PY
 SH
 chmod +x "$fakebin/codex"
 
-cp "$fakebin/codex" "$fakebin/legacy-agent"
+cp "$fakebin/codex" "$fakebin/pi"
 cp "$fakebin/codex" "$fakebin/pi"
 cp "$fakebin/codex" "$fakebin/agy"
 
 project="$tmp/project"
-mkdir -p "$project/docs/changes/1-默认go-dag/tests"
+mkdir -p "$project/docs/changes/1-默认内嵌工作流/tests"
 git -C "$project" init -q
 git -C "$project" config user.email "test@example.com"
 git -C "$project" config user.name "Test User"
 
-cat >"$project/docs/changes/1-默认go-dag/proposal.md" <<'MD'
-# 默认 go-dag
+cat >"$project/docs/changes/1-默认内嵌工作流/proposal.md" <<'MD'
+# 默认工作流
 
 ## 背景
 
 这个临时 change 用来验证 oz flow 默认运行路径。
 MD
 
-cat >"$project/docs/changes/1-默认go-dag/brief.md" <<'MD'
-# 默认 go-dag
+cat >"$project/docs/changes/1-默认内嵌工作流/brief.md" <<'MD'
+# 默认工作流
 
-验证默认 oz flow run 使用 go-dag 推进真实 change，并保留状态观测合同。
+验证默认 oz flow run 使用 内嵌工作流 推进真实 change，并保留状态观测合同。
 MD
 
-cat >"$project/docs/changes/1-默认go-dag/design.md" <<'MD'
+cat >"$project/docs/changes/1-默认内嵌工作流/design.md" <<'MD'
 # 设计
 
-使用最小任务证明默认 go-dag 运行会推进真实 change。
+使用最小任务证明默认工作流 运行会推进真实 change。
 MD
 
-cat >"$project/docs/changes/1-默认go-dag/spec.md" <<'MD'
+cat >"$project/docs/changes/1-默认内嵌工作流/spec.md" <<'MD'
 # 规格
 
-### 需求：默认 go-dag
+### 需求：默认工作流
 
-系统必须默认使用 go-dag。
+系统必须默认使用 内嵌工作流。
 
 #### 场景：运行并归档
 
 - **当** 用户运行 oz flow run
-- **则** run 完成并记录 go-dag 状态
+- **则** run 完成并记录 内嵌工作流 状态
 MD
 
-cat >"$project/docs/changes/1-默认go-dag/task.md" <<'MD'
+cat >"$project/docs/changes/1-默认内嵌工作流/task.md" <<'MD'
 # 任务
 
-- [ ] 1.1 完成默认 go-dag 验证任务
+- [ ] 1.1 完成默认工作流 验证任务
 MD
 
-cat >"$project/docs/changes/1-默认go-dag/tests/test_contract.sh" <<'SH'
+cat >"$project/docs/changes/1-默认内嵌工作流/tests/test_contract.sh" <<'SH'
 #!/usr/bin/env bash
 # 临时 change 的测试入口，证明 tests/ 目录不是占位。
 set -euo pipefail
-test -f docs/changes/1-默认go-dag/acceptance.json
+test -f docs/changes/1-默认内嵌工作流/acceptance.json
 SH
-chmod +x "$project/docs/changes/1-默认go-dag/tests/test_contract.sh"
+chmod +x "$project/docs/changes/1-默认内嵌工作流/tests/test_contract.sh"
 
-cat >"$project/docs/changes/1-默认go-dag/acceptance.json" <<'JSON'
+cat >"$project/docs/changes/1-默认内嵌工作流/acceptance.json" <<'JSON'
 {
-  "summary": "验证默认 go-dag run 契约",
+  "summary": "验证默认工作流 run 契约",
   "required_tests": [
     {
       "id": "temporary-contract",
       "source": "change_contract",
-      "path": "docs/changes/1-默认go-dag/tests/test_contract.sh",
-      "command": "bash docs/changes/1-默认go-dag/tests/test_contract.sh",
+      "path": "docs/changes/1-默认内嵌工作流/tests/test_contract.sh",
+      "command": "bash docs/changes/1-默认内嵌工作流/tests/test_contract.sh",
       "purpose": "证明临时 change 包含真实测试入口",
-      "assertions": ["默认 oz flow run 使用 go-dag 推进 execution 并完成 archive"]
+      "assertions": ["默认 oz flow run 使用 内嵌工作流 推进 execution 并完成 archive"]
     }
   ],
   "required_evidence": []
@@ -179,12 +179,12 @@ YAML
 git -C "$project" add .
 git -C "$project" commit -q -m initial
 
-note "运行默认 oz flow run，验证内嵌 go-dag 能推进真实 change"
-WO_TEST_REPO="$project" \
+note "运行默认 oz flow run，验证内嵌 内嵌工作流 能推进真实 change"
+OZ_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" flow run --change "1-默认go-dag" --json' _ "$project" "$wo" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
+  bash -c 'cd "$1" && "$2" flow run --change "1-默认内嵌工作流" --json' _ "$project" "$wo" >"$tmp/run.jsonl" 2>"$tmp/run.err" || {
     cat "$tmp/run.err" | tee -a "$log"
     fail "默认 oz flow run 失败"
   }
@@ -200,8 +200,8 @@ python3 - "$state" <<'PY' || exit 1
 import json
 import sys
 state = json.load(open(sys.argv[1], encoding="utf-8"))
-if state.get("engine") != "go-dag":
-    raise SystemExit("state.engine must be go-dag")
+if state.get("engine") != "内嵌工作流":
+    raise SystemExit("state.engine must be 内嵌工作流")
 if state.get("workflow_config", {}).get("parallel", {}).get("enabled") is not True:
     raise SystemExit("workflow_config.parallel.enabled must default to true")
 PY
@@ -213,7 +213,7 @@ PY
 )"
 
 note "检查人类 status 输出包含并行成员阶段树"
-WO_TEST_REPO="$project" \
+OZ_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \
@@ -224,7 +224,7 @@ grep -qF "代码" "$tmp/status.txt" || fail "oz flow status 必须显示 impleme
 grep -qF "外部" "$tmp/status.txt" || fail "oz flow status 必须显示 implementation_context 并行成员"
 
 note "检查 JSON status 兼容旧 runner contract"
-WO_TEST_REPO="$project" \
+OZ_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
 PATH="$fakebin:/usr/bin:/bin" \

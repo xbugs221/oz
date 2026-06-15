@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-RESULT_DIR="$ROOT/test-results/go-dag/compact-chinese-graph"
+RESULT_DIR="$ROOT/test-results/workflow/compact-chinese-graph"
 TMP="$(mktemp -d)"
 
 cleanup() {
@@ -23,9 +23,9 @@ trap cleanup EXIT
 rm -rf "$RESULT_DIR"
 mkdir -p "$RESULT_DIR"
 
-WO_BIN="$TMP/wo"
+OZ_BIN="$TMP/wo"
 note "build real oz flow binary"
-(cd "$ROOT" && go build -o "$WO_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
+(cd "$ROOT" && go build -o "$OZ_BIN" ./cmd/oz) >>"$RESULT_DIR/test.log" 2>&1
 
 PROJECT="$TMP/project"
 mkdir -p "$PROJECT"
@@ -42,19 +42,21 @@ mkdir -p "$PROJECT"
 note "generate default oz-flow.yaml and verify iteration budget"
 (
   cd "$PROJECT"
-  "$WO_BIN" config
+  "$OZ_BIN" flow config
 ) >"$RESULT_DIR/config.out" 2>"$RESULT_DIR/config.err"
 cp "$PROJECT/oz-flow.yaml" "$RESULT_DIR/oz-flow.yaml"
 grep -q 'max_review_iterations: 5' "$PROJECT/oz-flow.yaml" || fail "default max_review_iterations should be 5"
 if grep -q 'max_review_iterations: 30' "$PROJECT/oz-flow.yaml"; then
   fail "default max_review_iterations should no longer be 30"
 fi
-grep -q 'engine: go-dag' "$PROJECT/oz-flow.yaml" || fail "default engine should remain go-dag"
+if grep -q '^engine:' "$PROJECT/oz-flow.yaml"; then
+  fail "default oz-flow.yaml should not expose an engine field"
+fi
 
 note "render mermaid graph and verify it is compact"
 (
   cd "$PROJECT"
-  "$WO_BIN" flow graph --change demo --format mermaid
+  "$OZ_BIN" flow graph --change demo --format mermaid
 ) >"$RESULT_DIR/graph.mmd" 2>"$RESULT_DIR/graph.err"
 grep -q 'flowchart TD' "$RESULT_DIR/graph.mmd" || fail "mermaid graph should render a flowchart"
 
