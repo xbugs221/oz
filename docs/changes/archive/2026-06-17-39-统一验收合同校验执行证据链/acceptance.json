@@ -1,0 +1,46 @@
+{
+  "summary": "验收 acceptance lifecycle 共享诊断边界，使 validate、preflight、run-acceptance 和 QA gate 复用同一证据链判断并保持旧 schema 兼容。",
+  "coverage": [
+    {
+      "spec": "需求：验收生命周期有共享诊断 / 场景：validate、preflight、run-acceptance 复用 lifecycle",
+      "tests": ["acceptance-lifecycle-contract"],
+      "evidence": ["acceptance-lifecycle-log"],
+      "risk": "不强制所有诊断 code 名称，只验收共享边界和关键字段。"
+    },
+    {
+      "spec": "需求：required_tests 执行结果可追溯 / 场景：run-acceptance 输出 producer 和 coverage 诊断",
+      "tests": ["acceptance-lifecycle-contract"],
+      "evidence": ["acceptance-lifecycle-log"],
+      "risk": "不限制 diagnostics 内部排序，执行阶段可选择合适字段名但必须可复核。"
+    },
+    {
+      "spec": "需求：旧合同兼容 / 场景：旧 acceptance schema 不新增必填字段",
+      "tests": ["acceptance-lifecycle-contract"],
+      "evidence": ["acceptance-lifecycle-log"],
+      "risk": "不遍历所有归档提案，只用真实临时 change 验证旧 schema 兼容。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "acceptance-lifecycle-contract",
+      "source": "change_contract",
+      "path": "docs/changes/39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh",
+      "command": "bash docs/changes/39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh | tee test-results/39-acceptance-lifecycle/acceptance-command.log",
+      "purpose": "证明 acceptance lifecycle 共享诊断边界覆盖 validate、run-acceptance 和证据 producer 追溯。",
+      "assertions": [
+        "acceptance lifecycle contract verifies oz validate and oz flow run-acceptance use a shared lifecycle diagnostics boundary for the same real change",
+        "acceptance lifecycle contract verifies run-acceptance JSON keeps old summary fields and exposes producer or coverage diagnostics for runtime evidence",
+        "acceptance lifecycle contract verifies old acceptance schema remains valid without adding new required JSON fields"
+      ],
+      "expected_initial_failure": "当前实现尚未输出统一 lifecycle diagnostics，测试应失败于目标诊断字段或共享边界缺失。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "acceptance-lifecycle-log",
+      "kind": "runtime_log",
+      "path": "test-results/39-acceptance-lifecycle/contract.log",
+      "purpose": "记录临时真实 change 的 validate、run-acceptance 和 lifecycle diagnostics 验证过程。"
+    }
+  ]
+}

@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 // QA is the strict JSON contract used by QA stages.
@@ -122,22 +124,15 @@ func ValidateQA(qa QA) error {
 }
 
 // ValidateQAAgainstAcceptance ensures clean QA covers every acceptance item.
-func ValidateQAAgainstAcceptance(qa QA, acceptance Acceptance) error {
+func ValidateQAAgainstAcceptance(qa QA, contract Acceptance) error {
 	if err := ValidateQA(qa); err != nil {
 		return err
 	}
 	if qa.Decision != "clean" {
 		return nil
 	}
-	required := map[string]string{}
-	contractTests := acceptance.RequiredTests
-	for _, test := range contractTests {
-		required[test.ID] = "required_tests"
-	}
-	for _, evidence := range acceptance.RequiredEvidence {
-		required[evidence.ID] = "required_evidence"
-	}
-	if len(required) == 0 {
+	required := acceptance.RequiredItems(contract)
+	if len(required.Tests) == 0 && len(required.Evidence) == 0 {
 		return nil
 	}
 	seen := map[string]bool{}
@@ -145,7 +140,9 @@ func ValidateQAAgainstAcceptance(qa QA, acceptance Acceptance) error {
 		if strings.TrimSpace(result.ID) == "" || strings.TrimSpace(result.Status) == "" || strings.TrimSpace(result.Evidence) == "" {
 			return fmt.Errorf("acceptance_matrix[%d] 不完整", i)
 		}
-		if _, ok := required[result.ID]; !ok {
+		_, testOK := required.Tests[result.ID]
+		_, evidenceOK := required.Evidence[result.ID]
+		if !testOK && !evidenceOK {
 			return fmt.Errorf("acceptance_matrix[%d].id 未在 acceptance 合同中定义：%q", i, result.ID)
 		}
 		if result.Status != "passed" {
@@ -153,9 +150,14 @@ func ValidateQAAgainstAcceptance(qa QA, acceptance Acceptance) error {
 		}
 		seen[result.ID] = true
 	}
-	for id, group := range required {
+	for id := range required.Tests {
 		if !seen[id] {
-			return fmt.Errorf("clean qa 缺少 %s acceptance_matrix 覆盖：%s", group, id)
+			return fmt.Errorf("clean qa 缺少 required_tests acceptance_matrix 覆盖：%s", id)
+		}
+	}
+	for id := range required.Evidence {
+		if !seen[id] {
+			return fmt.Errorf("clean qa 缺少 required_evidence acceptance_matrix 覆盖：%s", id)
 		}
 	}
 	return nil

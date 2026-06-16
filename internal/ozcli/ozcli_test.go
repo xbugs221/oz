@@ -273,6 +273,41 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	}
 }
 
+func TestValidateJSONIncludesLifecycleDiagnostics(t *testing.T) {
+	// TestValidateJSONIncludesLifecycleDiagnostics verifies oz validate exposes shared producer diagnostics.
+	project := newProject(t)
+	writeValidChange(t, project, "3-验收诊断")
+	changeDir := filepath.Join(project, "docs", "changes", "3-验收诊断")
+	acceptancePath := filepath.Join(changeDir, "acceptance.json")
+	acceptanceData, err := os.ReadFile(acceptancePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptanceText := strings.ReplaceAll(string(acceptanceData), "证明提案包含真实测试入口，并生成 archive-log 到 test-results/archive.log", "证明提案包含真实测试入口")
+	acceptanceText = strings.ReplaceAll(acceptanceText, "归档后提案测试文件仍随 active change 保留，测试命令写出 archive-log 运行证据", "归档后提案测试文件仍随 active change 保留并执行真实业务断言")
+	if err := os.WriteFile(acceptancePath, []byte(acceptanceText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testPath := filepath.Join(changeDir, "tests", "archive_test.go")
+	if err := os.WriteFile(testPath, []byte("package tests\n\nimport \"testing\"\n\nfunc TestNoProducer(t *testing.T) {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := runCLI(t, project, "validate", "3-验收诊断", "--json")
+	if result.code == 0 {
+		t.Fatalf("validate should fail when evidence has no producer:\n%s", result.stdout)
+	}
+	var payload validationResult
+	if err := json.Unmarshal([]byte(result.stdout), &payload); err != nil {
+		t.Fatalf("invalid validate JSON: %v\n%s", err, result.stdout)
+	}
+	if payload.Valid || len(payload.Diagnostics) == 0 {
+		t.Fatalf("expected lifecycle diagnostics in validate JSON: %#v", payload)
+	}
+	if payload.Diagnostics[0].Code != "required_evidence_producer_missing" {
+		t.Fatalf("unexpected diagnostics: %#v", payload.Diagnostics)
+	}
+}
+
 func TestCommandHelpForDailyAndAutomationCommands(t *testing.T) {
 	// TestCommandHelpForDailyAndAutomationCommands keeps diagnostics useful for users and tools.
 	project := newProject(t)

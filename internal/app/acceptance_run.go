@@ -14,21 +14,26 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 const acceptanceRunKind = "acceptance_run"
 
 // AcceptanceRunResult is the stable JSON result consumed by runners and QA reviewers.
 type AcceptanceRunResult struct {
-	Change     string                        `json:"change"`
-	Valid      bool                          `json:"valid"`
-	Status     string                        `json:"status"`
-	ResultPath string                        `json:"result_path"`
-	StartedAt  string                        `json:"started_at"`
-	FinishedAt string                        `json:"finished_at"`
-	Summary    AcceptanceRunSummary          `json:"summary"`
-	Tests      []AcceptanceRunTestResult     `json:"tests"`
-	Evidence   []AcceptanceRunEvidenceResult `json:"evidence"`
+	Change      string                           `json:"change"`
+	Valid       bool                             `json:"valid"`
+	Status      string                           `json:"status"`
+	ResultPath  string                           `json:"result_path"`
+	StartedAt   string                           `json:"started_at"`
+	FinishedAt  string                           `json:"finished_at"`
+	Summary     AcceptanceRunSummary             `json:"summary"`
+	Tests       []AcceptanceRunTestResult        `json:"tests"`
+	Evidence    []AcceptanceRunEvidenceResult    `json:"evidence"`
+	Coverage    []AcceptanceRunCoverageResult    `json:"coverage,omitempty"`
+	Producers   []AcceptanceRunProducerResult    `json:"producers,omitempty"`
+	Diagnostics []acceptance.LifecycleDiagnostic `json:"diagnostics"`
 }
 
 // AcceptanceRunSummary records aggregate counts for fast gate decisions.
@@ -59,6 +64,21 @@ type AcceptanceRunEvidenceResult struct {
 	Kind   string `json:"kind"`
 	Path   string `json:"path"`
 	Status string `json:"status"`
+}
+
+// AcceptanceRunCoverageResult records which required tests and evidence cover one spec.
+type AcceptanceRunCoverageResult struct {
+	Spec     string   `json:"spec"`
+	Tests    []string `json:"tests"`
+	Evidence []string `json:"evidence"`
+}
+
+// AcceptanceRunProducerResult records the required_tests that are expected to produce evidence.
+type AcceptanceRunProducerResult struct {
+	EvidenceID string   `json:"evidence_id"`
+	Path       string   `json:"path"`
+	Tests      []string `json:"tests"`
+	Verified   bool     `json:"verified"`
 }
 
 // dispatchRunAcceptanceCommand parses the runner command and writes JSON even for failed tests.
@@ -99,9 +119,24 @@ func runAcceptanceRequiredTests(ctx context.Context, repo, changeName string) (A
 	}
 	result.Tests = runAcceptanceTests(ctx, repo, resultDir, contract.RequiredTests)
 	result.Evidence = checkAcceptanceEvidence(repo, contract.RequiredEvidence)
+	lifecycle := acceptance.ValidateLifecycle(repo, contract)
+	result.Diagnostics = append(result.Diagnostics, lifecycle.Diagnostics...)
+	result.Coverage = buildAcceptanceRunCoverage(contract.Coverage)
+	result.Producers = buildAcceptanceRunProducers(repo, contract, lifecycle.Valid)
 	result.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	result.Summary = summarizeAcceptanceRun(result.Tests, result.Evidence)
-	result.Valid = result.Summary.Failed == 0 && result.Summary.EvidenceMissing == 0
+	result.Valid = lifecycle.Valid && result.Summary.Failed == 0 && result.Summary.EvidenceMissing == 0
+	for _, item := range result.Evidence {
+		if item.Status == "missing" {
+			result.Diagnostics = append(result.Diagnostics, acceptance.LifecycleDiagnostic{
+				Code:       "required_evidence_runtime_missing",
+				Severity:   "error",
+				Message:    fmt.Sprintf("required_evidence %q runtime evidence missing: %s", item.ID, item.Path),
+				EvidenceID: item.ID,
+				Path:       item.Path,
+			})
+		}
+	}
 	if !result.Valid {
 		result.Status = validationStatusFailed
 	}
@@ -145,6 +180,66 @@ func runAcceptanceTests(ctx context.Context, repo, resultDir string, tests []Acc
 		})
 	}
 	return results
+}
+
+// buildAcceptanceRunCoverage exposes the contract coverage that explains each runtime result.
+func buildAcceptanceRunCoverage(coverage []Coverage) []AcceptanceRunCoverageResult {
+	results := make([]AcceptanceRunCoverageResult, 0, len(coverage))
+	for _, item := range coverage {
+		results = append(results, AcceptanceRunCoverageResult{
+			Spec:     item.Spec,
+			Tests:    append([]string(nil), item.Tests...),
+			Evidence: append([]string(nil), item.Evidence...),
+		})
+	}
+	return results
+}
+
+// buildAcceptanceRunProducers exposes evidence-to-test producer links used by lifecycle validation.
+func buildAcceptanceRunProducers(repo string, contract Acceptance, lifecycleValid bool) []AcceptanceRunProducerResult {
+	tests := map[string]AcceptanceTest{}
+	for _, test := range contract.RequiredTests {
+		tests[test.ID] = test
+	}
+	results := make([]AcceptanceRunProducerResult, 0, len(contract.RequiredEvidence))
+	for _, evidence := range contract.RequiredEvidence {
+		results = append(results, AcceptanceRunProducerResult{
+			EvidenceID: evidence.ID,
+			Path:       evidence.Path,
+			Tests:      producerTestIDs(evidence.ID, contract.Coverage),
+			Verified:   lifecycleValid && acceptance.EvidenceHasProducer(repo, evidence, contract.Coverage, tests),
+		})
+	}
+	return results
+}
+
+// producerTestIDs returns the required_tests ids bound to an evidence id by coverage.
+func producerTestIDs(evidenceID string, coverage []Coverage) []string {
+	seen := map[string]bool{}
+	var ids []string
+	for _, item := range coverage {
+		if !acceptanceRunStringSliceContains(item.Evidence, evidenceID) {
+			continue
+		}
+		for _, testID := range item.Tests {
+			if seen[testID] {
+				continue
+			}
+			seen[testID] = true
+			ids = append(ids, testID)
+		}
+	}
+	return ids
+}
+
+// acceptanceRunStringSliceContains reports whether a list contains a string exactly.
+func acceptanceRunStringSliceContains(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 // checkAcceptanceEvidence reports present only for declared regular files.
@@ -210,7 +305,8 @@ func safeAcceptanceLogName(id string) string {
 
 // shouldRunAcceptanceGate limits required_tests execution to implementation stages.
 func shouldRunAcceptanceGate(state State) bool {
-	return state.Stage == "execution" || strings.HasPrefix(state.Stage, "fix_")
+	stage, err := parseWorkflowStage(state.Stage)
+	return err == nil && (stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix))
 }
 
 // runAcceptanceGate runs the same executor used by the public runner command.

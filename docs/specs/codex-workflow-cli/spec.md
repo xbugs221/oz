@@ -203,6 +203,40 @@
 - **关键断言**：4 个运行状态边界文件存在，`state.go` 不再承载迁出 helper，关键 `internal/app` 回归通过
 - **剩余风险**：该测试不逐行验证 helper 的完整实现细节，代码审查仍需确认没有留下重复实现
 
+#### 场景：clean 先计划后执行
+
+// Sources: 40-运行态清理与测试基建治理
+
+- **当** 用户运行 `oz flow clean --dry-run --json`
+- **则** 系统必须在删除运行态前生成可复核 clean plan
+- **且** JSON 输出必须包含将删除或保护的对象、action 和 reason
+- **且** dry-run 不得删除 run、batch 或 agent session
+- **测试**：`tests/specs/codex-workflow-cli/test_clean_plan_fixture_contract.sh`
+- **关键断言**：failed run 显示为 delete 计划，dry-run 后 run 目录仍存在
+- **剩余风险**：不验证 Windows lock 行为，平台差异由既有锁测试补充
+
+#### 场景：clean 默认行为兼容
+
+// Sources: 40-运行态清理与测试基建治理
+
+- **当** 用户运行默认 `oz flow clean`
+- **则** 系统必须 apply 同一类 clean plan 并保持既有实际清理语义
+- **且** failed、blocked、interrupted 或 corrupt run 仍按既有清理策略删除
+- **测试**：`tests/specs/codex-workflow-cli/test_clean_plan_fixture_contract.sh`
+- **关键断言**：dry-run 不删除，实际 clean 删除同一个 failed run
+- **剩余风险**：agent session 外部存储的全部 schema 仍由邻近测试和代码审查覆盖
+
+#### 场景：核心 workflow 测试存在共享 fixture
+
+// Sources: 40-运行态清理与测试基建治理
+
+- **当** 维护者扩展核心 workflow 测试
+- **则** 临时 git repo、active change 写入、acceptance contract 写入、fake runner、fake tool registry 和常用 git helper 必须沉淀为共享测试夹具
+- **且** 具体业务断言必须保留在调用测试中，不得藏进 fixture
+- **测试**：`tests/specs/codex-workflow-cli/test_clean_plan_fixture_contract.sh`
+- **关键断言**：`internal/app` 存在共享 workflow fixture，且 `go test ./internal/app` 继续通过
+- **剩余风险**：不强制一次迁移所有历史 helper，只保护核心共享夹具边界
+
 ### 需求：agent tool JSONL 事件驱动
 
 系统必须通过当前阶段 effective agent tool 的 stdout JSONL 事件流抽取 session id，但不在 run 目录重复保存 agent JSONL 日志。
@@ -2733,3 +2767,53 @@ review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 
 - **入口路径**：默认 prompt 模板
 - **关键断言**：review/QA prompt 都包含 scope 字段、非阻断 finding 字段和当前范围硬阻断说明
 - **剩余风险**：该测试只验证 prompt 明确性，最终 gate 行为由前面的 Go 合同测试证明
+
+// Sources: 38-收敛工作流阶段状态和门禁流水线
+
+### 需求：阶段状态语义收敛
+
+系统必须提供单一阶段解析和状态规范化入口，避免核心路径继续散落裸字符串判断。
+
+#### 场景：阶段和状态有单一解析入口
+
+- **给定** 仓库内真实 `internal/app` 工作流源码
+- **当** 维护者运行阶段门禁流水线合同测试
+- **则** 源码必须包含 workflow stage 语义类型、workflow stage 解析入口和 run status 规范化入口
+- **并且** `go test ./internal/app` 必须通过
+- **测试**：`tests/specs/codex-workflow-cli/test_stage_gate_pipeline_contract.sh`
+- **真实数据来源**：当前仓库 `internal/app` 源码和 Go 回归测试
+- **入口路径**：shell 合同测试从仓库根目录执行
+- **关键断言**：阶段解析、运行状态规范化和 Go 回归测试都存在且可执行
+- **剩余风险**：测试不穷举用户本机历史 runtime state，只保护公开阶段和核心状态边界
+
+### 需求：主阶段门禁流水线统一
+
+系统必须让 loop 路径和 DAG node 路径复用同一主阶段门禁流水线，确保 artifact、acceptance、validation 和 advance 顺序一致。
+
+#### 场景：loop 和 DAG 复用同一主阶段门禁
+
+- **给定** `internal/app/engine_run.go`、`internal/app/node.go` 和主阶段门禁流水线实现
+- **当** 维护者运行阶段门禁流水线合同测试
+- **则** `runLoop` 与 `nodeRunStage` 都必须调用同一流水线入口
+- **并且** `nodeRunStage` 不得直接串联 acceptance preflight、acceptance run、validation、mark completed 或 advance
+- **测试**：`tests/specs/codex-workflow-cli/test_stage_gate_pipeline_contract.sh`
+- **真实数据来源**：真实源码边界和 `go test ./internal/app`
+- **入口路径**：shell 合同测试检查源码并运行 Go 测试
+- **关键断言**：loop 与 DAG node 复用主阶段门禁流水线；DAG node 路径不回退为重复串联逻辑
+- **剩余风险**：静态断言不模拟所有失败组合，失败组合由 Go DAG 和 stage gate 单测补足
+
+### 需求：兼容现有输出
+
+系统必须保持 `state.json`、status/watch 和 runner JSON 的公开字符串输出兼容。
+
+#### 场景：status 和 runner JSON 保持原字符串输出
+
+- **给定** 引入类型化 helper 后的 `internal/app` 实现
+- **当** 维护者运行阶段门禁流水线合同测试
+- **则** `go test ./internal/app` 必须通过
+- **并且** status、watch、runner JSON、DAG 和 validation 相关既有测试不得回退
+- **测试**：`tests/specs/codex-workflow-cli/test_stage_gate_pipeline_contract.sh`
+- **真实数据来源**：现有 `internal/app` status 和 runner Go 测试
+- **入口路径**：合同测试运行 `go test ./internal/app`
+- **关键断言**：内部阶段/状态 helper 不改变公开字符串输出
+- **剩余风险**：不覆盖用户本机所有历史 runtime state 变体，执行阶段应继续保留旧字符串兼容分支

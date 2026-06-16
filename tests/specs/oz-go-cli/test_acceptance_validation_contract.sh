@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sources: 2-合并-oz-flow-执行器到-oz-仓库, 21-共享验收证据追溯逻辑
+# Sources: 2-合并-oz-flow-执行器到-oz-仓库, 21-共享验收证据追溯逻辑, 39-统一验收合同校验执行证据链
 # 文件目的：验证 oz validate 正式校验当前 oz flow 允许的 acceptance.json 格式。
 set -euo pipefail
 
@@ -155,6 +155,52 @@ cat >"$change_dir/acceptance.json" <<'JSON'
 JSON
 (cd "$project" && "$oz" validate "$change" --json) >"$tmp/rich.json"
 grep -q '"valid": true' "$tmp/rich.json"
+
+if ! rg -n 'LifecycleDiagnostic|LifecycleResult|ValidateLifecycle|BuildLifecycle' "$repo_root/internal/acceptance" >"$tmp/lifecycle-symbols.log"; then
+  echo "internal/acceptance 缺少 lifecycle 诊断边界" >&2
+  exit 1
+fi
+rg -n 'ValidateLifecycle|BuildLifecycle|Diagnostics|RequiredItems' \
+  "$repo_root/internal/ozcli/cmd_validate.go" \
+  "$repo_root/internal/app/acceptance_preflight.go" \
+  "$repo_root/internal/app/acceptance_run.go" \
+  "$repo_root/internal/app/qa.go" >"$tmp/lifecycle-callers.log"
+
+(
+  cd "$project"
+  git init >/dev/null
+  git config user.email "oz-test@example.com"
+  git config user.name "oz test"
+  git add docs
+  git commit -m init >/dev/null
+)
+(cd "$project" && "$oz" flow run-acceptance --change "$change" --json) >"$tmp/run-acceptance.json"
+python3 - "$tmp/run-acceptance.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+if not payload.get("valid") or payload.get("status") != "passed":
+    raise SystemExit(f"run-acceptance did not pass: {payload!r}")
+
+coverage = payload.get("coverage") or []
+producers = payload.get("producers") or []
+has_coverage = any(
+    "sample-contract" in item.get("tests", [])
+    and "validate-json" in item.get("evidence", [])
+    for item in coverage
+)
+has_producer = any(
+    item.get("evidence_id") == "validate-json"
+    and "sample-contract" in item.get("tests", [])
+    and item.get("verified") is True
+    for item in producers
+)
+if not has_coverage or not has_producer:
+    raise SystemExit(f"missing lifecycle trace: coverage={coverage!r} producers={producers!r}")
+PY
 
 cat >"$change_dir/acceptance.json" <<'JSON'
 {

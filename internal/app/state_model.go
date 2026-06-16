@@ -165,12 +165,13 @@ func processStatusFromNode(node DAGNodeState, hasNode bool, sessionID string) st
 		}
 		return ""
 	}
-	switch node.Status {
-	case "success", "completed", statusDone:
+	normalized := normalizeDAGNodeStatus(node.Status)
+	switch normalized {
+	case statusDone:
 		return "completed"
 	case statusRunning:
 		return statusRunning
-	case statusFailed, "error", "validation_failed":
+	case statusFailed:
 		return statusFailed
 	default:
 		if node.Status != "" {
@@ -180,6 +181,20 @@ func processStatusFromNode(node DAGNodeState, hasNode bool, sessionID string) st
 			return statusRunning
 		}
 		return ""
+	}
+}
+
+// normalizeDAGNodeStatus maps scheduler node states into run status groups.
+func normalizeDAGNodeStatus(status string) string {
+	switch normalizeRunStatus(status) {
+	case runStatus(statusDone):
+		return statusDone
+	case runStatus(statusRunning):
+		return statusRunning
+	case runStatus(statusFailed):
+		return statusFailed
+	default:
+		return status
 	}
 }
 

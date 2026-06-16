@@ -51,6 +51,29 @@ func TestValidateQACommandRejectsMissingAcceptanceMatrixCoverage(t *testing.T) {
 	}
 }
 
+// TestValidateQAAgainstAcceptanceUsesLifecycleRequiredItems verifies QA coverage reuses shared required ids.
+func TestValidateQAAgainstAcceptanceUsesLifecycleRequiredItems(t *testing.T) {
+	dir := t.TempDir()
+	acceptancePath := filepath.Join(dir, "acceptance.json")
+	writeTestFile(t, acceptancePath, qaCommandAcceptanceJSON())
+	contract, err := ReadAcceptance(acceptancePath)
+	if err != nil {
+		t.Fatalf("parse acceptance fixture: %v", err)
+	}
+	qa := QA{
+		Summary:  "QA covers acceptance",
+		Decision: "clean",
+		Evidence: []string{"runtime evidence: test-results/qa-command/contract.log"},
+		AcceptanceMatrix: []AcceptanceResult{
+			{ID: "qa-command-contract", Status: "passed", Artifact: "docs/changes/99-demo/tests/qa-command.sh", Evidence: "test passed"},
+			{ID: "qa-command-runtime-log", Status: "passed", Artifact: "test-results/qa-command/contract.log", Evidence: "runtime log present"},
+		},
+	}
+	if err := ValidateQAAgainstAcceptance(qa, contract); err != nil {
+		t.Fatalf("expected lifecycle required item set to pass QA coverage: %v", err)
+	}
+}
+
 // writeTestFile writes a test fixture file and fails fast on filesystem errors.
 func writeTestFile(t *testing.T, path, body string) {
 	t.Helper()

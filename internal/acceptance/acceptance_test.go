@@ -75,6 +75,80 @@ func TestEvidenceHasProducerRejectsMissingProducer(t *testing.T) {
 	}
 }
 
+func TestValidateLifecycleReportsProducerDiagnostics(t *testing.T) {
+	// TestValidateLifecycleReportsProducerDiagnostics verifies producer tracing failures become structured diagnostics.
+	root := t.TempDir()
+	writeFile(t, root, "tests/no_producer_test.sh", "echo no runtime artifact here\n")
+	contract := Contract{
+		Summary: "lifecycle contract",
+		Coverage: []Coverage{{
+			Spec:     "需求：lifecycle / 场景：producer",
+			Tests:    []string{"no-producer"},
+			Evidence: []string{"runtime-log"},
+			Risk:     "fixture",
+		}},
+		RequiredTests: []Test{{
+			ID:         "no-producer",
+			Source:     "change_contract",
+			Path:       "tests/no_producer_test.sh",
+			Command:    "bash tests/no_producer_test.sh",
+			Purpose:    "runs without evidence output",
+			Assertions: []string{"business acceptance executes without producing the declared runtime log"},
+		}},
+		RequiredEvidence: []Evidence{{
+			ID:      "runtime-log",
+			Kind:    "runtime_log",
+			Path:    "test-results/lifecycle/runtime.log",
+			Purpose: "declared runtime evidence",
+		}},
+	}
+
+	result := ValidateLifecycle(root, contract)
+	if result.Valid {
+		t.Fatalf("expected missing producer to fail lifecycle")
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "required_evidence_producer_missing" {
+		t.Fatalf("unexpected diagnostics: %#v", result.Diagnostics)
+	}
+}
+
+func TestValidateLifecycleAcceptsProducerAndExposesRequiredItems(t *testing.T) {
+	// TestValidateLifecycleAcceptsProducerAndExposesRequiredItems verifies the positive lifecycle path and QA item set.
+	root := t.TempDir()
+	writeFile(t, root, "tests/producer_test.sh", "mkdir -p test-results/lifecycle\nprintf ok > test-results/lifecycle/runtime.log\n")
+	contract := Contract{
+		Summary: "lifecycle contract",
+		Coverage: []Coverage{{
+			Spec:     "需求：lifecycle / 场景：producer",
+			Tests:    []string{"producer"},
+			Evidence: []string{"runtime-log"},
+			Risk:     "fixture",
+		}},
+		RequiredTests: []Test{{
+			ID:         "producer",
+			Source:     "change_contract",
+			Path:       "tests/producer_test.sh",
+			Command:    "bash tests/producer_test.sh",
+			Purpose:    "runs producer script",
+			Assertions: []string{"business acceptance writes the declared runtime log"},
+		}},
+		RequiredEvidence: []Evidence{{
+			ID:      "runtime-log",
+			Kind:    "runtime_log",
+			Path:    "test-results/lifecycle/runtime.log",
+			Purpose: "declared runtime evidence",
+		}},
+	}
+
+	result := ValidateLifecycle(root, contract)
+	if !result.Valid || len(result.Diagnostics) != 0 {
+		t.Fatalf("expected lifecycle to pass, got %#v", result)
+	}
+	if result.Required.Tests["producer"] == "" || result.Required.Evidence["runtime-log"] == "" {
+		t.Fatalf("required item set missing ids: %#v", result.Required)
+	}
+}
+
 func coverageFor(evidenceID, testID string) []Coverage {
 	// coverageFor builds the minimal contract link needed by producer tracing.
 	return []Coverage{{Spec: "producer tracing", Tests: []string{testID}, Evidence: []string{evidenceID}}}

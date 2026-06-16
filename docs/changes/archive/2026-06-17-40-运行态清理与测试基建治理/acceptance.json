@@ -1,0 +1,46 @@
+{
+  "summary": "验收 clean plan/apply 安全边界、dry-run JSON 预览能力和 workflow 测试夹具治理，降低后续重构风险。",
+  "coverage": [
+    {
+      "spec": "需求：clean 先计划后执行 / 场景：dry-run JSON 展示将删除和保护项且不删除文件",
+      "tests": ["clean-plan-fixture-contract"],
+      "evidence": ["clean-plan-fixture-log"],
+      "risk": "不覆盖 Windows lock 细节，平台差异由既有锁测试补充。"
+    },
+    {
+      "spec": "需求：clean 默认行为兼容 / 场景：apply 使用同一计划删除 failed run",
+      "tests": ["clean-plan-fixture-contract"],
+      "evidence": ["clean-plan-fixture-log"],
+      "risk": "不覆盖所有 agent session SQLite schema，沿用既有 best-effort 逻辑。"
+    },
+    {
+      "spec": "需求：workflow 测试夹具收敛 / 场景：核心 workflow 测试存在共享 fixture",
+      "tests": ["clean-plan-fixture-contract"],
+      "evidence": ["clean-plan-fixture-log"],
+      "risk": "不强制一次迁移所有历史测试 helper，只要求核心 fixture 边界存在并被使用。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "clean-plan-fixture-contract",
+      "source": "change_contract",
+      "path": "docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh",
+      "command": "bash docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh | tee test-results/40-clean-plan-fixture/acceptance-command.log",
+      "purpose": "证明 oz flow clean 先生成计划再执行删除，并且核心 workflow 测试夹具已经收敛。",
+      "assertions": [
+        "clean plan fixture contract verifies oz flow clean --dry-run --json reports delete actions for failed runtime state without deleting the run directory",
+        "clean plan fixture contract verifies oz flow clean applies the same planned deletion to a real temporary repository runtime state",
+        "clean plan fixture contract verifies internal/app has a shared workflow fixture and go test ./internal/app continues to pass"
+      ],
+      "expected_initial_failure": "当前实现尚未支持 clean --dry-run --json，也未形成目标 clean plan 和 workflow fixture 边界。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "clean-plan-fixture-log",
+      "kind": "runtime_log",
+      "path": "test-results/40-clean-plan-fixture/contract.log",
+      "purpose": "记录 clean dry-run/apply 和 workflow fixture 验证过程，供 QA 复核。"
+    }
+  ]
+}

@@ -21,18 +21,18 @@ type StageDecision struct {
 // DecideNextStage returns the next durable stage/status for pure stage transitions.
 func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 	ensureWorkflowConfig(&state)
-	switch {
-	case state.Stage == "execution":
+	stage, err := parseWorkflowStage(state.Stage)
+	if err != nil {
+		return StageDecision{}, err
+	}
+	switch stage.Kind {
+	case workflowStageExecution:
 		if state.Workflow.MaxReviewIterations == 0 {
 			return StageDecision{NextStage: "archive", NextStatus: state.Status}, nil
 		}
 		return StageDecision{NextStage: "review_1", NextStatus: state.Status}, nil
-	case strings.HasPrefix(state.Stage, "review_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return StageDecision{}, err
-		}
-		n := strconv.Itoa(iteration)
+	case workflowStageReview:
+		n := strconv.Itoa(stage.Iteration)
 		if ReviewDeclaresWorkflowFailure(review) {
 			reason := "审核阶段判定工作流无法继续：" + strings.TrimSpace(review.WorkflowFailure.Reason)
 			return StageDecision{NextStage: state.Stage, NextStatus: statusFailed, BlockedReason: reason}, nil
@@ -41,26 +41,18 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 			return StageDecision{NextStage: "fix_" + n, NextStatus: state.Status}, nil
 		}
 		return StageDecision{NextStage: "qa_" + n, NextStatus: state.Status}, nil
-	case strings.HasPrefix(state.Stage, "qa_"):
-		iteration, err := stageIteration(state.Stage)
-		if err != nil {
-			return StageDecision{}, err
-		}
-		n := strconv.Itoa(iteration)
+	case workflowStageQA:
+		n := strconv.Itoa(stage.Iteration)
 		if QANeedsFix(qa) {
 			return StageDecision{NextStage: "fix_" + n, NextStatus: state.Status}, nil
 		}
 		return StageDecision{NextStage: "archive", NextStatus: state.Status}, nil
-	case strings.HasPrefix(state.Stage, "fix_"):
-		n, err := stageIteration(state.Stage)
-		if err != nil {
-			return StageDecision{}, err
-		}
-		if n >= state.Workflow.MaxReviewIterations {
+	case workflowStageFix:
+		if stage.Iteration >= state.Workflow.MaxReviewIterations {
 			return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "审核修正达到上限，工作流已中断"}, nil
 		}
-		return StageDecision{NextStage: fmt.Sprintf("review_%d", n+1), NextStatus: state.Status}, nil
-	case state.Stage == "archive":
+		return StageDecision{NextStage: fmt.Sprintf("review_%d", stage.Iteration+1), NextStatus: state.Status}, nil
+	case workflowStageArchive:
 		return StageDecision{NextStage: "done", NextStatus: statusDone}, nil
 	default:
 		return StageDecision{}, fmt.Errorf("未知阶段 %q", state.Stage)
@@ -78,15 +70,12 @@ func stageKind(stage string) string {
 
 // stageIteration returns the numeric review, QA, or fix round encoded in the stage name.
 func stageIteration(stage string) (int, error) {
-	for _, prefix := range []string{"review_", "qa_", "fix_"} {
-		if strings.HasPrefix(stage, prefix) {
-			raw := strings.TrimPrefix(stage, prefix)
-			n, err := strconv.Atoi(raw)
-			if err != nil || n < 1 {
-				return 0, fmt.Errorf("非法迭代阶段 %q", stage)
-			}
-			return n, nil
-		}
+	parsed, err := parseWorkflowStage(stage)
+	if err != nil {
+		return 0, err
+	}
+	if parsed.Iterable {
+		return parsed.Iteration, nil
 	}
 	return 0, nil
 }
@@ -227,17 +216,18 @@ func (e *Engine) advance(state *State) error {
 	}
 	review := result.Review
 	qa := result.QA
-	switch {
-	case state.Stage == "execution":
-	case strings.HasPrefix(state.Stage, "review_"):
+	stage, err := parseWorkflowStage(state.Stage)
+	if err != nil {
+		return err
+	}
+	switch stage.Kind {
+	case workflowStageExecution:
+	case workflowStageReview:
 		clearStageValidationFailure(state)
-	case strings.HasPrefix(state.Stage, "qa_"):
+	case workflowStageQA:
 		clearStageValidationFailure(state)
-	case strings.HasPrefix(state.Stage, "fix_"):
-		if _, err := stageIteration(state.Stage); err != nil {
-			return err
-		}
-	case state.Stage == "archive":
+	case workflowStageFix:
+	case workflowStageArchive:
 	default:
 		return fmt.Errorf("未知阶段 %q", state.Stage)
 	}

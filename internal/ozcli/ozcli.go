@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 var (
@@ -28,11 +30,12 @@ type cli struct {
 }
 
 type validationResult struct {
-	Valid     bool              `json:"valid"`
-	Change    string            `json:"change"`
-	Errors    []string          `json:"errors"`
-	Warnings  []string          `json:"warnings"`
-	Artifacts map[string]string `json:"artifacts"`
+	Valid       bool                             `json:"valid"`
+	Change      string                           `json:"change"`
+	Errors      []string                         `json:"errors"`
+	Warnings    []string                         `json:"warnings"`
+	Artifacts   map[string]string                `json:"artifacts"`
+	Diagnostics []acceptance.LifecycleDiagnostic `json:"diagnostics,omitempty"`
 }
 
 func stateRoot() (string, error) {

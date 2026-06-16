@@ -43,6 +43,7 @@
 - **并且** `coverage[].evidence` 必须引用真实存在的 `required_evidence[].id`
 - **并且** `required_evidence[]` 必须能追溯到 `coverage` 绑定的 `required_tests` producer
 - **并且** producer 追溯规则必须由 `internal/acceptance` 统一实现，`oz validate` 和 `oz flow` 预检复用同一规则
+- **并且** acceptance lifecycle 诊断边界必须由 `internal/acceptance` 统一提供，并被 `oz validate`、`oz flow` 预检、`run-acceptance` 和 QA 验收矩阵复用
 
 ### 场景：下游校验接口拒绝弱验收合同
 
@@ -61,6 +62,15 @@
 - **给定** 一个活动提案的 `coverage` 引用了不存在的测试或证据 id
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令失败并指出引用错误
+
+### 场景：required_tests 执行证据链可追溯
+
+- **给定** 一个活动提案的合法 `acceptance.json` 使用旧必填字段集合，并声明 `coverage`、`required_tests` 和 `required_evidence`
+- **并且** required test 真实写入 runtime evidence
+- **当** 下游工具运行 `oz flow run-acceptance --change <change> --json`
+- **则** 命令保持既有 `summary`、`tests`、`evidence` 和 `diagnostics` 输出兼容
+- **并且** JSON 结果必须包含 required evidence 到 required tests 的 coverage 绑定
+- **并且** JSON 结果必须包含 producer 追溯结果，说明对应 evidence 已由 coverage 绑定的 required test 验证
 
 ### 场景：下游状态和归档接口继续可用
 

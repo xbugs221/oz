@@ -1,0 +1,46 @@
+{
+  "summary": "验收阶段/状态语义收敛和主阶段门禁流水线统一，确保 loop 与 DAG 路径复用同一业务边界且公开输出兼容。",
+  "coverage": [
+    {
+      "spec": "需求：阶段状态语义收敛 / 场景：阶段和状态有单一解析入口",
+      "tests": ["stage-gate-pipeline-contract"],
+      "evidence": ["stage-gate-pipeline-log"],
+      "risk": "不穷举所有历史 state 字符串，执行阶段需要保留兼容分支并依赖既有回归测试补充。"
+    },
+    {
+      "spec": "需求：主阶段门禁流水线统一 / 场景：loop 和 DAG 复用同一主阶段门禁",
+      "tests": ["stage-gate-pipeline-contract"],
+      "evidence": ["stage-gate-pipeline-log"],
+      "risk": "静态边界测试不能证明所有失败组合，需配合新增 Go 单测和现有 DAG 测试。"
+    },
+    {
+      "spec": "需求：兼容现有输出 / 场景：status 和 runner JSON 保持原字符串输出",
+      "tests": ["stage-gate-pipeline-contract"],
+      "evidence": ["stage-gate-pipeline-log"],
+      "risk": "不覆盖用户本机所有历史 runtime state，只覆盖仓库现有测试数据和公开字符串。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "stage-gate-pipeline-contract",
+      "source": "change_contract",
+      "path": "docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh",
+      "command": "bash docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh | tee test-results/38-stage-gate-pipeline/acceptance-command.log",
+      "purpose": "证明工作流阶段状态语义和主阶段门禁流水线已经形成单一可维护边界，并保留现有 Go 回归。",
+      "assertions": [
+        "stage gate pipeline contract verifies loop and DAG node stage completion call the same gate pipeline instead of duplicating acceptance and validation order",
+        "stage gate pipeline contract verifies workflow stage and run status parsing has one source of truth while public JSON strings remain compatible",
+        "stage gate pipeline contract runs go test ./internal/app so status, runner JSON, validation, DAG and archive behavior stay compatible"
+      ],
+      "expected_initial_failure": "当前实现尚未提供统一主阶段门禁流水线和阶段状态语义边界，测试应失败于目标架构缺失。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "stage-gate-pipeline-log",
+      "kind": "runtime_log",
+      "path": "test-results/38-stage-gate-pipeline/contract.log",
+      "purpose": "记录阶段状态语义、门禁流水线边界和 Go 回归测试结果，供 QA 复核。"
+    }
+  ]
+}

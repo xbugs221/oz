@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type nodeResult struct {
@@ -43,7 +42,7 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 			return e.failNodeState(state, err)
 		}
 	}
-	done, err = e.nodeStageDone(state)
+	result, err := e.completeMainStage(ctx, &state, stageGatePipelineNode)
 	if err != nil {
 		if isStageArtifactGateError(err) {
 			if recordErr := recordStageArtifactGateFailure(e.Repo, &state, err); recordErr != nil {
@@ -56,63 +55,11 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 		}
 		return e.failNodeState(state, err)
 	}
-	if !done {
-		err := e.stageArtifactGateError(state, fmt.Errorf("%s 阶段 artifact 未完成", stage))
-		if recordErr := recordStageArtifactGateFailure(e.Repo, &state, err); recordErr != nil {
-			return recordErr
-		}
+	if err := nodeStageGateError(stage, result); err != nil {
 		if saveErr := saveState(e.Repo, state); saveErr != nil {
 			return saveErr
 		}
 		return err
-	}
-	clearStageArtifactGateFailure(&state)
-	if stage == "execution" {
-		preflightPassed, err := e.runAcceptancePreflight(&state)
-		if err != nil {
-			return e.failNodeState(state, err)
-		}
-		if !preflightPassed {
-			if err := saveState(e.Repo, state); err != nil {
-				return err
-			}
-			return fmt.Errorf("%s acceptance preflight 未通过", stage)
-		}
-	}
-	acceptancePassed, err := e.runAcceptanceGate(ctx, &state)
-	if err != nil {
-		return e.failNodeState(state, err)
-	}
-	if !acceptancePassed {
-		if err := saveState(e.Repo, state); err != nil {
-			return err
-		}
-		return fmt.Errorf("%s acceptance run 未通过", stage)
-	}
-	validationPassed, err := e.validateStage(ctx, &state)
-	if err != nil {
-		return e.failNodeState(state, err)
-	}
-	if !validationPassed {
-		if err := saveState(e.Repo, state); err != nil {
-			return err
-		}
-		return fmt.Errorf("%s validation 未通过", stage)
-	}
-	markStageCompleted(&state)
-	if stage == "execution" || strings.HasPrefix(stage, "fix_") || stage == "archive" {
-		if err := e.advance(&state); err != nil {
-			if isStageArtifactGateError(err) {
-				if recordErr := recordStageArtifactGateFailure(e.Repo, &state, err); recordErr != nil {
-					return recordErr
-				}
-				if saveErr := saveState(e.Repo, state); saveErr != nil {
-					return saveErr
-				}
-				return err
-			}
-			return e.failNodeState(state, err)
-		}
 	}
 	if err := saveState(e.Repo, state); err != nil {
 		return err

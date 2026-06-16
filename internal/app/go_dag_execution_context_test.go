@@ -48,7 +48,8 @@ type goDAGContextFakeRunner struct {
 
 // TestGoDAGRetryableHelperErrorRestoresRunningState verifies transient helper failures stay retryable.
 func TestGoDAGRetryableHelperErrorRestoresRunningState(t *testing.T) {
-	repo := t.TempDir()
+	fixture := newWorkflowFixture(t)
+	repo := fixture.repo
 	runID := "retryable-helper-run"
 	state := State{
 		RunID:      runID,
@@ -888,6 +889,45 @@ func TestGoDAGAcceptanceFailureDoesNotReachValidation(t *testing.T) {
 	}
 	if _, ok := persisted.Validation["execution"]; ok {
 		t.Fatalf("validation should not run after failed acceptance gate: %#v", persisted.Validation["execution"])
+	}
+	if _, ok := persisted.ArtifactGates["execution"]; ok {
+		t.Fatalf("acceptance retry should not be recorded as artifact gate failure: %#v", persisted.ArtifactGates["execution"])
+	}
+}
+
+// TestGoDAGAcceptanceBlockedDoesNotBecomeArtifactGateBlock keeps gate ownership in acceptance state.
+func TestGoDAGAcceptanceBlockedDoesNotBecomeArtifactGateBlock(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [x] task\n")
+	writeAcceptanceRunChange(t, repo, "demo", []acceptanceRunFixtureTest{{
+		id:   "go-dag-acceptance-block",
+		body: `mkdir -p test-results/demo && printf fail > test-results/demo/go-dag-acceptance-block.log && exit 7`,
+	}}, []string{"test-results/demo/go-dag-acceptance-block.log"})
+	goDAGContextInstallFakeOz(t)
+	runID := "blocked-execution-acceptance-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	state.Workflow.Validation.MaxAttemptsPerStage = 1
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	if err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"}); err != nil {
+		t.Fatalf("execution node error = %v, want terminal acceptance block", err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Status != statusAcceptanceContractBlocked || persisted.Stage != statusAcceptanceContractBlocked {
+		t.Fatalf("state = %s/%s, want blocked_acceptance_contract", persisted.Status, persisted.Stage)
+	}
+	if _, ok := persisted.ArtifactGates["execution"]; ok {
+		t.Fatalf("acceptance blocked should not be recorded as artifact gate failure: %#v", persisted.ArtifactGates["execution"])
 	}
 }
 

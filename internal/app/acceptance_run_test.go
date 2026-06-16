@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 // TestRunAcceptanceCommandPassesAndWritesResult verifies the runner command emits the persisted result JSON.
@@ -25,6 +27,15 @@ func TestRunAcceptanceCommandPassesAndWritesResult(t *testing.T) {
 	}
 	if !fileExists(filepath.Join(repo, filepath.FromSlash(result.ResultPath))) {
 		t.Fatalf("missing result file %s", result.ResultPath)
+	}
+	if len(result.Diagnostics) != 0 {
+		t.Fatalf("passing acceptance run should not report diagnostics: %#v", result.Diagnostics)
+	}
+	if len(result.Coverage) != 1 || result.Coverage[0].Tests[0] != "pass-test" || result.Coverage[0].Evidence[0] != "evidence-a" {
+		t.Fatalf("passing acceptance run should expose coverage trace: %#v", result.Coverage)
+	}
+	if len(result.Producers) != 1 || result.Producers[0].EvidenceID != "evidence-a" || !result.Producers[0].Verified {
+		t.Fatalf("passing acceptance run should expose verified producer trace: %#v", result.Producers)
 	}
 }
 
@@ -58,6 +69,76 @@ func TestRunAcceptanceMissingEvidenceFails(t *testing.T) {
 	if result.Valid || result.Summary.EvidenceMissing != 1 {
 		t.Fatalf("missing evidence should fail result: %#v", result)
 	}
+	if !hasAcceptanceDiagnostic(result.Diagnostics, "required_evidence_runtime_missing") {
+		t.Fatalf("missing evidence should emit lifecycle diagnostics: %#v", result.Diagnostics)
+	}
+}
+
+// TestRunAcceptanceLifecycleDiagnosticsFailGate verifies lifecycle errors are not advisory only.
+func TestRunAcceptanceLifecycleDiagnosticsFailGate(t *testing.T) {
+	repo := t.TempDir()
+	change := "1-demo"
+	changeDir := filepath.Join(repo, "docs", "changes", change)
+	testsDir := filepath.Join(changeDir, "tests")
+	if err := os.MkdirAll(testsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptRel := "docs/changes/" + change + "/tests/pass.sh"
+	script := filepath.Join(repo, filepath.FromSlash(scriptRel))
+	writeTestFile(t, script, "#!/usr/bin/env bash\n# 文件功能目的：生成 runtime evidence 以验证 lifecycle gate。\nset -euo pipefail\nmkdir -p test-results/demo\nprintf ok > test-results/demo/runtime.log\n")
+	if err := os.Chmod(script, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(changeDir, "acceptance.json"), `{
+  "summary": "invalid lifecycle fixture",
+  "coverage": [{
+    "spec": "需求：invalid lifecycle fixture / 场景：非法 required test path",
+    "tests": ["bad-test"],
+    "evidence": ["runtime-log"],
+    "risk": "fixture only"
+  }],
+  "required_tests": [{
+    "id": "bad-test",
+    "source": "change_contract",
+    "path": "../outside/evil.sh",
+    "command": "bash `+scriptRel+` # ../outside/evil.sh",
+    "purpose": "produce runtime-log at test-results/demo/runtime.log",
+    "assertions": ["required test writes runtime-log to test-results/demo/runtime.log"]
+  }],
+  "required_evidence": [{
+    "id": "runtime-log",
+    "kind": "runtime_log",
+    "path": "test-results/demo/runtime.log",
+    "purpose": "prove runtime evidence exists"
+  }]
+}`)
+
+	result, err := runAcceptanceRequiredTests(context.Background(), repo, change)
+	if err == nil {
+		t.Fatal("run-acceptance should fail when lifecycle diagnostics contain errors")
+	}
+	if result.Valid || result.Status != validationStatusFailed {
+		t.Fatalf("lifecycle error should fail result: %#v", result)
+	}
+	if result.Summary.Failed != 0 || result.Summary.EvidenceMissing != 0 {
+		t.Fatalf("fixture should isolate lifecycle gate failure: %#v", result.Summary)
+	}
+	if !hasAcceptanceDiagnostic(result.Diagnostics, "required_test_path") {
+		t.Fatalf("expected required_test_path diagnostic: %#v", result.Diagnostics)
+	}
+	if len(result.Producers) != 1 || result.Producers[0].Verified {
+		t.Fatalf("invalid lifecycle producer trace should not be verified: %#v", result.Producers)
+	}
+}
+
+func hasAcceptanceDiagnostic(diagnostics []acceptance.LifecycleDiagnostic, code string) bool {
+	// hasAcceptanceDiagnostic checks diagnostics by code without depending on ordering.
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 // TestRunAcceptanceRejectsPathTraversal verifies change names cannot escape docs/changes.

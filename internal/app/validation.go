@@ -53,7 +53,8 @@ func shouldValidateStage(state State) bool {
 	if len(state.Workflow.Validation.Commands) == 0 {
 		return false
 	}
-	return state.Stage == "execution" || strings.HasPrefix(state.Stage, "fix_")
+	stage, err := parseWorkflowStage(state.Stage)
+	return err == nil && (stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix))
 }
 
 // shouldForceStageRerun reports whether a failed validation gate must re-enter the same stage.

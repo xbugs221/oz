@@ -74,8 +74,8 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 		return dispatchAbortCommand(args, stdout, repo)
 	case "clean":
 		for _, arg := range args[1:] {
-			if arg != "--agent-sessions" {
-				return fmt.Errorf("用法：oz flow clean [--agent-sessions]")
+			if arg != "--agent-sessions" && arg != "--dry-run" && arg != "--json" {
+				return fmt.Errorf("用法：oz flow clean [--agent-sessions] [--dry-run] [--json]")
 			}
 		}
 		return runClean(stdout, repo, args[1:]...)

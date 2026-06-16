@@ -2,7 +2,6 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/xbugs221/oz/internal/acceptance"
@@ -43,14 +42,11 @@ func (e *Engine) runAcceptancePreflight(state *State) (bool, error) {
 
 // acceptancePreflightFindings returns contract issues that would waste later review/QA/fix turns.
 func acceptancePreflightFindings(repo string, contract Acceptance) []string {
-	tests := map[string]AcceptanceTest{}
-	for _, test := range contract.RequiredTests {
-		tests[test.ID] = test
-	}
 	var findings []string
-	for _, evidence := range contract.RequiredEvidence {
-		if !acceptance.EvidenceHasProducer(repo, evidence, contract.Coverage, tests) {
-			findings = append(findings, fmt.Sprintf("required_evidence %q 无法追溯到 required_tests producer", evidence.ID))
+	lifecycle := acceptance.ValidateLifecycle(repo, contract)
+	for _, diagnostic := range lifecycle.Diagnostics {
+		if diagnostic.Code == "required_evidence_producer_missing" {
+			findings = append(findings, diagnostic.Message)
 		}
 	}
 	return findings

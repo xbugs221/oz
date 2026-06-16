@@ -150,7 +150,7 @@ func (e *Engine) run(ctx context.Context, state State) error {
 // runLoop advances stages while the caller holds the run lock.
 func (e *Engine) runLoop(ctx context.Context, state State) error {
 	e.printProgress(state, "resuming")
-	for state.Status == statusRunning {
+	for normalizeRunStatus(state.Status).isRunning() {
 		forceRun := shouldForceStageRerun(state)
 		done := false
 		var err error
@@ -176,7 +176,7 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 		} else {
 			e.printProgress(state, "skipped")
 		}
-		done, err = e.checkStageArtifactGate(state)
+		result, err := e.completeMainStage(ctx, &state, stageGatePipelineLoop)
 		if err != nil {
 			if handled, handleErr := e.handleStageArtifactGateFailure(&state, err); handleErr != nil {
 				return handleErr
@@ -185,73 +185,13 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 			}
 			return err
 		}
-		if !done {
+		if !result.Done {
 			continue
-		}
-		clearStageArtifactGateFailure(&state)
-		if state.Stage == "execution" {
-			preflightPassed, err := e.runAcceptancePreflight(&state)
-			if err != nil {
-				return err
-			}
-			if !preflightPassed {
-				if err := saveState(e.Repo, state); err != nil {
-					return err
-				}
-				e.printProgress(state, "blocked")
-				continue
-			}
-		}
-		acceptancePassed, err := e.runAcceptanceGate(ctx, &state)
-		if err != nil {
-			return err
-		}
-		if !acceptancePassed {
-			if err := saveState(e.Repo, state); err != nil {
-				return err
-			}
-			if state.Status == statusAcceptanceContractBlocked {
-				e.printProgress(state, "blocked")
-			} else {
-				e.printProgress(state, "validation_failed")
-			}
-			continue
-		}
-		validationPassed, err := e.validateStage(ctx, &state)
-		if err != nil {
-			return err
-		}
-		if !validationPassed {
-			if err := saveState(e.Repo, state); err != nil {
-				return err
-			}
-			if state.Status == statusValidationBlocked {
-				e.printProgress(state, "blocked")
-			} else {
-				e.printProgress(state, "validation_failed")
-			}
-			continue
-		}
-		if state.Status != statusRunning {
-			if err := saveState(e.Repo, state); err != nil {
-				return err
-			}
-			e.printProgress(state, "blocked")
-			continue
-		}
-		markStageCompleted(&state)
-		if err := e.advance(&state); err != nil {
-			if handled, handleErr := e.handleStageArtifactGateFailure(&state, err); handleErr != nil {
-				return handleErr
-			} else if handled {
-				continue
-			}
-			return err
 		}
 		if err := saveState(e.Repo, state); err != nil {
 			return err
 		}
-		e.printProgress(state, "next")
+		e.printProgress(state, result.ProgressLabel)
 	}
 	return nil
 }

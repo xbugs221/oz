@@ -92,15 +92,27 @@ func validateChange(root, change string) validationResult {
 		result.Errors = append(result.Errors, "task.md 必须包含任务项")
 	}
 	acceptancePath := filepath.Join(changeDir, "acceptance.json")
-	if contract, err := acceptance.Read(acceptancePath); err != nil {
-		result.Errors = append(result.Errors, "acceptance.json 无效："+err.Error())
-	} else {
-		result.Errors = append(result.Errors, validateAcceptanceFiles(root, contract)...)
-	}
+	diagnostics, acceptanceErrors := validateAcceptanceFiles(filepath.Dir(root), acceptancePath)
+	result.Diagnostics = append(result.Diagnostics, diagnostics...)
+	result.Errors = append(result.Errors, acceptanceErrors...)
 	result.Errors = append(result.Errors, validateRuntimeArtifactPolicy(filepath.Dir(root), changeDir)...)
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0
 	return result
+}
+
+func validateAcceptanceFiles(projectRoot, acceptancePath string) ([]acceptance.LifecycleDiagnostic, []string) {
+	// validateAcceptanceFiles preserves the ozcli validation boundary while delegating lifecycle checks.
+	contract, err := acceptance.Read(acceptancePath)
+	if err != nil {
+		return nil, []string{"acceptance.json 无效：" + err.Error()}
+	}
+	lifecycle := acceptance.ValidateLifecycle(projectRoot, contract)
+	errs := make([]string, 0, len(lifecycle.Diagnostics))
+	for _, diagnostic := range lifecycle.Diagnostics {
+		errs = append(errs, diagnostic.Message)
+	}
+	return lifecycle.Diagnostics, errs
 }
 
 func isGitIgnored(projectRoot, path string) bool {
@@ -111,36 +123,6 @@ func isGitIgnored(projectRoot, path string) bool {
 	}
 	cmd := exec.Command("git", "-C", projectRoot, "check-ignore", "--quiet", "--", filepath.ToSlash(rel))
 	return cmd.Run() == nil
-}
-
-func validateAcceptanceFiles(root string, contract acceptance.Contract) []string {
-	// validateAcceptanceFiles binds acceptance.json entries to real tests and evidence references.
-	errs := []string{}
-	projectRoot := filepath.Dir(root)
-	tests := map[string]acceptance.Test{}
-	for i, test := range contract.RequiredTests {
-		tests[test.ID] = test
-		if filepath.IsAbs(test.Path) || strings.TrimSpace(test.Path) == "." {
-			errs = append(errs, fmt.Sprintf("required_tests[%d].path 必须是相对测试路径：%s", i, test.Path))
-			continue
-		}
-		testPath := filepath.Join(projectRoot, filepath.Clean(test.Path))
-		if info, err := os.Stat(testPath); err != nil || info.IsDir() {
-			errs = append(errs, fmt.Sprintf("required_tests[%d].path 指向的测试不存在：%s", i, test.Path))
-		}
-		if !strings.Contains(test.Command, test.Path) {
-			errs = append(errs, fmt.Sprintf("required_tests[%d].command 必须引用 path：%s", i, test.Path))
-		}
-	}
-	for i, evidence := range contract.RequiredEvidence {
-		if filepath.IsAbs(evidence.Path) || strings.TrimSpace(evidence.Path) == "." {
-			errs = append(errs, fmt.Sprintf("required_evidence[%d].path 必须是相对产物路径：%s", i, evidence.Path))
-		}
-		if !acceptance.EvidenceHasProducer(projectRoot, evidence, contract.Coverage, tests) {
-			errs = append(errs, fmt.Sprintf("required_evidence[%d] %q 无法追溯到 required_tests producer：必须在 coverage 绑定的 required_tests 的 command/purpose/assertions、测试文件或同目录 .sh wrapper 中明确产出 evidence id/path", i, evidence.ID))
-		}
-	}
-	return errs
 }
 
 func validateRuntimeArtifactPolicy(projectRoot, changeDir string) []string {
