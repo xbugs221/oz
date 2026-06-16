@@ -130,7 +130,8 @@ func ValidateQAAgainstAcceptance(qa QA, acceptance Acceptance) error {
 		return nil
 	}
 	required := map[string]string{}
-	for _, test := range acceptance.RequiredTests {
+	contractTests := acceptance.RequiredTests
+	for _, test := range contractTests {
 		required[test.ID] = "required_tests"
 	}
 	for _, evidence := range acceptance.RequiredEvidence {

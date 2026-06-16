@@ -1,0 +1,116 @@
+{
+  "summary": "把 acceptance.json.required_tests 变成 oz flow 可执行、可汇总、可接入 sealed run gate 的稳定合同测试入口",
+  "coverage": [
+    {
+      "spec": "需求：验收合同执行入口 / 场景：Runner surface 暴露 run-acceptance",
+      "tests": ["acceptance-run-surface-contract"],
+      "evidence": ["acceptance-run-surface-log"],
+      "risk": "只覆盖命令面可发现性，不覆盖实际测试执行"
+    },
+    {
+      "spec": "需求：验收合同执行入口 / 场景：成功执行 active change 的 required tests 并检查 evidence",
+      "tests": ["acceptance-run-success-contract"],
+      "evidence": ["acceptance-run-success-log"],
+      "risk": "只覆盖单测试成功路径，不覆盖失败汇总"
+    },
+    {
+      "spec": "需求：验收合同执行入口 / 场景：失败时仍汇总全部 required tests",
+      "tests": ["acceptance-run-failure-contract"],
+      "evidence": ["acceptance-run-failure-log"],
+      "risk": "不要求并行执行，只要求失败不短路"
+    },
+    {
+      "spec": "需求：验收合同 gate 集成 / 场景：execution/fix 后使用同一执行器阻断失败合同",
+      "tests": ["acceptance-run-gate-contract"],
+      "evidence": ["acceptance-run-gate-log"],
+      "risk": "结构和 Go 回归不能替代真实外部 agent CLI 端到端运行"
+    },
+    {
+      "spec": "需求：测试执行边界收敛 / 场景：acceptance run 不混入 validation 和 QA artifact 逻辑",
+      "tests": ["acceptance-run-gate-contract"],
+      "evidence": ["acceptance-run-gate-log"],
+      "risk": "结构断言允许实现细节调整，但必须保留独立边界"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "acceptance-run-surface-contract",
+      "source": "change_contract",
+      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh",
+      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh",
+      "purpose": "验证 run-acceptance 命令面并生成 test-results/37-执行验收合同测试并汇总结果/surface/contract.log",
+      "assertions": [
+        "真实 cmd/oz 二进制的 oz flow --help 暴露 run-acceptance JSON runner 命令",
+        "oz flow contract --json 的 capabilities 包含 run-acceptance",
+        "surface 合同日志写入 test-results/37-执行验收合同测试并汇总结果/surface/contract.log"
+      ],
+      "expected_initial_failure": "当前 oz flow 尚未实现 run-acceptance 命令和 runner capability"
+    },
+    {
+      "id": "acceptance-run-success-contract",
+      "source": "change_contract",
+      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh",
+      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh",
+      "purpose": "验证成功执行 required_tests 并生成 test-results/37-执行验收合同测试并汇总结果/success/contract.log",
+      "assertions": [
+        "真实临时 git 项目中的 active change required test 被 oz flow run-acceptance 执行",
+        "run-acceptance JSON 汇总 valid=true/status=passed 且 evidence 标记 present",
+        "success 合同日志写入 test-results/37-执行验收合同测试并汇总结果/success/contract.log"
+      ],
+      "expected_initial_failure": "当前 oz flow 尚未实现 run-acceptance 成功路径"
+    },
+    {
+      "id": "acceptance-run-failure-contract",
+      "source": "change_contract",
+      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh",
+      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh",
+      "purpose": "验证失败不短路并生成 test-results/37-执行验收合同测试并汇总结果/failure/contract.log",
+      "assertions": [
+        "一个 required test 失败时 oz flow run-acceptance 返回非零",
+        "另一个 required test 仍被执行并出现在 JSON tests 列表中",
+        "failure 合同日志写入 test-results/37-执行验收合同测试并汇总结果/failure/contract.log"
+      ],
+      "expected_initial_failure": "当前 oz flow 尚未实现 run-acceptance 失败汇总路径"
+    },
+    {
+      "id": "acceptance-run-gate-contract",
+      "source": "change_contract",
+      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh",
+      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh",
+      "purpose": "验证 execution/fix gate 和边界收敛并生成 test-results/37-执行验收合同测试并汇总结果/gate/contract.log",
+      "assertions": [
+        "internal/app 存在独立 acceptance run 边界文件和结果 DTO",
+        "execution/fix 后的 gate 能保存 acceptance run result 路径和失败摘要",
+        "gate 合同日志写入 test-results/37-执行验收合同测试并汇总结果/gate/contract.log"
+      ],
+      "expected_initial_failure": "当前 internal/app 尚未存在 acceptance run 执行边界和 stage gate 回归"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "acceptance-run-surface-log",
+      "kind": "runtime_log",
+      "path": "test-results/37-执行验收合同测试并汇总结果/surface/contract.log",
+      "purpose": "记录 run-acceptance 命令面和 runner capability 检查结果"
+    },
+    {
+      "id": "acceptance-run-success-log",
+      "kind": "runtime_log",
+      "path": "test-results/37-执行验收合同测试并汇总结果/success/contract.log",
+      "purpose": "记录成功执行 active change required test 和 evidence 检查结果"
+    },
+    {
+      "id": "acceptance-run-failure-log",
+      "kind": "runtime_log",
+      "path": "test-results/37-执行验收合同测试并汇总结果/failure/contract.log",
+      "purpose": "记录失败不短路、完整汇总和日志落盘检查结果"
+    },
+    {
+      "id": "acceptance-run-gate-log",
+      "kind": "runtime_log",
+      "path": "test-results/37-执行验收合同测试并汇总结果/gate/contract.log",
+      "purpose": "记录 execution/fix gate 集成和边界收敛结构检查结果"
+    }
+  ]
+}
+

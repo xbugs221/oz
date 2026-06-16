@@ -1118,7 +1118,35 @@
 - **且** stdout 是合法 JSON 对象
 - **且** `json` 字段为 `true`
 - **且** `capabilities` 是数组
-- **且** `capabilities` 至少包含 `list-changes`、`run`、`resume`、`status`、`abort`
+- **且** `capabilities` 至少包含 `list-changes`、`run`、`run-acceptance`、`resume`、`status`、`abort`
+
+### 需求：验收合同执行入口
+
+// Sources: 37-执行验收合同测试并汇总结果
+
+系统必须提供 `oz flow run-acceptance --change <change-name> --json`，让 runner 能确定性执行 active change 的 `acceptance.json.required_tests` 并汇总 evidence 状态。
+
+#### 场景：执行并汇总 active change required tests
+
+- **给定** active change 拥有合法 `acceptance.json`
+- **当** 调用 `oz flow run-acceptance --change <change-name> --json`
+- **则** 系统必须按顺序执行全部 `required_tests[].command`
+- **且** 任一 required test 失败时仍继续执行后续 required tests
+- **且** stdout 和 `test-results/acceptance-run/<change-name>/result.json` 必须使用同一 JSON 结构
+- **且** JSON 必须记录每个测试的 `id`、`source`、`path`、`command`、`status`、`exit_code`、`log_path` 和 `duration_ms`
+- **且** JSON 必须逐项记录 `required_evidence` 是否为存在的普通文件
+- **且** 任一测试失败或 evidence 缺失时 `valid=false/status=failed` 并返回非零
+- **测试**：`tests/specs/codex-workflow-cli/test_acceptance_run_contract.sh`
+
+#### 场景：execution/fix 后验收合同 gate
+
+- **给定** sealed run 处于 `execution` 或 `fix_*` 阶段
+- **当** 阶段 artifact gate 和 execution acceptance preflight 已通过
+- **则** 系统必须复用 `run-acceptance` 执行器阻断失败的 required tests 或缺失 evidence
+- **且** gate 失败必须写入 `state.acceptance_run[stage]` 的状态、失败摘要和 result 路径
+- **且** 未达到重试上限时必须重入同一阶段，并把 result JSON 注入下一轮 prompt
+- **且** 达到重试上限时必须进入 `blocked_acceptance_contract`
+- **测试**：`tests/specs/codex-workflow-cli/test_acceptance_run_contract.sh`
 
 ### 需求：JSON change listing
 

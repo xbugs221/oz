@@ -762,6 +762,10 @@ func TestGoDAGSkipsExecutionContextWhenTasksAlreadyDone(t *testing.T) {
 func TestGoDAGCompletedExecutionStillRunsValidation(t *testing.T) {
 	repo := goDAGContextRepo(t)
 	goDAGContextChange(t, repo, "- [x] task\n")
+	writeAcceptanceRunChange(t, repo, "demo", []acceptanceRunFixtureTest{{
+		id:   "go-dag-validation-precondition",
+		body: `mkdir -p test-results/demo && printf pass > test-results/demo/go-dag-validation-precondition.log`,
+	}}, []string{"test-results/demo/go-dag-validation-precondition.log"})
 	goDAGContextInstallFakeOz(t)
 	runID := "done-execution-validation-run"
 	if err := snapshotRunPrompts(repo, runID); err != nil {
@@ -798,6 +802,92 @@ func TestGoDAGCompletedExecutionStillRunsValidation(t *testing.T) {
 	}
 	if validation.LastArtifact == "" || !fileExists(validation.LastArtifact) {
 		t.Fatalf("validation artifact = %q, want written artifact", validation.LastArtifact)
+	}
+}
+
+// TestGoDAGCompletedExecutionRunsAcceptanceGate proves skipped execution agents still run required_tests.
+func TestGoDAGCompletedExecutionRunsAcceptanceGate(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [x] task\n")
+	writeAcceptanceRunChange(t, repo, "demo", []acceptanceRunFixtureTest{{
+		id:   "go-dag-acceptance-pass",
+		body: `mkdir -p test-results/demo && printf pass > test-results/demo/go-dag-acceptance.log`,
+	}}, []string{"test-results/demo/go-dag-acceptance.log"})
+	goDAGContextInstallFakeOz(t)
+	runID := "done-execution-acceptance-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	if err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"}); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runner.mainCalls != 0 {
+		t.Fatalf("main calls = %d, want execution skipped", runner.mainCalls)
+	}
+	gate := persisted.AcceptanceRun["execution"]
+	if gate.Kind != acceptanceRunKind || gate.Status != validationStatusPassed || gate.LastArtifact == "" {
+		t.Fatalf("acceptance gate = %#v, want passed acceptance artifact", gate)
+	}
+	if !fileExists(filepath.Join(repo, filepath.FromSlash(gate.LastArtifact))) {
+		t.Fatalf("acceptance artifact %q should exist", gate.LastArtifact)
+	}
+	if persisted.Stage != "archive" || persisted.Stages["execution"] != "completed" {
+		t.Fatalf("state = stage %q execution %q, want archive/completed", persisted.Stage, persisted.Stages["execution"])
+	}
+}
+
+// TestGoDAGAcceptanceFailureDoesNotReachValidation keeps required_tests ahead of validation commands.
+func TestGoDAGAcceptanceFailureDoesNotReachValidation(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [x] task\n")
+	writeAcceptanceRunChange(t, repo, "demo", []acceptanceRunFixtureTest{{
+		id:   "go-dag-acceptance-fail",
+		body: `mkdir -p test-results/demo && printf fail > test-results/demo/go-dag-acceptance-fail.log && exit 7`,
+	}}, []string{"test-results/demo/go-dag-acceptance-fail.log"})
+	goDAGContextInstallFakeOz(t)
+	runID := "failed-execution-acceptance-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	state.Workflow.Validation.Commands = []ValidationCommand{{
+		Executable: "/bin/sh",
+		Args:       []string{"-c", "printf validation-should-not-run"},
+	}}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"})
+	if !errors.Is(err, errGoDAGValidationRetry) {
+		t.Fatalf("execution node error = %v, want acceptance retry", err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Stage != "execution" || persisted.Stages["execution"] != "validation_failed" {
+		t.Fatalf("state = stage %q execution %q, want execution/validation_failed", persisted.Stage, persisted.Stages["execution"])
+	}
+	gate := persisted.AcceptanceRun["execution"]
+	if gate.Kind != acceptanceRunKind || gate.Status != validationStatusFailed || gate.LastArtifact == "" || gate.LastError == "" {
+		t.Fatalf("acceptance gate = %#v, want failed acceptance artifact", gate)
+	}
+	if _, ok := persisted.Validation["execution"]; ok {
+		t.Fatalf("validation should not run after failed acceptance gate: %#v", persisted.Validation["execution"])
 	}
 }
 
@@ -1155,7 +1245,8 @@ func goDAGContextChange(t *testing.T, repo, task string) {
 		"design.md":       "demo\n",
 		"spec.md":         "demo\n",
 		"task.md":         task,
-		"acceptance.json": `{"summary":"demo","coverage":[{"spec":"demo workflow","tests":["contract-demo"],"evidence":["runtime-demo"],"risk":"covered by runtime log"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.test.ts","command":"pnpm exec tsx --test docs/changes/demo/tests/demo.acceptance.test.ts","purpose":"produce runtime-demo at test-results/demo.log","assertions":["execution writes runtime-demo to test-results/demo.log"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove demo runtime path"}]}` + "\n",
+		"acceptance.json": `{"summary":"demo","coverage":[{"spec":"demo workflow","tests":["contract-demo"],"evidence":["runtime-demo"],"risk":"covered by runtime log"}],"required_tests":[{"id":"contract-demo","source":"change_contract","path":"docs/changes/demo/tests/demo.acceptance.sh","command":"bash docs/changes/demo/tests/demo.acceptance.sh","purpose":"produce runtime-demo at test-results/demo.log","assertions":["execution writes runtime-demo to test-results/demo.log"]}],"required_evidence":[{"id":"runtime-demo","kind":"runtime_log","path":"test-results/demo.log","purpose":"prove demo runtime path"}]}` + "\n",
+		filepath.Join("tests", "demo.acceptance.sh"): "#!/usr/bin/env bash\n# 文件功能目的：为 GoDAG 单测生成可复核的 acceptance runtime evidence。\nset -euo pipefail\nmkdir -p test-results\nprintf 'runtime-demo\\n' > test-results/demo.log\n",
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {

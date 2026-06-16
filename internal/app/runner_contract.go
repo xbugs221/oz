@@ -18,7 +18,7 @@ import (
 var Version = "dev"
 
 // runnerCapabilities lists the JSON subcommands promised by the runner contract.
-var runnerCapabilities = []string{"list-changes", "run", "resume", "restart", "status", "abort"}
+var runnerCapabilities = []string{"list-changes", "run", "run-acceptance", "resume", "restart", "status", "abort"}
 
 // RunnerState is the JSON DTO consumed by workflow runners.
 type RunnerState struct {

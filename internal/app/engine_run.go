@@ -202,6 +202,21 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 				continue
 			}
 		}
+		acceptancePassed, err := e.runAcceptanceGate(ctx, &state)
+		if err != nil {
+			return err
+		}
+		if !acceptancePassed {
+			if err := saveState(e.Repo, state); err != nil {
+				return err
+			}
+			if state.Status == statusAcceptanceContractBlocked {
+				e.printProgress(state, "blocked")
+			} else {
+				e.printProgress(state, "validation_failed")
+			}
+			continue
+		}
 		validationPassed, err := e.validateStage(ctx, &state)
 		if err != nil {
 			return err

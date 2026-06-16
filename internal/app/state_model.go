@@ -58,6 +58,7 @@ type State struct {
 	Paths               map[string]string               `json:"paths"`
 	Validation          map[string]StageValidationState `json:"validation,omitempty"`
 	ArtifactGates       map[string]StageValidationState `json:"artifact_gates,omitempty"`
+	AcceptanceRun       map[string]StageValidationState `json:"acceptance_run,omitempty"`
 	AcceptancePreflight AcceptancePreflightState        `json:"acceptance_preflight,omitempty"`
 	Workflow            WorkflowConfig                  `json:"workflow_config"`
 }

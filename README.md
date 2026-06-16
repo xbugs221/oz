@@ -19,6 +19,8 @@ url: https://github.com/xbugs221/oz
 - `acceptance.json` 结构化验收合同：列出必须通过的测试和 QA 必须采集的截图、trace、network、runtime log 等证据
 - `tests` 测试集：符合场景声明的契约测试，编码后必须通过
 
+`oz flow run-acceptance --change <change-name> --json` 可以在本地执行某个 active change 的 `acceptance.json.required_tests`，并把每个测试结果、日志路径和 evidence 存在性汇总到 `test-results/acceptance-run/<change-name>/result.json`。sealed run 在 execution 和 fix 后也会复用这个执行器做 gate，失败时回到同一阶段修复。
+
 文件树示意：
 
 ```text

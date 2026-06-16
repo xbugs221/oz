@@ -427,6 +427,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  oz flow contract --json")
 	fmt.Fprintln(stdout, "  oz flow list-changes --json")
 	fmt.Fprintln(stdout, "  oz flow run --change <change-name> --json")
+	fmt.Fprintln(stdout, "  oz flow run-acceptance --change <change-name> --json")
 	fmt.Fprintln(stdout, "  oz flow resume --run-id <run-id> --json")
 	fmt.Fprintln(stdout, "  oz flow restart --run-id <run-id> --json")
 	fmt.Fprintln(stdout, "  oz flow restart --batch-id <batch-id> --json")

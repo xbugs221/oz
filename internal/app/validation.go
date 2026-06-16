@@ -61,6 +61,9 @@ func shouldForceStageRerun(state State) bool {
 	if state.ArtifactGates != nil && state.ArtifactGates[state.Stage].Status == validationStatusFailed {
 		return true
 	}
+	if state.AcceptanceRun != nil && state.AcceptanceRun[state.Stage].Status == validationStatusFailed {
+		return true
+	}
 	return state.Validation != nil && state.Validation[state.Stage].Status == validationStatusFailed
 }
 
@@ -89,6 +92,21 @@ func clearStageArtifactGateFailure(state *State) {
 	current.LastArtifact = ""
 	current.LastError = ""
 	state.ArtifactGates[state.Stage] = current
+}
+
+// clearAcceptanceRunFailure records that required_tests passed for the current stage.
+func clearAcceptanceRunFailure(state *State) {
+	if state.AcceptanceRun == nil {
+		return
+	}
+	current := state.AcceptanceRun[state.Stage]
+	if current.Kind == "" && current.Status == "" {
+		return
+	}
+	current.Kind = acceptanceRunKind
+	current.Status = validationStatusPassed
+	current.LastError = ""
+	state.AcceptanceRun[state.Stage] = current
 }
 
 // markStageCompleted records stage completion only after deterministic gates pass.
@@ -251,6 +269,9 @@ func validationFailurePrompt(repo string, state State) string {
 	if gate, ok := state.ArtifactGates[state.Stage]; ok && gate.Status == validationStatusFailed {
 		current = gate
 	}
+	if gate, ok := state.AcceptanceRun[state.Stage]; ok && gate.Status == validationStatusFailed {
+		current = gate
+	}
 	if current.Status != validationStatusFailed || current.LastArtifact == "" {
 		return ""
 	}
@@ -262,6 +283,12 @@ func validationFailurePrompt(repo string, state State) string {
 		body = "# Stage artifact gate failed\n\n" +
 			"The previous attempt for this same stage wrote an artifact that failed the deterministic artifact contract gate. " +
 			"Read the artifact below and rewrite the required stage artifact at the output path from the original stage prompt.\n\n" +
+			"- Artifact: `" + current.LastArtifact + "`\n"
+	}
+	if current.Kind == acceptanceRunKind {
+		body = "# Acceptance run gate failed\n\n" +
+			"The previous attempt for this same stage failed the active change required_tests contract. " +
+			"Read the result below, fix every failing required test and missing evidence, then rerun the same stage.\n\n" +
 			"- Artifact: `" + current.LastArtifact + "`\n"
 	}
 	if current.LastError != "" {

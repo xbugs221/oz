@@ -55,6 +55,8 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 		return writeChangeList(stdout, changes)
 	case "run":
 		return dispatchRunCommand(ctx, args, stdout, repo, engine)
+	case "run-acceptance":
+		return dispatchRunAcceptanceCommand(ctx, args, stdout, repo)
 	case "r":
 		if len(args) != 1 {
 			return fmt.Errorf("用法：oz flow r")
