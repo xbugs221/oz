@@ -170,7 +170,7 @@ func runValidationCommands(ctx context.Context, repo, stage string, attempt int,
 		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	for _, command := range config.Commands {
-		cmd := exec.CommandContext(ctx, command.Executable, command.Args...)
+		cmd := validationExecCommand(ctx, command)
 		cmd.Dir = repo
 		var output bytes.Buffer
 		cmd.Stdout = &output
@@ -191,8 +191,19 @@ func runValidationCommands(ctx context.Context, repo, stage string, attempt int,
 	return result
 }
 
-// validationCommandLabel renders the exact argv used for diagnostics without shell syntax.
+// validationExecCommand builds the OS process for one configured validation command.
+func validationExecCommand(ctx context.Context, command ValidationCommand) *exec.Cmd {
+	if strings.TrimSpace(command.Run) != "" {
+		return exec.CommandContext(ctx, "bash", "-lc", command.Run)
+	}
+	return exec.CommandContext(ctx, command.Executable, command.Args...)
+}
+
+// validationCommandLabel renders the user-facing command used in diagnostics.
 func validationCommandLabel(command ValidationCommand) string {
+	if strings.TrimSpace(command.Run) != "" {
+		return command.Run
+	}
 	return strings.Join(append([]string{command.Executable}, command.Args...), " ")
 }
 

@@ -94,7 +94,27 @@ prompts:
     调用 `oz-plan` 技能开始讨论规划阶段
 ```
 
-配置按 `内置默认 -> ~/oz-flow.yaml -> 仓库 oz-flow.yaml -> run 快照` 合并；`validation.commands` 为空时不运行门禁，填入项目真实命令时使用 `executable` 和 `args` 描述 argv，`execution` 和 `fix` 阶段完成后会直接执行该程序，不经过 shell。
+配置按 `内置默认 -> ~/oz-flow.yaml -> 仓库 oz-flow.yaml -> run 快照` 合并；`validation.commands` 为空时不运行门禁，填入项目真实命令时可以直接写 bash 命令字符串：
+
+```yaml
+validation:
+  limit: 3
+  commands:
+    - ./git-hooks/pre-commit
+    - pnpm build
+```
+
+需要绕开 shell、精确描述 argv 时，继续使用 `executable` 和 `args`：
+
+```yaml
+validation:
+  commands:
+    - executable: pnpm
+      args:
+        - build
+```
+
+这些门禁会在 `execution` 和 `fix` 阶段完成后执行。
 
 ## GitHub Actions 门禁
 

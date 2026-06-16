@@ -69,8 +69,9 @@ type ValidationConfig struct {
 	MaxAttemptsPerStage int                 `json:"max_attempts_per_stage,omitempty" yaml:"max_attempts_per_stage"`
 }
 
-// ValidationCommand describes one shell-free executable invocation.
+// ValidationCommand describes one deterministic validation command.
 type ValidationCommand struct {
+	Run        string   `json:"run,omitempty" yaml:"run,omitempty"`
 	Executable string   `json:"executable" yaml:"executable"`
 	Args       []string `json:"args,omitempty" yaml:"args"`
 }

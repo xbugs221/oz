@@ -337,7 +337,7 @@
 - **则** 系统读取根节点工作流配置
 - **且** 校验 reasoning 只能是 `low`、`medium`、`high`、`xhigh`
 - **且** 校验 `max_review_iterations` 是非负整数
-- **且** 校验 `validation.commands` 中每个命令必须包含非空 `executable`
+- **且** 校验 `validation.commands` 中每个命令必须是非空 bash 命令字符串、非空 `run`，或包含非空 `executable` 的 argv 描述
 - **且** `validation.limit` 是唯一的 validation 重试预算字段
 
 #### 场景：旧顶层和旧别名字段不能继续生效
