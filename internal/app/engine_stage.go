@@ -78,7 +78,6 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 			e.stageRuntime[state.Stage] = meta
 		}
 	}
-	state.Stages[state.Stage] = "completed"
 	timing = state.StageTimings[state.Stage]
 	timing.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	state.StageTimings[state.Stage] = timing
@@ -88,7 +87,6 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 	}
 	state.BaselineHead = head
 	state.BaselineDiff = diff
-	e.printProgress(*state, "completed")
 	return saveState(e.Repo, *state)
 }
 

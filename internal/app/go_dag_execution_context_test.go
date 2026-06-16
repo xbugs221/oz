@@ -43,6 +43,7 @@ type goDAGContextFakeRunner struct {
 	stashAndPop         bool
 	stagePath           string
 	captureMalformed    bool
+	leaveTaskPending    bool
 }
 
 // TestGoDAGRetryableHelperErrorRestoresRunningState verifies transient helper failures stay retryable.
@@ -224,6 +225,9 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 		return "subagent-" + name, nil
 	}
 	r.mainCalls++
+	if r.leaveTaskPending {
+		return "executor-thread", nil
+	}
 	task := filepath.Join(repo, "docs", "changes", "demo", "task.md")
 	return "executor-thread", os.WriteFile(task, []byte("- [x] task\n"), 0o644)
 }
@@ -915,6 +919,103 @@ func TestGoDAGRunsExecutionContextWhenTasksPending(t *testing.T) {
 	}
 	if !fileExists(parallelArtifactPath(runDir(repo, runID), "implementation_context", 0)) {
 		t.Fatal("implementation context fan-in artifact should exist")
+	}
+}
+
+// TestRunStageDoesNotCompleteBeforeArtifactGate prevents agent success from bypassing task.md completion.
+func TestRunStageDoesNotCompleteBeforeArtifactGate(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "run-stage-pending-artifact-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	runner := &goDAGContextFakeRunner{leaveTaskPending: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	if err := engine.runStage(context.Background(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if runner.mainCalls != 1 {
+		t.Fatalf("main calls = %d, want one execution call", runner.mainCalls)
+	}
+	if state.Stages["execution"] == "completed" {
+		t.Fatalf("execution stage = %q, must not complete before artifact gate passes", state.Stages["execution"])
+	}
+}
+
+// TestGoDAGExecutionArtifactFailureDoesNotAdvance keeps incomplete task.md in execution retry state.
+func TestGoDAGExecutionArtifactFailureDoesNotAdvance(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	goDAGContextInstallFakeOz(t)
+	runID := "pending-task-artifact-gate-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{leaveTaskPending: true}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"})
+	if !errors.Is(err, errGoDAGValidationRetry) {
+		t.Fatalf("execution node error = %v, want validation retry", err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Stage != "execution" || persisted.Stages["execution"] != "validation_failed" {
+		t.Fatalf("state = stage %q execution %q, want execution/validation_failed", persisted.Stage, persisted.Stages["execution"])
+	}
+	gate := persisted.ArtifactGates["execution"]
+	if gate.Kind != validationKindArtifact || gate.Status != validationStatusFailed || gate.LastArtifact == "" {
+		t.Fatalf("artifact gate = %#v, want failed artifact gate with artifact", gate)
+	}
+}
+
+// TestGoDAGClearsFailedArtifactReferenceAfterGatePass prevents passed gates pointing at failed JSON.
+func TestGoDAGClearsFailedArtifactReferenceAfterGatePass(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [x] task\n")
+	goDAGContextInstallFakeOz(t)
+	runID := "passed-artifact-clears-failure-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	state.ArtifactGates = map[string]StageValidationState{
+		"execution": {
+			Attempts:     1,
+			Kind:         validationKindArtifact,
+			Status:       validationStatusFailed,
+			LastArtifact: filepath.Join(runDir(repo, runID), "validation-execution-1.json"),
+			LastError:    "execution 阶段 artifact 未完成",
+		},
+	}
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	runner := &goDAGContextFakeRunner{}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	if err := engine.runGoDAGNode(context.Background(), runID, WorkflowNode{ID: "execution", Type: "main_stage", Stage: "execution"}); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := persisted.ArtifactGates["execution"]
+	if gate.Status != validationStatusPassed || gate.LastArtifact != "" || gate.LastError != "" {
+		t.Fatalf("artifact gate = %#v, want passed gate without stale failed artifact", gate)
+	}
+	if persisted.Stage != "archive" || persisted.Stages["execution"] != "completed" {
+		t.Fatalf("state = stage %q execution %q, want archive/completed", persisted.Stage, persisted.Stages["execution"])
 	}
 }
 

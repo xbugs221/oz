@@ -97,7 +97,10 @@ func promptForStage(repo string, state State) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return prompt + validationFailurePrompt(repo, state), nil
+	if failurePrompt := validationFailurePrompt(repo, state); failurePrompt != "" {
+		return failurePrompt, nil
+	}
+	return prompt, nil
 }
 
 // promptForName reads a named prompt from the effective YAML config.

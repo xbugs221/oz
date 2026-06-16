@@ -86,8 +86,17 @@ func clearStageArtifactGateFailure(state *State) {
 	}
 	current.Kind = validationKindArtifact
 	current.Status = validationStatusPassed
+	current.LastArtifact = ""
 	current.LastError = ""
 	state.ArtifactGates[state.Stage] = current
+}
+
+// markStageCompleted records stage completion only after deterministic gates pass.
+func markStageCompleted(state *State) {
+	if state.Stages == nil {
+		state.Stages = map[string]string{}
+	}
+	state.Stages[state.Stage] = "completed"
 }
 
 type stageArtifactGateError struct {
@@ -245,12 +254,12 @@ func validationFailurePrompt(repo string, state State) string {
 	if current.Status != validationStatusFailed || current.LastArtifact == "" {
 		return ""
 	}
-	body := "\n\n# Validation gate failed\n\n" +
+	body := "# Validation gate failed\n\n" +
 		"The previous attempt for this same stage failed deterministic validation. " +
 		"Read the artifact below, fix every failing command, and do not stop at the first Playwright failure if the configured suite still fails.\n\n" +
 		"- Artifact: `" + current.LastArtifact + "`\n"
 	if current.Kind == validationKindArtifact {
-		body = "\n\n# Stage artifact gate failed\n\n" +
+		body = "# Stage artifact gate failed\n\n" +
 			"The previous attempt for this same stage wrote an artifact that failed the deterministic artifact contract gate. " +
 			"Read the artifact below and rewrite the required stage artifact at the output path from the original stage prompt.\n\n" +
 			"- Artifact: `" + current.LastArtifact + "`\n"

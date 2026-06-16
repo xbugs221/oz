@@ -174,7 +174,6 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 				return err
 			}
 		} else {
-			state.Stages[state.Stage] = "completed"
 			e.printProgress(state, "skipped")
 		}
 		done, err = e.checkStageArtifactGate(state)
@@ -225,6 +224,7 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 			e.printProgress(state, "blocked")
 			continue
 		}
+		markStageCompleted(&state)
 		if err := e.advance(&state); err != nil {
 			if handled, handleErr := e.handleStageArtifactGateFailure(&state, err); handleErr != nil {
 				return handleErr
