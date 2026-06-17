@@ -6,35 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 )
 
 // dispatchRepositoryCommand routes commands that require a repository, context, and engine.
 func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Writer, repo string, engine *Engine) error {
+	if args[0] == "config" {
+		return handleFlowConfigCommand(ctx, args, stdout, repo, engine)
+	}
 	switch args[0] {
-	case "config":
-		options, err := parseConfigCommandOptions(args[1:])
-		if err != nil {
-			return err
-		}
-		if options.ListProfiles {
-			printWorkflowProfiles(stdout)
-			return nil
-		}
-		if options.Global {
-			path, err := WriteWorkflowConfigProfile("", true, options.Profile)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(stdout, "已创建全局配置 %s\n", path)
-			return nil
-		}
-		path, err := WriteWorkflowConfigProfile(repo, false, options.Profile)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(stdout, "已创建 %s\n", filepath.Base(path))
-		return nil
 	case "init":
 		return fmt.Errorf("oz flow init 已移除，请改用 oz flow config")
 	case "install":

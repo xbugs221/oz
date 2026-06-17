@@ -275,12 +275,12 @@ func applyStatusRunningMarker(view *statusView, runningMarker string) {
 
 // statusPlanningContextCompleted treats execution preflight context fan-in as the completed planning marker.
 func statusPlanningContextCompleted(repo string, state State) bool {
-	for _, id := range []string{"planning_context_fanin"} {
+	for _, id := range []string{parallelGroupPlanning + "_fanin"} {
 		if node, ok := state.DAGNodes[id]; ok && statusDAGNodeSucceeded(node.Status) {
 			return true
 		}
 	}
-	return fileExists(parallelArtifactPath(runDir(repo, state.RunID), "planning_context", 0))
+	return fileExists(parallelArtifactPath(runDir(repo, state.RunID), parallelGroupPlanning, 0))
 }
 
 // statusDAGNodeSucceeded normalizes durable DAG node success values used across runners.
@@ -393,19 +393,7 @@ func statusSubagentRows(repo string, state State, parentStage string, now time.T
 
 // statusGroupsForStage maps compact parent stages to configured parallel helper groups.
 func statusGroupsForStage(stage string) []string {
-	if stage == "planning" {
-		return []string{"planning_context"}
-	}
-	if stage == "execution" {
-		return []string{"implementation_context"}
-	}
-	if strings.HasPrefix(stage, "review_") {
-		return []string{"review"}
-	}
-	if strings.HasPrefix(stage, "qa_") {
-		return []string{"qa"}
-	}
-	return nil
+	return parallelGroupForCompactStage(stage)
 }
 
 // statusGroupIteration returns the artifact iteration for one helper group.
@@ -422,19 +410,18 @@ func statusGroupIteration(stage, group string) (int, error) {
 // statusSubagentNode finds the DAG node for a configured member index.
 func statusSubagentNode(state State, groupName, parentStage string, iteration, index int) (string, DAGNodeState, bool) {
 	var candidates []string
-	switch groupName {
-	case "planning_context":
+	if groupName == parallelGroupPlanning {
 		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
-	case "implementation_context":
+	} else if groupName == parallelGroupImplementation {
 		candidates = append(candidates,
-			fmt.Sprintf("implementation_context_%d", index+1),
-			fmt.Sprintf("before_execution_%d", index+1),
+			fmt.Sprintf("%s_%d", parallelGroupImplementation, index+1),
+			fmt.Sprintf("%s_%d", parallelAnchorBeforeRun, index+1),
 		)
-	case "review", "qa":
+	} else if groupName == parallelGroupReview || groupName == parallelGroupQA {
 		if iteration > 0 {
 			candidates = append(candidates, fmt.Sprintf("%s_%d_%d", statusVisualGroupName(groupName), iteration, index+1))
 		}
-	default:
+	} else {
 		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
 	}
 	for _, id := range candidates {
@@ -447,14 +434,7 @@ func statusSubagentNode(state State, groupName, parentStage string, iteration, i
 
 // statusVisualGroupName maps configured helper groups to the DAG node prefix used by graph.go.
 func statusVisualGroupName(groupName string) string {
-	switch groupName {
-	case "review":
-		return "before_review"
-	case "qa":
-		return "before_qa"
-	default:
-		return groupName
-	}
+	return visualGroupForConfigGroup(groupName)
 }
 
 // statusSubagentSessionID returns the helper session id recorded by the subagent runner.

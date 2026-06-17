@@ -2817,3 +2817,24 @@ review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 
 - **入口路径**：合同测试运行 `go test ./internal/app`
 - **关键断言**：内部阶段/状态 helper 不改变公开字符串输出
 - **剩余风险**：不覆盖用户本机所有历史 runtime state 变体，执行阶段应继续保留旧字符串兼容分支
+
+// Sources: 41-收敛flow命令入口和状态映射
+
+### 需求：flow 命令入口和状态映射收敛
+
+系统必须把 `oz flow` 命令路由、workflow 阶段/并行组拓扑和公共 status 展示收敛到明确边界，避免后续重构继续在多个文件同步维护同一套业务映射，同时保持现有 CLI 行为。
+
+#### 场景：命令、拓扑和状态视图边界收敛且 CLI 行为保持稳定
+
+- **给定** 仓库内真实 `internal/app`、`internal/ozcli` 和 `tests` 生产代码
+- **当** 维护者运行 flow 边界收敛合同测试
+- **则** `internal/app/flow_command_registry.go` 必须定义命令 registry 结构或查询入口
+- **并且** `internal/app/workflow_topology.go` 必须成为阶段和并行组映射边界
+- **并且** graph/config/status 关键文件不得继续直接硬编码 `planning_context`、`implementation_context`、`before_execution`、`before_review`、`before_qa` 这些映射分支
+- **并且** 公共 status/progress 入口不得直接调用 legacy `stageChecklistLines` 系列函数
+- **并且** `go test ./internal/app ./internal/ozcli ./tests -count=1` 必须通过
+- **测试**：`tests/specs/codex-workflow-cli/test_flow_boundary_convergence_contract.sh`
+- **真实数据来源**：当前仓库 `internal/app`、`internal/ozcli`、`tests` 生产代码和 Go 回归测试
+- **入口路径**：shell 合同测试从仓库根目录执行
+- **关键断言**：命令 registry、workflow topology、公共 status view 三个边界已建立，真实 Go 命令面和状态回归保持稳定
+- **剩余风险**：该场景不逐个验证所有历史 shell 合同；执行阶段应根据改动影响面补跑 status/watch、graph、parallel 和 command dispatch 相关 specs

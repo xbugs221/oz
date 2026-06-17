@@ -15,43 +15,37 @@ import (
 // Run parses command arguments and starts the interactive workflow.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) > 0 {
-		switch args[0] {
-		case "--version":
+		if args[0] == "--version" {
 			fmt.Fprintln(stdout, resolvedVersion())
 			return nil
-		case "--help", "-h":
+		}
+		if args[0] == "--help" || args[0] == "-h" {
 			printHelp(stdout)
 			return nil
-		case "validate-review":
+		}
+		if args[0] == "validate-review" {
 			return runValidateReviewArtifact(args[1:], stdout)
-		case "validate-qa":
+		}
+		if args[0] == "validate-qa" {
 			return runValidateQAArtifact(args[1:], stdout)
-		case "validate-member-artifact":
+		}
+		if args[0] == "validate-member-artifact" {
 			return runValidateMemberArtifact(args[1:], stdout)
-		case "update":
+		}
+		if args[0] == "update" {
 			if len(args) != 1 {
 				return fmt.Errorf("用法：oz flow update")
 			}
 			return runUpdate(stdout)
-		case "config":
+		}
+		if args[0] == "config" {
 			options, err := parseConfigCommandOptions(args[1:])
-			if err != nil {
-				return err
+			if err != nil || !options.Global {
+				return runWithRepository(args, stdin, stdout)
 			}
-			if options.ListProfiles {
-				printWorkflowProfiles(stdout)
-				return nil
-			}
-			if !options.Global {
-				break
-			}
-			path, err := WriteWorkflowConfigProfile("", true, options.Profile)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(stdout, "已创建全局配置 %s\n", path)
-			return nil
-		case "graph":
+			return handleFlowConfigCommand(context.Background(), args, stdout, "", nil)
+		}
+		if args[0] == "graph" {
 			repo, err := GitRoot(".")
 			if err != nil {
 				return err
@@ -59,13 +53,18 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runGraph(repo, args[1:], stdout)
 		}
 	}
+	return runWithRepository(args, stdin, stdout)
+}
+
+// runWithRepository wires repository state, workflow tools, and registry dispatch.
+func runWithRepository(args []string, stdin io.Reader, stdout io.Writer) error {
 	repo, err := GitRoot(".")
 	if err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if commandNeedsWorkflowTools(args) {
+	if len(args) == 0 || flowCommandRequiresWorkflowTools(args[0]) {
 		if err := ensureBaseWorkflowCommands(); err != nil {
 			return err
 		}
@@ -76,7 +75,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	engine.inPlaceProgress = supportsInPlaceProgress(stdout)
 
 	if len(args) > 0 {
-		return dispatchRepositoryCommand(ctx, args, stdout, repo, engine)
+		if spec, ok := flowCommandByName(args[0]); ok {
+			return spec.Handler(ctx, args, stdout, repo, engine)
+		}
+		return fmt.Errorf("未知命令 %q", args[0])
 	}
 
 	return interactive(ctx, stdin, stdout, repo, engine)
@@ -112,17 +114,10 @@ func submitAllActiveChanges(ctx context.Context, stdout io.Writer, repo string, 
 	return engine.SubmitBatch(ctx, changes)
 }
 
-// commandNeedsWorkflowTools reports whether the CLI path will invoke workflow backends.
-func commandNeedsWorkflowTools(args []string) bool {
-	if len(args) == 0 {
-		return true
-	}
-	switch args[0] {
-	case "--help", "-h", "--version", "config", "init", "install", "contract", "validate-review", "validate-qa", "list-changes", "status", "update", "abort", "stop", "archive", "watch", "clean", "graph", "--list-changes":
-		return false
-	default:
-		return true
-	}
+// flowCommandRequiresWorkflowTools reports whether a registered command invokes workflow backends.
+func flowCommandRequiresWorkflowTools(name string) bool {
+	spec, ok := flowCommandByName(name)
+	return !ok || spec.NeedsWorkflowTools
 }
 
 // GitRoot returns the absolute root of the current git repository.
@@ -466,7 +461,7 @@ func printHelp(stdout io.Writer) {
 
 // printStageChecklist writes a plain text workflow status summary.
 func printStageChecklist(stdout io.Writer, state State) {
-	for _, line := range stageChecklistLines(state, nil) {
+	for _, line := range compactStatusLines(buildHumanStatusView("", state, state.RunID, "→")) {
 		fmt.Fprintln(stdout, line)
 	}
 }
@@ -477,7 +472,8 @@ func printHumanStageChecklist(stdout io.Writer, state State) {
 	if state.Status == statusRunning && state.Stage != "" {
 		runtime[state.Stage] = stageRuntime{}
 	}
-	for _, line := range stageChecklistLines(state, runtime) {
+	_ = runtime
+	for _, line := range compactStatusLines(buildHumanStatusView("", state, state.RunID, "→")) {
 		fmt.Fprintln(stdout, line)
 	}
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {
@@ -491,7 +487,8 @@ func printHumanStatusStageChecklist(stdout io.Writer, repo string, state State) 
 	if state.Status == statusRunning && state.Stage != "" {
 		runtime[state.Stage] = stageRuntime{}
 	}
-	for _, line := range stageChecklistLinesWithParallel(repo, state, runtime) {
+	_ = runtime
+	for _, line := range compactStatusLines(buildHumanStatusView(repo, state, state.RunID, "→")) {
 		fmt.Fprintln(stdout, line)
 	}
 	if state.BatchID == "" && isRestartableRunState(state) && (state.Status == statusFailed || state.Status == statusInterrupted) {

@@ -45,18 +45,19 @@ func parallelStatusLinesForRole(repo string, state State, role string, indent st
 
 // parallelGroupsForRole maps public status role rows to their parallel artifact groups.
 func parallelGroupsForRole(role string) []string {
-	switch role {
-	case "planner":
-		return []string{"planning_context"}
-	case "executor":
-		return []string{"implementation_context"}
-	case "reviewer":
-		return []string{"review"}
-	case "qa":
-		return []string{"qa"}
-	default:
-		return nil
+	if role == "planner" {
+		return []string{parallelGroupPlanning}
 	}
+	if role == "executor" {
+		return []string{parallelGroupImplementation}
+	}
+	if role == "reviewer" {
+		return []string{parallelGroupReview}
+	}
+	if role == "qa" {
+		return []string{parallelGroupQA}
+	}
+	return nil
 }
 
 // parallelStatusSummaryForGroup validates one configured group without failing the whole status command.
@@ -112,22 +113,21 @@ func parallelStatusGroupReached(path string, state State, group string) bool {
 		return false
 	}
 	kind := stageKind(state.Stage)
-	switch group {
-	case "planning_context", "implementation_context":
-		return stageAtLeast(kind, "execution")
-	case "review":
-		return kind == "review"
-	case "qa":
-		return kind == "qa"
-	default:
-		return false
+	if group == parallelGroupPlanning || group == parallelGroupImplementation {
+		return stageAtLeastKind(kind, "execution")
 	}
+	if group == parallelGroupReview {
+		return kind == "review"
+	}
+	if group == parallelGroupQA {
+		return kind == "qa"
+	}
+	return false
 }
 
 // parallelStatusIteration selects the artifact round for iterative review and QA groups.
 func parallelStatusIteration(state State, group string) (int, error) {
-	switch group {
-	case "review", "qa":
+	if group == parallelGroupReview || group == parallelGroupQA {
 		iteration, err := stageIteration(state.Stage)
 		if err != nil {
 			return 0, err
@@ -136,20 +136,6 @@ func parallelStatusIteration(state State, group string) (int, error) {
 			return iteration, nil
 		}
 		return 1, nil
-	default:
-		return 0, nil
 	}
-}
-
-// stageAtLeast reports whether a stage kind has reached a configured status milestone.
-func stageAtLeast(kind string, minimum string) bool {
-	order := map[string]int{
-		"planning":  1,
-		"execution": 2,
-		"review":    3,
-		"qa":        4,
-		"archive":   5,
-		"done":      6,
-	}
-	return order[kind] >= order[minimum]
+	return 0, nil
 }

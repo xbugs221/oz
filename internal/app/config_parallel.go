@@ -83,13 +83,11 @@ func parallelConfigFromStages(stages map[string]stageOptionsInput, base Parallel
 	if stages == nil {
 		return config, validateParallelConfig(config)
 	}
-	stageToGroup := map[string]string{"planning": "planning_context", "execution": "implementation_context", "review": "review", "qa": "qa"}
-	stageToAnchor := map[string]string{"planning": "planning", "execution": "before_execution", "review": "before_review", "qa": "before_qa"}
 	for stage, input := range stages {
 		if len(input.Before) == 0 {
 			continue
 		}
-		groupName, ok := stageToGroup[stage]
+		topology, ok := parallelTopologyForStage(stage)
 		if !ok {
 			return ParallelConfig{}, fmt.Errorf("stages.%s.before 不支持", stage)
 		}
@@ -98,28 +96,26 @@ func parallelConfigFromStages(stages map[string]stageOptionsInput, base Parallel
 			if err := rejectStageBeforeLegacyMemberFields(member, i); err != nil {
 				return ParallelConfig{}, fmt.Errorf("stages.%s.before: %w", stage, err)
 			}
-			member.Stage = stageToAnchor[stage]
+			member.Stage = topology.Anchor
 			members = append(members, member)
 		}
-		group, err := parallelGroupConfigFromInput(parallelGroupConfigInput{Mode: stageMode(stage), Members: members})
+		group, err := parallelGroupConfigFromInput(parallelGroupConfigInput{Mode: topology.Mode, Members: members})
 		if err != nil {
 			return ParallelConfig{}, fmt.Errorf("stages.%s.before: %w", stage, err)
 		}
 		if config.Groups == nil {
 			config.Groups = map[string]ParallelGroupConfig{}
 		}
-		config.Groups[groupName] = group
+		config.Groups[topology.Group] = group
 	}
 	return config, validateParallelConfig(config)
 }
 
 func stageMode(stage string) string {
-	switch stage {
-	case "planning", "execution":
-		return "advisory"
-	default:
-		return "gate_input"
+	if topology, ok := parallelTopologyForStage(stage); ok {
+		return topology.Mode
 	}
+	return "gate_input"
 }
 
 func validateParallelConfig(config ParallelConfig) error {
@@ -151,16 +147,5 @@ func validateParallelConfig(config ParallelConfig) error {
 
 // allowedParallelMemberStages defines the only stage anchors the built-in DAG can schedule.
 func allowedParallelMemberStages(groupName string) (map[string]bool, bool) {
-	switch groupName {
-	case "planning_context":
-		return map[string]bool{"planning": true}, true
-	case "implementation_context":
-		return map[string]bool{"before_execution": true, "execution": true}, true
-	case "review":
-		return map[string]bool{"before_review": true, "review": true}, true
-	case "qa":
-		return map[string]bool{"before_qa": true, "qa": true}, true
-	default:
-		return nil, false
-	}
+	return allowedStagesForParallelGroup(groupName)
 }

@@ -1,0 +1,35 @@
+{
+  "summary": "验收 oz flow 命令入口、workflow topology 和公共 status view 边界已收敛，并保持真实 Go CLI 回归稳定",
+  "coverage": [
+    {
+      "spec": "需求：flow 命令入口和状态映射收敛 / 场景：命令、拓扑和状态视图边界收敛且 CLI 行为保持稳定",
+      "tests": ["flow-boundary-convergence-contract"],
+      "evidence": ["flow-boundary-convergence-log"],
+      "risk": "不逐个验证所有历史 shell 合同；执行阶段应根据影响面补跑 status/watch、graph、parallel 和 command dispatch 相关 specs"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "flow-boundary-convergence-contract",
+      "source": "change_contract",
+      "path": "docs/changes/41-收敛flow命令入口和状态映射/tests/test_flow_boundary_convergence_contract.sh",
+      "command": "bash docs/changes/41-收敛flow命令入口和状态映射/tests/test_flow_boundary_convergence_contract.sh",
+      "purpose": "证明 flow 命令 registry、workflow topology 和统一 status view 边界已建立，并通过真实 Go 命令面回归",
+      "assertions": [
+        "检查 flow_command_registry.go 定义命令 registry，且 app.go 不再维护 commandNeedsWorkflowTools 或重复 repo 命令入口",
+        "检查 workflow_topology.go 成为阶段和并行组映射事实源，graph/config/status 关键文件不再重复硬编码同一批 group 名称",
+        "检查公共 status/progress 入口不再直接调用 legacy stageChecklistLines 系列函数",
+        "运行 internal/app、internal/ozcli 和 tests Go 回归，证明真实 CLI 命令面保持稳定"
+      ],
+      "expected_initial_failure": "重构未实现时应失败于目标边界文件缺失、重复硬编码映射仍存在，或公共 status/progress 仍直接依赖 legacy checklist"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "flow-boundary-convergence-log",
+      "kind": "runtime_log",
+      "path": "test-results/refactor-flow-boundary/flow-boundary-convergence-contract.log",
+      "purpose": "记录命令入口、topology、status view 边界检查和 Go 回归输出；该文件是本地运行产物，不进入 git"
+    }
+  ]
+}

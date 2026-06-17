@@ -3,7 +3,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 )
 
 // watchStatusLines renders batch or single-run status with spinner for watch refresh.
@@ -76,53 +75,6 @@ func runProposalStatusLines(repo string, state State, runAlias string, runningMa
 	}
 	if isStaleRunningRun(repo, state) {
 		lines = append(lines, "  提示: 当前 run 的 lock 已失效，可运行 oz flow restart 重试当前阶段")
-	}
-	return lines
-}
-
-// watchStageChecklistLines is like stageChecklistLines but replaces → with spinner.
-func watchStageChecklistLines(state State, runtime map[string]stageRuntime, spinner string) []string {
-	var lines []string
-	for _, item := range visibleSessionItems(state, runtime) {
-		parts := []string{"-", item.label}
-		if item.sessionID != "" {
-			parts = append(parts, item.sessionID)
-		}
-		markers := strings.Repeat("✓", item.completed)
-		if item.running == "→" {
-			markers += spinner
-		} else {
-			markers += item.running
-		}
-		if markers != "" {
-			parts = append(parts, markers)
-		}
-		line := strings.Join(parts, " ")
-		lines = append(lines, line)
-	}
-	if state.Status == statusBlocked || state.Stage == statusBlocked {
-		reason := state.Error
-		if reason == "" {
-			reason = "审核修正达到上限，工作流已中断"
-		}
-		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusBlocked, reason))
-	}
-	if state.Status == statusValidationBlocked || state.Stage == statusValidationBlocked {
-		reason := state.Error
-		if reason == "" {
-			reason = "阶段验证达到上限，工作流已中断"
-		}
-		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusValidationBlocked, reason))
-	}
-	if state.Status == statusAcceptanceContractBlocked || state.Stage == statusAcceptanceContractBlocked {
-		reason := state.Error
-		if reason == "" {
-			reason = "验收合同预检未通过，工作流已中断"
-		}
-		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusAcceptanceContractBlocked, reason))
-	}
-	if len(lines) == 0 {
-		return []string{"- 写 未知 " + spinner}
 	}
 	return lines
 }

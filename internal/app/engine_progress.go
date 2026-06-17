@@ -43,7 +43,7 @@ func (e *Engine) stageChecklistSignature(state State) string {
 
 // printStageChecklist renders a stable workflow block, refreshing in place on terminals.
 func (e *Engine) printStageChecklist(state State) {
-	lines := stageChecklistLines(state, e.stageRuntime)
+	lines := compactStatusLines(buildHumanStatusView(e.Repo, state, state.RunID, "→"))
 	if e.inPlaceProgress && e.progressLines > 0 {
 		fmt.Fprintf(e.Output, "\x1b[%dA\x1b[J", e.progressLines)
 	}
