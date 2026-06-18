@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	batchStatusRunning = "running"
-	batchStatusDone    = "done"
-	batchStatusFailed  = "failed"
-	batchStatusAborted = "aborted"
+	batchStatusRunning  = "running"
+	batchStatusDone     = "done"
+	batchStatusFailed   = "failed"
+	batchStatusAborted  = "aborted"
+	batchStatusArchived = "archived"
 )
 
 // BatchState is the durable queue state for a serial batch run.
@@ -465,7 +466,9 @@ func batchFailureLines(repo string, batch BatchState, batchAlias string) []strin
 	if batch.Status == batchStatusFailed {
 		if isBatchRestartRecoverable(repo, batch) {
 			lines = append(lines, fmt.Sprintf("  提示: 可运行 oz flow restart -%s 删除失败记录并继续该批量任务", batchAlias))
+			lines = append(lines, fmt.Sprintf("  归档: 可运行 %s 归档失败记录后开启新工作流", archiveCommandForAlias(batchAlias)))
 		} else {
+			lines = append(lines, fmt.Sprintf("  归档: 可运行 %s 归档失败记录后开启新工作流", archiveCommandForAlias(batchAlias)))
 			lines = append(lines, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态")
 			lines = append(lines, "        该操作仅删除 oz flow 历史记录，不回滚代码改动")
 		}

@@ -118,7 +118,7 @@ func commandNeedsWorkflowTools(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "--help", "-h", "--version", "config", "init", "install", "contract", "validate-review", "validate-qa", "list-changes", "status", "update", "abort", "watch", "clean", "graph", "--list-changes":
+	case "--help", "-h", "--version", "config", "init", "install", "contract", "validate-review", "validate-qa", "list-changes", "status", "update", "abort", "stop", "archive", "watch", "clean", "graph", "--list-changes":
 		return false
 	default:
 		return true
@@ -164,7 +164,9 @@ func printStoppedHistory(stdout io.Writer, repo string, batches []BatchState, ru
 		if batch.Status == batchStatusFailed {
 			if isBatchRestartRecoverable(repo, batch) {
 				fmt.Fprintf(stdout, "  提示: 可运行 %s 删除失败记录并继续该批量任务\n", restartCommandForAlias(alias))
+				fmt.Fprintf(stdout, "  归档: 可运行 %s 归档失败记录后开启新工作流\n", archiveCommandForAlias(alias))
 			} else {
+				fmt.Fprintf(stdout, "  归档: 可运行 %s 归档失败记录后开启新工作流\n", archiveCommandForAlias(alias))
 				fmt.Fprintf(stdout, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态\n")
 				fmt.Fprintf(stdout, "        该操作仅删除 oz flow 历史记录，不回滚代码改动\n")
 			}
@@ -188,7 +190,11 @@ func printStoppedHistory(stdout io.Writer, repo string, batches []BatchState, ru
 		if state.BatchID == "" {
 			if isRestartableRunCandidate(repo, state) {
 				fmt.Fprintf(stdout, "  提示: 可运行 %s 重启该工作流\n", restartCommandForAlias(runAlias))
+				fmt.Fprintf(stdout, "  归档: 可运行 %s 归档失败记录后开启新工作流\n", archiveCommandForAlias(runAlias))
 			} else {
+				if isArchivableRun(state) {
+					fmt.Fprintf(stdout, "  归档: 可运行 %s 归档失败记录后开启新工作流\n", archiveCommandForAlias(runAlias))
+				}
 				fmt.Fprintf(stdout, "  清理: 可运行 oz flow clean 清理当前项目失败或异常运行态\n")
 				fmt.Fprintf(stdout, "        该操作仅删除 oz flow 历史记录，不回滚代码改动\n")
 			}
@@ -202,6 +208,14 @@ func restartCommandForAlias(alias string) string {
 		return "oz flow restart -" + alias
 	}
 	return "oz flow restart"
+}
+
+// archiveCommandForAlias returns the shortest human archive command for a status alias.
+func archiveCommandForAlias(alias string) string {
+	if strings.HasPrefix(alias, "b") || strings.HasPrefix(alias, "w") {
+		return "oz flow archive -" + alias
+	}
+	return "oz flow archive"
 }
 
 // batchAliasForID returns a batch short alias or falls back to the real id.
@@ -397,6 +411,9 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  oz flow run | oz flow r")
 	fmt.Fprintln(stdout, "  oz flow status")
 	fmt.Fprintln(stdout, "  oz flow restart")
+	fmt.Fprintln(stdout, "  oz flow stop")
+	fmt.Fprintln(stdout, "  oz flow archive")
+	fmt.Fprintln(stdout, "  oz flow loop")
 	fmt.Fprintln(stdout, "  oz flow clean [--agent-sessions] [--dry-run] [--json]")
 	fmt.Fprintln(stdout, "  oz flow watch")
 	fmt.Fprintln(stdout, "  oz flow update")
@@ -415,6 +432,9 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  oz flow run | oz flow r              直接全选 active change 并启动任务队列")
 	fmt.Fprintln(stdout, "  oz flow status                  打印最新 run 进度")
 	fmt.Fprintln(stdout, "  oz flow restart [-bN|-wN]       重启最近失败或中断的批量任务/工作流")
+	fmt.Fprintln(stdout, "  oz flow stop                    停止当前正在进行的批量工作流")
+	fmt.Fprintln(stdout, "  oz flow archive [-bN|-wN]       归档最近失败的批量任务/工作流运行态")
+	fmt.Fprintln(stdout, "  oz flow loop                    每分钟监控批量工作流，失败后归档并从未完成变更继续")
 	fmt.Fprintln(stdout, "  oz flow watch [-bN|-wN]         持续刷新运行中的任务状态")
 	fmt.Fprintln(stdout, "  oz flow update                  更新 oz flow 和 oz，并输出备份回滚命令")
 	fmt.Fprintln(stdout, "  oz flow --list-changes          打印 active docs/changes 名称")

@@ -68,6 +68,12 @@ func dispatchRepositoryCommand(ctx context.Context, args []string, stdout io.Wri
 		return dispatchBatchCommand(ctx, args, stdout, repo, engine)
 	case "restart":
 		return dispatchRestartCommand(ctx, args, stdout, repo, engine)
+	case "stop":
+		return dispatchStopCommand(args, stdout, repo)
+	case "archive":
+		return dispatchArchiveCommand(args, stdout, repo)
+	case "loop":
+		return dispatchLoopCommand(ctx, args, stdout, repo, engine)
 	case "status":
 		return dispatchStatusCommand(args, stdout, repo)
 	case "abort":
