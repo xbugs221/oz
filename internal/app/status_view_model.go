@@ -137,7 +137,7 @@ func statusStageRow(repo string, state State, spec compactStageSpec, now time.Ti
 	if state.Status == statusAcceptanceContractBlocked && spec.role == "executor" {
 		row.Marker = "x"
 	}
-	if minutes, ok := statusStageDuration(state, stages, now); ok {
+	if minutes, ok := statusStageDuration(state, stages, row.SessionID, now); ok {
 		row.DurationMinutes = &minutes
 	}
 	return row
@@ -289,9 +289,10 @@ func statusDAGNodeSucceeded(status string) bool {
 }
 
 // statusStageDuration sums timing records for the concrete stages in one compact row.
-func statusStageDuration(state State, stages []string, now time.Time) (float64, bool) {
+func statusStageDuration(state State, stages []string, sessionID string, now time.Time) (float64, bool) {
 	total := 0.0
 	found := false
+	sessionStartedAt, hasSessionStartedAt := statusUUIDv7StartedAt(sessionID)
 	for _, stage := range stages {
 		timing, ok := state.StageTimings[stage]
 		if !ok || timing.StartedAt == "" {
@@ -300,6 +301,9 @@ func statusStageDuration(state State, stages []string, now time.Time) (float64, 
 		startedAt, err := time.Parse(time.RFC3339Nano, timing.StartedAt)
 		if err != nil {
 			continue
+		}
+		if hasSessionStartedAt && sessionStartedAt.Before(startedAt) {
+			startedAt = sessionStartedAt
 		}
 		finishedAt := now
 		if timing.FinishedAt != "" {
@@ -317,6 +321,19 @@ func statusStageDuration(state State, stages []string, now time.Time) (float64, 
 		found = true
 	}
 	return total, found
+}
+
+// statusUUIDv7StartedAt extracts the embedded millisecond timestamp from UUIDv7 session ids.
+func statusUUIDv7StartedAt(sessionID string) (time.Time, bool) {
+	compact := strings.ReplaceAll(sessionID, "-", "")
+	if len(compact) < 13 || compact[12] != '7' {
+		return time.Time{}, false
+	}
+	millis, err := strconv.ParseInt(compact[:12], 16, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(millis).UTC(), true
 }
 
 // statusStageArtifact returns the fixed artifact path for one main workflow stage.

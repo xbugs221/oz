@@ -27,10 +27,10 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 		"  执行   writer-session     → 6.50",
 		"    代码 subagent-session-1 ✓ 1.10",
 		"    外部 subagent-session-2 ✓ 0.80",
-		"  审核   reviewer-session   -  -",
-		"  修正   -                  -  -",
-		"  测试   -                  -  -",
-		"  归档   -                  -  -",
+		"  审核   reviewer-session   -    -",
+		"  修正   -                  -    -",
+		"  测试   -                  -    -",
+		"  归档   -                  -    -",
 	}
 	for _, want := range wantStatusLines {
 		if !hasExactLine(gotStatus, want) {
@@ -50,7 +50,7 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 	saveCompactResult(t, "watch-w1.txt", gotWatch)
 	for _, want := range []string{
 		"  规划   planner-session    ✓ 2.00",
-		"  执行   writer-session     |  6.50",
+		"  执行   writer-session     | 6.50",
 		"    代码 subagent-session-1 ✓ 1.10",
 		"    外部 subagent-session-2 ✓ 0.80",
 	} {
@@ -77,7 +77,7 @@ func TestStatusWatchCompactOutputContract(t *testing.T) {
 	saveCompactResult(t, "watch-b1.txt", gotBatch)
 	for _, want := range []string{
 		"  规划   planner-session    ✓ 2.00",
-		"  执行   writer-session     |  6.50",
+		"  执行   writer-session     | 6.50",
 		"    代码 subagent-session-1 ✓ 1.10",
 		"- 8-待执行",
 	} {

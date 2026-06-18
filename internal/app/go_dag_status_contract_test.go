@@ -40,9 +40,9 @@ func TestGoDAGHumanStatusContract(t *testing.T) {
 		"- demo → -",
 		"  执行 exec-session ✓ -",
 		"  审核 -            → -",
-		"  修正 -            -  -",
-		"  测试 -            -  -",
-		"  归档 -            -  -",
+		"  修正 -            - -",
+		"  测试 -            - -",
+		"  归档 -            - -",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("status output missing %q:\n%s", want, text)

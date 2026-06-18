@@ -20,7 +20,7 @@ func compactStatusLines(view statusView) []string {
 			padStatusColumn(name, widths.name-row.Indent),
 			padStatusColumn(statusText(row.SessionID), widths.session),
 			padStatusColumn(statusText(row.Marker), widths.marker),
-			padStatusColumn(statusDurationText(row.DurationMinutes), widths.duration),
+			padStatusColumnLeft(statusDurationText(row.DurationMinutes), widths.duration),
 		))
 	}
 	return lines
@@ -207,17 +207,81 @@ func padStatusColumn(value string, width int) string {
 	return value + strings.Repeat(" ", padding)
 }
 
-// statusDisplayWidth approximates terminal cell width for ASCII and Chinese status text.
+// padStatusColumnLeft left-pads terminal columns for right-aligned numeric values.
+func padStatusColumnLeft(value string, width int) string {
+	padding := width - statusDisplayWidth(value)
+	if padding <= 0 {
+		return value
+	}
+	return strings.Repeat(" ", padding) + value
+}
+
+// statusDisplayWidth approximates terminal cell width for compact CJK status text.
 func statusDisplayWidth(value string) int {
 	width := 0
 	for _, r := range value {
-		if r <= 127 {
-			width++
-			continue
-		}
-		width += 2
+		width += statusRuneDisplayWidth(r)
 	}
 	return width
+}
+
+// statusRuneDisplayWidth treats CJK ideographs as double-width while keeping status symbols single-width.
+func statusRuneDisplayWidth(r rune) int {
+	switch {
+	case r == 0:
+		return 0
+	case r < 0x20 || (r >= 0x7f && r < 0xa0):
+		return 0
+	case r >= 0x1100 && (r <= 0x115f ||
+		r == 0x2329 || r == 0x232a ||
+		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
+		(r >= 0xac00 && r <= 0xd7a3) ||
+		(r >= 0xf900 && r <= 0xfaff) ||
+		(r >= 0xfe10 && r <= 0xfe19) ||
+		(r >= 0xfe30 && r <= 0xfe6f) ||
+		(r >= 0xff00 && r <= 0xff60) ||
+		(r >= 0xffe0 && r <= 0xffe6)):
+		return 2
+	default:
+		return 1
+	}
+}
+
+// statusDurationDecimalColumn returns the display column of the decimal point in one rendered status line.
+func statusDurationDecimalColumn(line string) (int, bool) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return 0, false
+	}
+	value := fields[len(fields)-1]
+	decimalIndex := strings.Index(value, ".")
+	if decimalIndex < 0 {
+		return 0, false
+	}
+	index := strings.LastIndex(line, value)
+	if index < 0 {
+		return 0, false
+	}
+	return statusDisplayWidth(line[:index]) + statusDisplayWidth(value[:decimalIndex]), true
+}
+
+// statusDurationDecimalColumnsAligned reports whether every decimal duration ends at the same decimal column.
+func statusDurationDecimalColumnsAligned(lines []string) bool {
+	column := -1
+	for _, line := range lines {
+		next, ok := statusDurationDecimalColumn(line)
+		if !ok {
+			continue
+		}
+		if column < 0 {
+			column = next
+			continue
+		}
+		if next != column {
+			return false
+		}
+	}
+	return column >= 0
 }
 
 // statusText renders an empty field as the required dash column.
