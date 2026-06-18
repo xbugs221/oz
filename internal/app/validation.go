@@ -323,17 +323,11 @@ func commandExitCode(err error) int {
 // limitValidationOutput keeps validation artifacts useful without unbounded log growth.
 func limitValidationOutput(output string) string {
 	const max = 200_000
-	if len(output) <= max {
-		return output
-	}
-	return output[:max] + "\n[validation output truncated]\n"
+	return limitUTF8Text(output, max, "\n[validation output truncated]\n")
 }
 
 // limitValidationPromptExcerpt keeps retry prompts focused on the actionable failure.
 func limitValidationPromptExcerpt(output string) string {
 	const max = 12_000
-	if len(output) <= max {
-		return output
-	}
-	return output[:max] + "\n[validation artifact excerpt truncated]\n"
+	return limitUTF8Text(output, max, "\n[validation artifact excerpt truncated]\n")
 }

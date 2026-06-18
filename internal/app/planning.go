@@ -100,7 +100,7 @@ func codexPlanningCommand(ctx context.Context, path, prompt string, stdin io.Rea
 	} else {
 		args = append(args, "--disable", "fast_mode")
 	}
-	args = append(args, prompt)
+	args = append(args, agentPromptText(prompt))
 	cmd := commandContext(ctx, path, args...)
 	cmd.Stdin = stdin
 	return cmd

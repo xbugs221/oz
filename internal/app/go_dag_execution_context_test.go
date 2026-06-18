@@ -44,6 +44,7 @@ type goDAGContextFakeRunner struct {
 	stagePath           string
 	captureMalformed    bool
 	leaveTaskPending    bool
+	failMainErr         error
 }
 
 // TestGoDAGRetryableHelperErrorRestoresRunningState verifies transient helper failures stay retryable.
@@ -226,6 +227,9 @@ func (r *goDAGContextFakeRunner) Run(_ context.Context, repo, prompt, threadID s
 		return "subagent-" + name, nil
 	}
 	r.mainCalls++
+	if r.failMainErr != nil {
+		return "executor-thread", r.failMainErr
+	}
 	if r.leaveTaskPending {
 		return "executor-thread", nil
 	}
@@ -1072,6 +1076,35 @@ func TestRunStageDoesNotCompleteBeforeArtifactGate(t *testing.T) {
 	}
 	if state.Stages["execution"] == "completed" {
 		t.Fatalf("execution stage = %q, must not complete before artifact gate passes", state.Stages["execution"])
+	}
+}
+
+// TestRunStageMarksStageFailedWhenAgentErrors keeps persisted state consistent after agent process failures.
+func TestRunStageMarksStageFailedWhenAgentErrors(t *testing.T) {
+	repo := goDAGContextRepo(t)
+	goDAGContextChange(t, repo, "- [ ] task\n")
+	runID := "agent-error-stage-failed-run"
+	if err := snapshotRunPrompts(repo, runID); err != nil {
+		t.Fatal(err)
+	}
+	state := goDAGContextState(t, repo, runID)
+	runner := &goDAGContextFakeRunner{failMainErr: errors.New("agent stdin invalid utf8")}
+	engine := NewEngine(repo, goDAGContextRegistry(runner))
+
+	err := engine.runStage(context.Background(), &state)
+	if err == nil {
+		t.Fatal("runStage returned nil, want agent error")
+	}
+	persisted, err := loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Stages["execution"] != statusFailed {
+		t.Fatalf("execution stage = %q, want failed", persisted.Stages["execution"])
+	}
+	timing := persisted.StageTimings["execution"]
+	if timing.StartedAt == "" || timing.FinishedAt == "" {
+		t.Fatalf("stage timing = %#v, want started and finished timestamps", timing)
 	}
 }
 

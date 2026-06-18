@@ -184,7 +184,7 @@ func codexCommandError(err error, stderrText string) error {
 
 // stringsReader creates an io.Reader without importing shell-specific behavior.
 func stringsReader(text string) io.Reader {
-	return strings.NewReader(text)
+	return strings.NewReader(agentPromptText(text))
 }
 
 // codexExecArgs builds shell-free arguments while keeping prompt content on stdin.

@@ -65,6 +65,7 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 			warnWorkflowWrite("save interrupted stage state", saveErr)
 			return errors.Join(err, saveErr)
 		} else {
+			state.Stages[state.Stage] = statusFailed
 			saveErr := saveState(e.Repo, *state)
 			warnWorkflowWrite("save failed stage state", saveErr)
 			return errors.Join(err, saveErr)

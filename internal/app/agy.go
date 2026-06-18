@@ -85,7 +85,7 @@ func (a AgyCLI) Run(ctx context.Context, repo, prompt, conversationID string, op
 func agyPlanningArgs(prompt string, options StageOptions) []string {
 	args := []string{"--prompt-interactive"}
 	args = append(args, agyCommonArgs(options)...)
-	return append(args, prompt)
+	return append(args, agentPromptText(prompt))
 }
 
 // agyRunArgs builds shell-free sealed-run arguments for one Agy prompt.
@@ -95,7 +95,7 @@ func agyRunArgs(prompt, conversationID string, options StageOptions) []string {
 	if conversationID != "" {
 		args = append(args, "--conversation", conversationID)
 	}
-	return append(args, prompt)
+	return append(args, agentPromptText(prompt))
 }
 
 // agyCommonArgs maps shared stage options to Agy-supported CLI flags.

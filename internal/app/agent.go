@@ -91,11 +91,8 @@ func requiredAgentTools() []string {
 // limitAgentDiagnostics keeps process error messages useful without recreating log files.
 func limitAgentDiagnostics(text string) string {
 	const limit = 4096
-	text = strings.TrimSpace(text)
-	if len(text) <= limit {
-		return text
-	}
-	return text[:limit] + "\n... truncated"
+	text = strings.TrimSpace(agentPromptText(text))
+	return limitUTF8Text(text, limit, "\n... truncated")
 }
 
 // printAgentSessionStarted reports a durable session id in the generic progress format.

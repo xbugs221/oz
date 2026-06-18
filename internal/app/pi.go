@@ -177,7 +177,7 @@ func (p PiCLI) waitPiJSONLCommand(ctx context.Context, cmd *exec.Cmd, stdout io.
 // piPlanningArgs builds interactive planning arguments using Pi option names.
 func piPlanningArgs(prompt string, options StageOptions) []string {
 	args := piCommonArgs(options)
-	return append(args, prompt)
+	return append(args, agentPromptText(prompt))
 }
 
 // piRunArgs builds shell-free sealed-run arguments for Pi JSON mode.
@@ -187,7 +187,7 @@ func piRunArgs(prompt, sessionID string, options StageOptions) []string {
 	if sessionID != "" {
 		args = append(args, "--session", sessionID)
 	}
-	return append(args, prompt)
+	return append(args, agentPromptText(prompt))
 }
 
 // piCommonArgs maps shared stage options to Pi-supported CLI flags.

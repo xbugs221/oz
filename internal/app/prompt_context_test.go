@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // TestPromptForStageReturnsFailureBodyAfterValidationFail ensures retry 提示不再重复发送原始 prompt。
@@ -52,6 +53,42 @@ func TestPromptForStageReturnsFailureBodyAfterValidationFail(t *testing.T) {
 	}
 	if !strings.HasPrefix(prompt, "# Validation gate failed") {
 		t.Fatalf("prompt should start from failure body, got: %s", prompt)
+	}
+}
+
+// TestPromptForStageValidationFailurePromptPreservesUTF8 verifies retry prompts survive multibyte truncation.
+func TestPromptForStageValidationFailurePromptPreservesUTF8(t *testing.T) {
+	repo := t.TempDir()
+	state := State{
+		ChangeName: "demo",
+		Stage:      "execution",
+		Workflow:   DefaultWorkflowConfig(),
+		Validation: map[string]StageValidationState{
+			"execution": {
+				Status:       validationStatusFailed,
+				Kind:         validationKindCommands,
+				Attempts:     1,
+				LastArtifact: "validation-execution-1.json",
+				LastError:    "validation artifact includes multibyte output",
+			},
+		},
+	}
+	state.Workflow.Prompts["execution"] = "original execution prompt should not be repeated"
+	artifactPath := filepath.Join(repo, state.Validation["execution"].LastArtifact)
+	artifactBody := strings.Repeat("a", 11997) + "🙂tail"
+	if err := os.WriteFile(artifactPath, []byte(artifactBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	prompt, err := promptForStage(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.ValidString(prompt) {
+		t.Fatalf("retry prompt is not valid UTF-8 near boundary: %q", prompt[len(prompt)-80:])
+	}
+	if !strings.Contains(prompt, "[validation artifact excerpt truncated]") {
+		t.Fatalf("retry prompt should include truncation marker, got suffix: %q", prompt[len(prompt)-120:])
 	}
 }
 
