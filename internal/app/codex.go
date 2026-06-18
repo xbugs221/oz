@@ -10,6 +10,8 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 )
 
 // CodexTool adapts Codex CLI to the generic agent backend contract.
@@ -83,9 +85,7 @@ func (c CodexCLI) Run(ctx context.Context, repo, prompt, threadID string, option
 		return "", err
 	}
 	printCodexProcessStarted(c.Progress, cmd.Process.Pid)
-	observed, drainErr := drainCodexJSONLWithCapture(stdout, c.Progress, c.Artifact)
-	waitErr := cmd.Wait()
-	printCodexProcessExited(c.Progress, cmd.Process.Pid, cmd.ProcessState.ExitCode())
+	observed, drainErr, waitErr := c.waitCodexJSONLCommand(ctx, cmd, stdout)
 	if drainErr != nil {
 		return observed, drainErr
 	}
@@ -93,6 +93,84 @@ func (c CodexCLI) Run(ctx context.Context, repo, prompt, threadID string, option
 		return observed, codexCommandError(waitErr, stderr.String())
 	}
 	return observed, nil
+}
+
+// waitCodexJSONLCommand drains Codex JSONL with an output-idle watchdog so stuck turns can be retried.
+func (c CodexCLI) waitCodexJSONLCommand(ctx context.Context, cmd *exec.Cmd, stdout io.Reader) (string, error, error) {
+	type drainResult struct {
+		threadID string
+		err      error
+	}
+	touch := make(chan struct{}, 1)
+	drained := make(chan drainResult, 1)
+	waited := make(chan error, 1)
+	var observedMu sync.Mutex
+	observed := ""
+	setObserved := func(id string) {
+		observedMu.Lock()
+		observed = id
+		observedMu.Unlock()
+	}
+	getObserved := func() string {
+		observedMu.Lock()
+		defer observedMu.Unlock()
+		return observed
+	}
+	go func() {
+		threadID, err := drainCodexJSONLWithCaptureNotify(stdout, c.Progress, c.Artifact, func() {
+			select {
+			case touch <- struct{}{}:
+			default:
+			}
+		}, setObserved)
+		drained <- drainResult{threadID: threadID, err: err}
+	}()
+	go func() {
+		waited <- cmd.Wait()
+	}()
+	timer := time.NewTimer(agentOutputIdleTimeout)
+	defer timer.Stop()
+	drainDone := false
+	waitDone := false
+	var drainErr error
+	var waitErr error
+	for !drainDone || !waitDone {
+		select {
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return getObserved(), ctx.Err(), nil
+		case <-touch:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(agentOutputIdleTimeout)
+		case result := <-drained:
+			drainDone = true
+			if result.threadID != "" {
+				setObserved(result.threadID)
+			}
+			drainErr = result.err
+		case err := <-waited:
+			waitDone = true
+			waitErr = err
+			exitCode := -1
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+			}
+			printCodexProcessExited(c.Progress, cmd.Process.Pid, exitCode)
+		case <-timer.C:
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return getObserved(), fmt.Errorf("%w: codex %s 内没有新输出，已终止本次进程并准备续跑", errGoDAGRetryableNode, agentOutputIdleTimeout), nil
+		}
+	}
+	return getObserved(), drainErr, waitErr
 }
 
 // codexCommandError summarizes Codex failures and includes bounded captured diagnostics.
@@ -152,12 +230,23 @@ func drainCodexJSONL(stdout io.Reader, progress io.Writer) (threadID string, err
 
 // drainCodexJSONLWithCapture reads stdout while extracting session metadata and final text.
 func drainCodexJSONLWithCapture(stdout io.Reader, progress io.Writer, capture *artifactCapture) (threadID string, err error) {
+	return drainCodexJSONLWithCaptureNotify(stdout, progress, capture, nil, nil)
+}
+
+// drainCodexJSONLWithCaptureNotify reports each output line and thread id to the caller.
+func drainCodexJSONLWithCaptureNotify(stdout io.Reader, progress io.Writer, capture *artifactCapture, touch func(), session func(string)) (threadID string, err error) {
 	reader := bufio.NewReaderSize(stdout, 64*1024)
 	for {
 		line, readErr := reader.ReadBytes('\n')
 		if len(line) > 0 {
+			if touch != nil {
+				touch()
+			}
 			if id := codexThreadIDFromLine(line, progress); id != "" {
 				threadID = id
+				if session != nil {
+					session(id)
+				}
 			}
 			capturePiText(line, capture)
 		}

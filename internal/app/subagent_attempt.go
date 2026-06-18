@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type subagentAttemptRequest struct {
 	Prompt         string
 	ArtifactPath   string
 	SchemaErr      error
+	RetryErr       error
 	PromptContext  subagentContext
 	Options        StageOptions
 	AttemptContext context.Context
@@ -61,6 +63,7 @@ type subagentAttemptsResult struct {
 func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentAttemptsResult, error) {
 	var result ParallelMemberResult
 	var schemaErr error
+	var retryErr error
 	var boundaryRepair subagentBoundaryRepair
 	sessionID := request.SessionID
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -97,6 +100,7 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			Prompt:         request.Prompt,
 			ArtifactPath:   request.ArtifactPath,
 			SchemaErr:      schemaErr,
+			RetryErr:       retryErr,
 			PromptContext:  request.PromptContext,
 			Options:        request.Options,
 			AttemptContext: request.Context,
@@ -109,8 +113,14 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			return subagentAttemptsResult{}, boundaryErr
 		}
 		if attemptResult.Err != nil {
+			if errors.Is(attemptResult.Err, errGoDAGRetryableNode) && attempt < 3 {
+				schemaErr = nil
+				retryErr = attemptResult.Err
+				continue
+			}
 			return subagentAttemptsResult{}, e.failNodeState(request.State, attemptResult.Err)
 		}
+		retryErr = nil
 		if fileExists(request.ArtifactPath) {
 			result, schemaErr = readNormalizeValidateMemberArtifact(request.ArtifactPath, request.ConfigName, request.Member, request.State.ChangeName)
 			if schemaErr == nil {
@@ -155,7 +165,11 @@ func (e *Engine) runSubagentAttempt(request subagentAttemptRequest) subagentAtte
 	prompt := request.Prompt
 	sessionID := request.SessionID
 	if request.Attempt > 1 {
-		prompt = artifactRetryPrompt(request.SchemaErr, request.PromptContext)
+		if request.SchemaErr != nil {
+			prompt = artifactRetryPrompt(request.SchemaErr, request.PromptContext)
+		} else if request.RetryErr != nil {
+			prompt = artifactContinuationPrompt(request.RetryErr, request.PromptContext)
+		}
 	}
 	sessionID, err := runner.Run(attemptCtx, e.Repo, prompt, sessionID, request.Options)
 	if attemptCtx.Err() == context.DeadlineExceeded {

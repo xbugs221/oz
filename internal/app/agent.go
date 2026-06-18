@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // AgentRunner executes one agent turn and returns the observed session id.
@@ -21,6 +22,8 @@ type AgentTool interface {
 	PlanningCommand(ctx context.Context, repo, prompt string, stdin io.Reader, options StageOptions) (*exec.Cmd, error)
 	NewRunner() AgentRunner
 }
+
+var agentOutputIdleTimeout = 5 * time.Minute
 
 // AgentRegistry maps configured tool names to concrete backends.
 type AgentRegistry struct {

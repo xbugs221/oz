@@ -72,6 +72,23 @@ func artifactRetryPrompt(schemaErr error, context subagentContext) string {
 	}, "\n") + "\n"
 }
 
+func artifactContinuationPrompt(retryErr error, context subagentContext) string {
+	reason := "上一轮 helper 执行中断或长时间无输出。"
+	if retryErr != nil {
+		reason = retryErr.Error()
+	}
+	return strings.Join([]string{
+		"上一轮未完成：" + reason,
+		"只处理当前提案：" + context.ChangeName + "。",
+		"请继续上一轮任务，不要重新扩大搜索范围。",
+		"如果已足够判断，请立即写入上一轮提示中的 ARTIFACT_PATH 文件。",
+		"只写原 ARTIFACT_PATH，不修改源码、提案、测试或其它 artifact。",
+		"写入后运行上一轮给出的 oz flow validate-member-artifact 命令。",
+		"最终回复只简短说明已写入和校验结果；不要把 JSON 作为最终回复传输。",
+		memberArtifactSchemaPrompt(),
+	}, "\n") + "\n"
+}
+
 func memberArtifactSchemaPrompt() string {
 	return strings.Join([]string{
 		`{"name":"` + "{{SUBAGENT_NAME}}" + `","change_name":"` + "{{CURRENT_CHANGE}}" + `","purpose":"` + "{{SUBAGENT_PURPOSE}}" + `","status":0|1|"success"|"failed"|"skipped","relevant":true|false,"irrelevant_reason":"string","summary":"string","evidence":["string"],"findings":[{"title":"string","severity":1|2|3,"scope":1|2|0,"evidence":"string","recommendation":"string"}]}`,

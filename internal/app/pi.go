@@ -10,6 +10,8 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 )
 
 // PiTool adapts Pi Coding Agent CLI to the generic agent backend contract.
@@ -80,9 +82,7 @@ func (p PiCLI) Run(ctx context.Context, repo, prompt, sessionID string, options 
 		return "", err
 	}
 	printAgentProcessStarted(p.Progress, "pi", cmd.Process.Pid)
-	observed, drainErr := drainPiJSONLWithCapture(stdout, p.Progress, p.Artifact)
-	waitErr := cmd.Wait()
-	printAgentProcessExited(p.Progress, "pi", cmd.Process.Pid, cmd.ProcessState.ExitCode())
+	observed, drainErr, waitErr := p.waitPiJSONLCommand(ctx, cmd, stdout)
 	if drainErr != nil {
 		return observed, drainErr
 	}
@@ -94,6 +94,84 @@ func (p PiCLI) Run(ctx context.Context, repo, prompt, sessionID string, options 
 		return observed, fmt.Errorf("%w；stderr：%s", waitErr, stderrText)
 	}
 	return observed, nil
+}
+
+// waitPiJSONLCommand drains Pi JSONL with an output-idle watchdog so stuck backends release the workflow.
+func (p PiCLI) waitPiJSONLCommand(ctx context.Context, cmd *exec.Cmd, stdout io.Reader) (string, error, error) {
+	type drainResult struct {
+		sessionID string
+		err       error
+	}
+	touch := make(chan struct{}, 1)
+	drained := make(chan drainResult, 1)
+	waited := make(chan error, 1)
+	var observedMu sync.Mutex
+	observed := ""
+	setObserved := func(id string) {
+		observedMu.Lock()
+		observed = id
+		observedMu.Unlock()
+	}
+	getObserved := func() string {
+		observedMu.Lock()
+		defer observedMu.Unlock()
+		return observed
+	}
+	go func() {
+		sessionID, err := drainPiJSONLWithCaptureNotify(stdout, p.Progress, p.Artifact, func() {
+			select {
+			case touch <- struct{}{}:
+			default:
+			}
+		}, setObserved)
+		drained <- drainResult{sessionID: sessionID, err: err}
+	}()
+	go func() {
+		waited <- cmd.Wait()
+	}()
+	timer := time.NewTimer(agentOutputIdleTimeout)
+	defer timer.Stop()
+	drainDone := false
+	waitDone := false
+	var drainErr error
+	var waitErr error
+	for !drainDone || !waitDone {
+		select {
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return getObserved(), ctx.Err(), nil
+		case <-touch:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(agentOutputIdleTimeout)
+		case result := <-drained:
+			drainDone = true
+			if result.sessionID != "" {
+				setObserved(result.sessionID)
+			}
+			drainErr = result.err
+		case err := <-waited:
+			waitDone = true
+			waitErr = err
+			exitCode := -1
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+			}
+			printAgentProcessExited(p.Progress, "pi", cmd.Process.Pid, exitCode)
+		case <-timer.C:
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			return getObserved(), fmt.Errorf("%w: pi %s 内没有新输出，已终止本次进程并准备续跑", errGoDAGRetryableNode, agentOutputIdleTimeout), nil
+		}
+	}
+	return getObserved(), drainErr, waitErr
 }
 
 // piPlanningArgs builds interactive planning arguments using Pi option names.
@@ -143,12 +221,23 @@ func drainPiJSONL(stdout io.Reader, progress io.Writer) (sessionID string, err e
 
 // drainPiJSONLWithCapture reads stdout while best-effort extracting Pi session metadata and final text.
 func drainPiJSONLWithCapture(stdout io.Reader, progress io.Writer, capture *artifactCapture) (sessionID string, err error) {
+	return drainPiJSONLWithCaptureNotify(stdout, progress, capture, nil, nil)
+}
+
+// drainPiJSONLWithCaptureNotify reports each output line and session id to the caller.
+func drainPiJSONLWithCaptureNotify(stdout io.Reader, progress io.Writer, capture *artifactCapture, touch func(), session func(string)) (sessionID string, err error) {
 	reader := bufio.NewReaderSize(stdout, 64*1024)
 	for {
 		line, readErr := reader.ReadBytes('\n')
 		if len(line) > 0 {
+			if touch != nil {
+				touch()
+			}
 			if id := piSessionIDFromLine(line, progress); id != "" {
 				sessionID = id
+				if session != nil {
+					session(id)
+				}
 			}
 			capturePiText(line, capture)
 		}
