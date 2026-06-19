@@ -1,8 +1,4 @@
 读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、当前完整变更 `{{.ChangePath}}/`、当前 diff baseline `{{.BaselineHead}}`
-{{if .HasPlanningContext}}可选上下文：`{{.PlanningContextPath}}`
-{{end}}{{if .HasParallelContext}}可选上下文：`{{.ParallelContextPath}}`
-{{end}}{{if .HasParallelReview}}review helper：`{{.ParallelReviewPath}}`
-{{end}}
 
 任务：
 
@@ -10,8 +6,6 @@
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
 - blocking scope 只允许 `current_change` 或 `introduced_regression`；acceptance_contract 未满足必须可复现。
 - `required_evidence` 只要求可复核，不要求 `test-results/`、截图、trace 或 runtime log 进 git；强制跟踪运行产物属于合同设计错误。
-{{if .HasParallelReview}}- 读或生成 `{{.ParallelReviewPath}}`；先把 gate_input 成员结论归一化。relevant:false 且 findings=[] 的 helper 只作 evidence，不得阻断。只有复核确认当前 acceptance/spec 的 blocker/major 失败才进入最终 `findings`。
-{{end}}
 {{if .HasPreviousReview}}
 上一轮：`{{.LatestPreviousReviewPath}}`；历史 review 数量：{{.PreviousReviewCount}}
 {{if .HasPreviousFixSummary}}Fix summary：`{{.LatestPreviousFixSummaryPath}}`

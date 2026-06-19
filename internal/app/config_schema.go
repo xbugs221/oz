@@ -32,6 +32,32 @@ type workflowConfigInput struct {
 	Subagents           parallelConfigInput          `yaml:"subagents"`
 	Validation          validationConfigInput        `yaml:"validation"`
 	Prompts             map[string]string            `yaml:"prompts"`
+	legacyParallelSet   bool                         `yaml:"-"`
+	legacySubagentsSet  bool                         `yaml:"-"`
+	legacyGuardSet      bool                         `yaml:"-"`
+}
+
+// UnmarshalYAML records deleted workflow keys before typed decoding loses empty/null presence.
+func (input *workflowConfigInput) UnmarshalYAML(value *yaml.Node) error {
+	type raw workflowConfigInput
+	var decoded raw
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			switch value.Content[i].Value {
+			case "parallel":
+				decoded.legacyParallelSet = true
+			case "subagents":
+				decoded.legacySubagentsSet = true
+			case "subagent_guard":
+				decoded.legacyGuardSet = true
+			}
+		}
+	}
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*input = workflowConfigInput(decoded)
+	return nil
 }
 
 type parallelConfigInput struct {
@@ -192,26 +218,22 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if input.Iterations != nil {
 		return WorkflowConfig{}, fmt.Errorf("iterations 是旧字段，已删除")
 	}
-	if input.Subagents.Enabled != nil || input.Subagents.Groups != nil {
+	if input.legacySubagentsSet {
 		return WorkflowConfig{}, fmt.Errorf("subagents 是旧字段，已删除")
 	}
-	if input.Parallel.Groups != nil {
-		return WorkflowConfig{}, fmt.Errorf("parallel.groups 是旧字段，已删除；请使用 stages.<stage>.before")
+	if input.legacyParallelSet {
+		return WorkflowConfig{}, fmt.Errorf("parallel 是旧字段，已删除")
 	}
 	maxIterations := defaultMaxReviewIterations
 	engine := "go-dag"
-	subagentGuard := subagentGuardModeAdvisory
 	var basePrompts map[string]string
 	byKind := defaultStageOptionsByKind()
 	validation := ValidationConfig{MaxAttemptsPerStage: 3}
-	parallel := defaultParallelConfig()
 	if baseConfig != nil {
 		engine = baseConfig.Engine
 		maxIterations = baseConfig.MaxReviewIterations
-		subagentGuard = normalizeSubagentGuardMode(baseConfig.SubagentGuard)
 		basePrompts = clonePrompts(baseConfig.Prompts)
 		validation = baseConfig.Validation
-		parallel = cloneParallelConfig(baseConfig.Parallel)
 		if option, ok := baseConfig.Stages["planning"]; ok {
 			byKind["planning"] = option
 		}
@@ -240,8 +262,8 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if strings.TrimSpace(input.Engine) != "" {
 		return WorkflowConfig{}, fmt.Errorf("engine 是旧字段，已删除")
 	}
-	if input.SubagentGuard.Set {
-		subagentGuard = input.SubagentGuard.Mode
+	if input.legacyGuardSet {
+		return WorkflowConfig{}, fmt.Errorf("subagent_guard 是旧字段，已删除")
 	}
 	for _, kind := range stageKinds {
 		base := byKind[kind]
@@ -255,6 +277,9 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 				}
 			}
 			if override, ok := input.Stages[kind]; ok {
+				if override.Before != nil {
+					return WorkflowConfig{}, fmt.Errorf("stages.%s.before 是旧字段，已删除", kind)
+				}
 				if err := mergeStageOptions(&base, override); err != nil {
 					return WorkflowConfig{}, fmt.Errorf("stages.%s: %w", kind, err)
 				}
@@ -262,7 +287,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		byKind[kind] = base
 	}
-	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, SubagentGuard: subagentGuard, Stages: map[string]StageOptions{
+	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
 		"planning":  byKind["planning"],
 		"execution": byKind["execution"],
 		"archive":   byKind["archive"],
@@ -271,20 +296,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if err != nil {
 		return WorkflowConfig{}, err
 	}
-	parallel, err = parallelConfigFromInput(input.Parallel, parallel)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	parallel, err = parallelConfigFromInput(input.Subagents, parallel)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	parallel, err = parallelConfigFromStages(input.Stages, parallel)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
 	config.Validation = validation
-	config.Parallel = parallel
 	for i := 1; i <= maxIterations; i++ {
 		config.Stages[fmt.Sprintf("review_%d", i)] = byKind["review"]
 		config.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]

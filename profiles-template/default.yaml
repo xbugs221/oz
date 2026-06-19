@@ -1,5 +1,3 @@
-parallel: true
-subagent_guard: advisory
 max_review_iterations: 5
 stages:
   planning:
@@ -8,54 +6,15 @@ stages:
   execution:
     agent: codex
     reasoning: low
-    before:
-      - name: 代码库侦察员
-        purpose: 汇总 execution 需要读取的文件和测试模式
-        agent: pi
-        subagent: explore
-      - name: 外部资料研究员
-        purpose: 查询 execution 依赖的外部库文档和开源实现
-        agent: pi
-        subagent: librarian
   fix:
     agent: codex
     reasoning: low
   review:
     agent: codex
     reasoning: high
-    before:
-      - name: 目标核对审核员
-        purpose: 核对 proposal/spec/task 是否满足
-        agent: pi
-        required: true
-      - name: 测试有效性审核员
-        purpose: 判断测试是否真实覆盖场景
-        agent: pi
-        required: true
-      - name: 安全风险审核员
-        purpose: 检查权限、输入、泄漏和破坏性操作
-        agent: pi
-        required: true
-      - name: 上下文一致性审核员
-        purpose: 检查是否违背现有架构约定
-        agent: pi
-        required: true
   qa:
     agent: codex
     reasoning: high
-    before:
-      - name: CLI/API 测试员
-        purpose: 执行命令行或接口真实路径
-        agent: pi
-        required: true
-      - name: 浏览器路径测试员
-        purpose: 执行页面真实用户路径
-        agent: pi
-        required: true
-      - name: 回归场景测试员
-        purpose: 覆盖邻近功能回归
-        agent: pi
-        required: true
   archive:
     agent: codex
     reasoning: low

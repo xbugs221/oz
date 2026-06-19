@@ -3,7 +3,6 @@ package app
 
 import (
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -109,8 +108,7 @@ type LockInfo struct {
 }
 
 func parallelGroupConfigured(workflow WorkflowConfig, name string) bool {
-	group, ok := workflow.Parallel.Groups[name]
-	return ok && len(group.Members) > 0
+	return false
 }
 
 // refreshStateProcesses derives a stage-aware process list from sessions and DAG nodes.
@@ -118,56 +116,7 @@ func refreshStateProcesses(state *State) {
 	if state == nil || state.RunID == "" {
 		return
 	}
-	ensureWorkflowConfig(state)
-	if !state.Workflow.Parallel.Enabled || len(state.Workflow.Parallel.Groups) == 0 {
-		state.Processes = nil
-		return
-	}
-	spec := BuildWorkflowSpec(state.ChangeName, state.Workflow)
-	var processes []ProcessState
-	for _, node := range spec.Nodes {
-		if node.Type != "subagent" {
-			continue
-		}
-		groupName := configGroupName(node.Group)
-		group, ok := state.Workflow.Parallel.Groups[groupName]
-		if !ok {
-			continue
-		}
-		member, ok := parallelMemberByName(group, node.Member)
-		if !ok {
-			continue
-		}
-		provider := nonEmpty(member.Tool, "pi")
-		role := "subagent:" + groupName + ":" + member.Name + ":" + strconv.Itoa(node.Iteration)
-		sessionID := state.Sessions[sessionStateKey(provider, role)]
-		if sessionID == "" && provider != "pi" {
-			sessionID = state.Sessions[sessionStateKey("pi", role)]
-		}
-		nodeState, hasNode := state.DAGNodes[node.ID]
-		status := processStatusFromNode(nodeState, hasNode, sessionID)
-		if status == "" {
-			continue
-		}
-		processes = append(processes, ProcessState{
-			Stage:     nonEmpty(node.Stage, workflowNodeRunStage(node)),
-			Role:      role,
-			Provider:  provider,
-			Status:    status,
-			SessionID: sessionID,
-		})
-	}
-	state.Processes = processes
-}
-
-// parallelMemberByName returns the configured helper member for process metadata.
-func parallelMemberByName(group ParallelGroupConfig, name string) (ParallelMemberConfig, bool) {
-	for _, member := range group.Members {
-		if member.Name == name {
-			return member, true
-		}
-	}
-	return ParallelMemberConfig{}, false
+	state.Processes = nil
 }
 
 // processStatusFromNode converts internal DAG progress into the public process status vocabulary.

@@ -142,10 +142,6 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	e.recordGoDAGNode(runID, node.ID, DAGNodeState{Status: "running", StartedAt: time.Now().UTC().Format(time.RFC3339Nano)})
 	var out bytes.Buffer
 	switch node.Type {
-	case "subagent":
-		err = e.nodeRunSubagent(ctx, state, goDAGNodeArgs(node), &out)
-	case "fanin":
-		err = e.nodeFanin(state, goDAGNodeArgs(node), &out)
 	case "gate":
 		err = e.nodeGate(state, goDAGNodeArgs(node), &out)
 	default:
@@ -177,14 +173,7 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 
 // goDAGShouldSkipCompletedExecutionContext skips advisory execution helpers when task.md is already complete.
 func (e *Engine) goDAGShouldSkipCompletedExecutionContext(state State, node WorkflowNode) bool {
-	if workflowNodeRunStage(node) != "execution" || configGroupName(node.Group) != "implementation_context" {
-		return false
-	}
-	if node.Type != "subagent" && node.Type != "fanin" {
-		return false
-	}
-	done, err := ChangeTasksDone(e.Repo, state.ChangeName)
-	return err == nil && done
+	return false
 }
 
 // goDAGNodeReachedTerminalBlock reports non-failed workflow blocks created by node logic.
@@ -267,14 +256,7 @@ func workflowNodeRunStage(node WorkflowNode) string {
 }
 
 func goDAGNodeArtifact(repo, runID string, node WorkflowNode) string {
-	switch node.Type {
-	case "subagent":
-		return memberArtifactPath(repo, runID, configGroupName(node.Group), node.Iteration, node.Member)
-	case "fanin":
-		return parallelArtifactPath(runDir(repo, runID), configGroupName(node.Group), node.Iteration)
-	default:
-		return ""
-	}
+	return ""
 }
 
 func goDAGOrder(spec WorkflowSpec) []WorkflowNode {

@@ -27,6 +27,41 @@ func newWorkflowFixture(t *testing.T) *workflowFixture {
 	}
 }
 
+// gitRepo creates a temporary git repository for workflow tests.
+func gitRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, string(out))
+	}
+	for _, args := range [][]string{
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test User"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, string(out))
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("fixture\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"add", "README.md"},
+		{"commit", "-q", "-m", "init"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, string(out))
+		}
+	}
+	return repo
+}
+
 // writeActiveChange creates the minimum active change files used by workflow tests.
 func (f *workflowFixture) writeActiveChange(name string) {
 	f.t.Helper()
@@ -87,9 +122,12 @@ func (fakeWorkflowTool) PlanningCommand(context.Context, string, string, io.Read
 // NewRunner returns the fixture runner.
 func (t fakeWorkflowTool) NewRunner() AgentRunner { return t.runner }
 
-// fakeWorkflowRunner aliases the existing DAG runner behavior for shared fixture users.
-type fakeWorkflowRunner struct {
-	goDAGContextFakeRunner
+// fakeWorkflowRunner returns a stable session id without invoking external CLIs.
+type fakeWorkflowRunner struct{}
+
+// Run satisfies AgentRunner for tests that only need registry wiring.
+func (fakeWorkflowRunner) Run(context.Context, string, string, string, StageOptions) (string, error) {
+	return "fake-workflow-session", nil
 }
 
 // TestWorkflowFixtureWritesChangeAndRegistry verifies the shared fixture creates reusable workflow boundaries.

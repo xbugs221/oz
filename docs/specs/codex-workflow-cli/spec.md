@@ -714,6 +714,62 @@
 - **则** 任务或设计说明必须记录保留原因
 - **且** 测试仍必须保证内置默认和生成 YAML 不发生分叉
 
+### 需求：默认工作流不再生成固定外置子代理
+
+// Sources: 42-拆除固定子代理编排
+
+系统必须让新用户默认看不到 oz 外置固定子代理配置。默认 workflow 只表达 planning、execution、review、qa、fix、archive 主阶段，以及 validation、prompt 和主 agent 配置。默认 graph、prompt、status/watch 和源码边界不得再依赖 oz 生成的 subagent、fan-in、parallel artifact 或外置子代理 runner。
+
+#### 场景：默认配置不再生成外置子代理配置
+
+- **当** 用户在临时 git 仓库运行真实 `oz flow config`
+- **则** 默认 `oz-flow.yaml` 不包含 `parallel:`、`subagent_guard:` 或 `before:`
+- **且** 默认 `oz-flow.yaml` 不包含内置固定 helper 名称，例如 `代码库侦察员`、`目标核对审核员`、`浏览器路径测试员`
+- **且** 默认 `oz-flow.yaml` 仍包含 execution、review、qa、fix、archive 主阶段配置
+- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **关键断言**：真实 `cmd/oz` 生成的默认配置只保留主阶段配置，不暴露固定外置子代理
+- **剩余风险**：用户自定义旧配置不自动迁移，只在读取时明确拒绝
+
+#### 场景：默认 workflow graph 不再包含 subagent/fan-in 观测节点
+
+- **当** 用户运行真实 `oz flow graph --change demo --format json`
+- **则** graph nodes 不包含 `type=subagent` 或 `type=fanin`
+- **且** graph artifacts 不包含 `parallel-*` 路径
+- **且** graph 仍包含 `execution`、`review_1`、`qa_1`、`fix_1`、`archive` 和 gate 节点
+- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **关键断言**：默认拓扑只保留主阶段和 gate，状态观测事实源不再包含外置子代理节点
+- **剩余风险**：该场景不启动完整 sealed run；运行时 status/watch 由源码边界和 Go 回归共同约束
+
+#### 场景：主阶段 prompt 不依赖 oz 子代理 artifact
+
+- **给定** 内置 prompt 模板 `prompts-template/oz-flow-start.md`、`oz-flow-review.md` 和 `oz-flow-qa.md`
+- **当** 系统渲染主阶段 prompt
+- **则** execution/review/QA prompt 不包含 `subagent artifact`、`parallel-`、`ParallelContext`、`ParallelReview`、`ParallelQA`、`review helper` 或 `QA helper`
+- **且** prompt 仍保留 `StatePath`、`AcceptancePath`、`ChangePath`、`ReviewPath` 或 `QAPath` 等主阶段必要输入
+- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **关键断言**：内置 prompt 不再要求主 agent 读取 oz 生成的固定外置子代理产物
+- **剩余风险**：用户自定义 prompt 可自行保留文本，不属于默认模板合同
+
+#### 场景：旧外置子代理配置字段明确拒绝
+
+- **给定** 仓库 `oz-flow.yaml` 包含 `parallel`、`subagents`、`subagent_guard` 或 `stages.execution.before`
+- **当** 用户运行真实 `oz flow graph --change demo --format json`
+- **则** 配置读取必须失败
+- **且** 错误信息必须提到对应字段已删除或不再支持
+- **且** 空对象或空值写法，例如 `parallel: {}`、`parallel:`、`subagents: {}`、`subagent_guard:` 也必须被拒绝
+- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **关键断言**：旧字段不会被静默忽略，也不会继续影响 workflow
+- **剩余风险**：迁移用户配置文件内容由用户或后续工具处理
+
+#### 场景：生产代码不再保留外置子代理 runner/fan-in 边界
+
+- **当** 检查 `internal/app` 生产源码并运行核心 Go 回归
+- **则** `internal/app` 不再包含 `nodeRunSubagent`、`nodeFanin`、`runSubagentAttempts`、`ParallelMemberResult`、`memberArtifactPath` 或 `ValidateParallelQAGate`
+- **且** `go test ./internal/app ./internal/ozcli ./tests -count=1` 必须通过
+- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **关键断言**：oz 不再保留外置子代理 runner、member artifact、fan-in 和 parallel QA gate 边界
+- **剩余风险**：静态断言不穷举所有历史命名，代码审查仍需关注死代码残留
+
 ### 需求：阶段级 reasoning 和 fast mode
 
 系统必须允许用户配置 planning、execution、review、qa、fix、archive 六类会话的 reasoning depth；未知阶段键必须在配置读取阶段被拒绝。

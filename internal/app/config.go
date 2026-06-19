@@ -89,19 +89,18 @@ var DefaultWorkflowConfigYAML = mustDefaultWorkflowConfigYAML()
 // LoadWorkflowConfig reads oz-flow.yaml or oz-flow.yml and returns an expanded effective config.
 func LoadWorkflowConfig(repo string) (WorkflowConfig, error) {
 	config := DefaultWorkflowConfig()
-	if path, err := globalWorkflowConfigPath(); err != nil {
-		return WorkflowConfig{}, err
-	} else if fileExists(path) {
-		if err := mergeWorkflowConfigFile(&config, path); err != nil {
-			return WorkflowConfig{}, err
-		}
-	}
 	path, err := workflowConfigPath(repo)
 	if err != nil {
 		return WorkflowConfig{}, err
 	}
 	if path != "" {
 		if err := mergeWorkflowConfigFile(&config, path); err != nil {
+			return WorkflowConfig{}, err
+		}
+	} else if globalPath, err := globalWorkflowConfigPath(); err != nil {
+		return WorkflowConfig{}, err
+	} else if fileExists(globalPath) {
+		if err := mergeWorkflowConfigFile(&config, globalPath); err != nil {
 			return WorkflowConfig{}, err
 		}
 	}
@@ -270,20 +269,9 @@ func normalizeWorkflowConfig(config *WorkflowConfig) {
 	if config.Engine == "" {
 		config.Engine = "go-dag"
 	}
-	config.SubagentGuard = normalizeSubagentGuardMode(config.SubagentGuard)
 	normalizeValidationConfig(&config.Validation)
-	if len(config.Parallel.Groups) == 0 {
-		config.Parallel = defaultParallelConfig()
-	}
-	for groupName, group := range config.Parallel.Groups {
-		for i, member := range group.Members {
-			if member.Tool == "" {
-				member.Tool = "pi"
-			}
-			group.Members[i] = member
-		}
-		config.Parallel.Groups[groupName] = group
-	}
+	config.SubagentGuard = ""
+	config.Parallel = ParallelConfig{}
 }
 
 // normalizeValidationConfig backfills the default retry budget for older snapshots.

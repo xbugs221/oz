@@ -29,9 +29,6 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		if args[0] == "validate-qa" {
 			return runValidateQAArtifact(args[1:], stdout)
 		}
-		if args[0] == "validate-member-artifact" {
-			return runValidateMemberArtifact(args[1:], stdout)
-		}
 		if args[0] == "update" {
 			if len(args) != 1 {
 				return fmt.Errorf("用法：oz flow update")

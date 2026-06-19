@@ -101,9 +101,6 @@ func (e *Engine) validateStageArtifact(state State) (stageArtifactResult, bool, 
 		if err := ValidateQAAgainstAcceptance(qa, acceptance); err != nil {
 			return stageArtifactResult{}, false, err
 		}
-		if err := ValidateParallelQAGate(base, state.Workflow, iteration, qa); err != nil {
-			return stageArtifactResult{}, false, err
-		}
 		return stageArtifactResult{QA: qa}, true, nil
 	case state.Stage == "archive":
 		if !fileExists(filepath.Join(base, "delivery-summary.md")) || !archiveExists(e.Repo, state.ChangeName) {

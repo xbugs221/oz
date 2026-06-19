@@ -11,44 +11,6 @@ import (
 	"testing"
 )
 
-// TestParallelEnabledPromptsCarryFanoutArtifacts verifies optional helpers enter stage prompts only when enabled.
-func TestParallelEnabledPromptsCarryFanoutArtifacts(t *testing.T) {
-	repo := gitRepoForMigratedContract(t)
-	workflow := DefaultWorkflowConfig()
-	workflow.Parallel.Enabled = true
-	workflow.Parallel.Groups["planning_context"] = ParallelGroupConfig{
-		Mode: "advisory",
-		Members: []ParallelMemberConfig{
-			{Name: "需求分析员", Purpose: "找出需求歧义、风险和遗漏", Stage: "planning", Tool: "pi"},
-		},
-	}
-	state := State{ChangeName: "demo", Sealed: true, Workflow: workflow}
-
-	cases := []struct {
-		stage string
-		want  []string
-	}{
-		{stage: "planning", want: []string{"开始讨论规划", "oz-plan"}},
-		{stage: "execution", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json"}},
-		{stage: "review_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-review-1.json", "先把 gate_input 成员结论归一化"}},
-		{stage: "qa_1", want: []string{"parallel-planning-context.json", "parallel-implementation-context.json", "parallel-qa-1.json", "acceptance_matrix"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.stage, func(t *testing.T) {
-			state.Stage = tc.stage
-			got, err := promptForStage(repo, state)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, want := range tc.want {
-				if !strings.Contains(got, want) {
-					t.Fatalf("%s prompt missing %q:\n%s", tc.stage, want, got)
-				}
-			}
-		})
-	}
-}
-
 // TestBundledOzSkillPromptsDelegateToSkills verifies agent prompts do not duplicate oz skill bodies.
 func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 	for _, tc := range []struct {

@@ -1,0 +1,66 @@
+{
+  "summary": "验收 oz flow 已拆除固定外置子代理编排，只保留主阶段 workflow、主阶段产物门禁和主阶段状态观测",
+  "coverage": [
+    {
+      "spec": "需求：默认配置移除固定子代理 / 场景：默认配置不再生成外置子代理配置",
+      "tests": ["remove-fixed-subagents-contract"],
+      "evidence": ["remove-fixed-subagents-log"],
+      "risk": "只检查默认 profile；执行阶段若保留 MADA profile，应同步决定是否删除其中的固定子代理并补充回归"
+    },
+    {
+      "spec": "需求：工作流观测不再展示外置子代理 / 场景：默认 workflow graph 不再包含 subagent/fan-in 观测节点",
+      "tests": ["remove-fixed-subagents-contract"],
+      "evidence": ["remove-fixed-subagents-log", "remove-fixed-subagents-graph"],
+      "risk": "不启动完整 sealed run；status/watch 的运行时展示由生产代码静态边界断言和执行阶段 Go 回归补足"
+    },
+    {
+      "spec": "需求：主阶段 prompt 不依赖 oz 子代理 artifact / 场景：主阶段 prompt 不再依赖 oz 子代理 artifact",
+      "tests": ["remove-fixed-subagents-contract"],
+      "evidence": ["remove-fixed-subagents-log"],
+      "risk": "用户自定义 prompt 不是本次合同范围"
+    },
+    {
+      "spec": "需求：旧外置子代理配置字段明确拒绝 / 场景：旧外置子代理配置字段明确拒绝",
+      "tests": ["remove-fixed-subagents-contract"],
+      "evidence": ["remove-fixed-subagents-log"],
+      "risk": "不自动改写用户旧配置；迁移动作由用户或后续工具完成"
+    },
+    {
+      "spec": "需求：源码边界移除 oz 外置子代理 runner / 场景：生产代码不再保留外置子代理 runner/fan-in 边界",
+      "tests": ["remove-fixed-subagents-contract"],
+      "evidence": ["remove-fixed-subagents-log"],
+      "risk": "静态断言不穷举所有历史命名；执行阶段应按影响面补跑现有 flow/config/status/graph shell specs"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "remove-fixed-subagents-contract",
+      "source": "change_contract",
+      "path": "docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh",
+      "command": "bash docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh",
+      "purpose": "证明 oz flow 默认配置、workflow graph、prompt、旧配置拒绝和生产代码边界都不再保留固定外置子代理编排",
+      "assertions": [
+        "默认 oz-flow.yaml 不再生成 parallel、subagent_guard、before 或固定 helper 名称，但仍包含主阶段配置",
+        "默认 graph JSON 不包含 subagent/fanin 节点和 parallel artifact，且仍包含主阶段和 gate",
+        "execution/review/QA 内置 prompt 不再要求读取 oz 生成的 subagent/parallel artifact",
+        "包含 parallel、subagent_guard 或 stages.execution.before 的旧配置被明确拒绝",
+        "internal/app 生产代码不再包含外置子代理 runner、fan-in、member artifact 或 parallel QA gate 边界，并通过 Go 回归"
+      ],
+      "expected_initial_failure": "功能未实现时应失败于默认配置仍包含 parallel/before、graph 仍包含 subagent/fanin、prompt 仍引用 parallel artifact，或 internal/app 仍保留外置子代理 runner 代码"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "remove-fixed-subagents-log",
+      "kind": "runtime_log",
+      "path": "test-results/42-remove-fixed-subagents/remove-fixed-subagents-contract.log",
+      "purpose": "记录默认配置、graph、prompt、旧字段拒绝、源码边界和 Go 回归检查输出；该文件是本地运行产物，不进入 git"
+    },
+    {
+      "id": "remove-fixed-subagents-graph",
+      "kind": "state_snapshot",
+      "path": "test-results/42-remove-fixed-subagents/default-graph.json",
+      "purpose": "保存默认 workflow graph JSON，证明新拓扑不再包含 subagent/fan-in/parallel artifact；该文件是本地运行产物，不进入 git"
+    }
+  ]
+}

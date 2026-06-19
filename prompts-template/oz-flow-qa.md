@@ -1,8 +1,4 @@
 读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、`{{.ReviewPath}}`、当前变更 `{{.ChangePath}}/`
-{{if .HasPlanningContext}}可选上下文：`{{.PlanningContextPath}}`
-{{end}}{{if .HasParallelContext}}可选上下文：`{{.ParallelContextPath}}`
-{{end}}{{if .HasParallelQA}}QA helper：`{{.ParallelQAPath}}`
-{{end}}
 
 任务：
 
@@ -10,8 +6,6 @@
 - `acceptance_matrix[].id` 必须逐字来自 `{{.AcceptancePath}}` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
 - blocking scope 只允许 `current_change` 或 `introduced_regression`；required_evidence 只要求可复核，不要求运行产物进 git。
-{{if .HasParallelQA}}- 读或生成 `{{.ParallelQAPath}}`；缺少 required evidence 或有 severity=1/2 finding 时，最终 `decision` 不得为 0；relevant:false 且 findings=[] 的 helper 只作 evidence。
-{{end}}
 
 写入：`{{.QAPath}}`
 

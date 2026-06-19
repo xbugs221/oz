@@ -220,16 +220,6 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 		PreviousFixSummaryPaths: []string{},
 		RepeatedFindingTitles:   []string{},
 	}
-	if state.Workflow.Parallel.Enabled {
-		context.PlanningContextPath = parallelArtifactPath(runPath, "planning_context", iteration)
-		context.ParallelContextPath = parallelArtifactPath(runPath, "implementation_context", iteration)
-		context.ParallelReviewPath = parallelArtifactPath(runPath, "review", iteration)
-		context.ParallelQAPath = parallelArtifactPath(runPath, "qa", iteration)
-		context.HasPlanningContext = parallelGroupConfigured(state.Workflow, "planning_context") && (kind == "planning" || kind == "execution" || kind == "review" || kind == "qa")
-		context.HasParallelContext = parallelGroupConfigured(state.Workflow, "implementation_context") && (kind == "execution" || kind == "review" || kind == "qa")
-		context.HasParallelReview = parallelGroupConfigured(state.Workflow, "review") && kind == "review"
-		context.HasParallelQA = parallelGroupConfigured(state.Workflow, "qa") && kind == "qa"
-	}
 	escalation, err := fixEscalation(repo, state)
 	if err != nil {
 		return promptTemplateContext{}, err

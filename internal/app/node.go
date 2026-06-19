@@ -4,7 +4,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -98,70 +97,6 @@ func (e *Engine) nodeGate(state State, args []string, stdout io.Writer) error {
 		return err
 	}
 	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage})
-}
-
-// nodeFanin combines all member artifacts into the existing parallel schema.
-func (e *Engine) nodeFanin(state State, args []string, stdout io.Writer) error {
-	groupName, err := requireFlagValue(args, "--group")
-	if err != nil {
-		return err
-	}
-	stage, err := requireFlagValue(args, "--stage")
-	if err != nil {
-		return err
-	}
-	iteration, err := nodeIteration(args, stage)
-	if err != nil {
-		return e.failNodeState(state, err)
-	}
-	if state.Status != statusRunning || state.Stage != stage {
-		return writeNodeResult(stdout, nodeResult{Status: "skipped", RunID: state.RunID, Stage: stage, Group: groupName})
-	}
-	configName := configGroupName(groupName)
-	group, ok := state.Workflow.Parallel.Groups[configName]
-	if !state.Workflow.Parallel.Enabled || !ok {
-		return writeNodeResult(stdout, nodeResult{Status: "skipped", RunID: state.RunID, Stage: stage, Group: groupName})
-	}
-	artifact := ParallelArtifact{Group: configName, Mode: group.Mode, Summary: configName + " fanin completed"}
-	for _, member := range group.Members {
-		path := memberArtifactPath(e.Repo, state.RunID, configName, iteration, member.Name)
-		result, err := readNormalizeValidateMemberArtifact(path, configName, member, state.ChangeName)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				artifact.Members = append(artifact.Members, missingParallelMemberResult(member, state.ChangeName, path))
-				continue
-			}
-			return e.failNodeState(state, err)
-		}
-		if err := writeMemberArtifact(path, result); err != nil {
-			return e.failNodeState(state, err)
-		}
-		artifact.Members = append(artifact.Members, result)
-	}
-	if err := ValidateParallelArtifact(artifact); err != nil {
-		return e.failNodeState(state, err)
-	}
-	if err := ValidateParallelArtifactForGroup(artifact, configName, group); err != nil {
-		return e.failNodeState(state, err)
-	}
-	path := parallelArtifactPath(runDir(e.Repo, state.RunID), configName, iteration)
-	if err := writeJSONFile(path, artifact); err != nil {
-		return e.failNodeState(state, err)
-	}
-	return writeNodeResult(stdout, nodeResult{Status: "completed", RunID: state.RunID, Stage: stage, Group: groupName, Artifact: path})
-}
-
-// missingParallelMemberResult records absent helper output without blocking the main workflow.
-func missingParallelMemberResult(member ParallelMemberConfig, changeName, path string) ParallelMemberResult {
-	return ParallelMemberResult{
-		Name:       member.Name,
-		ChangeName: changeName,
-		Purpose:    member.Purpose,
-		Status:     "missing",
-		Summary:    "helper artifact missing; main stage should proceed with remaining context",
-		Evidence:   []string{"missing artifact: " + path},
-		Required:   member.Required,
-	}
 }
 
 // failNodeState records node failures in durable run state.

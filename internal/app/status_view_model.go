@@ -2,12 +2,10 @@
 package app
 
 import (
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 type statusView struct {
@@ -66,13 +64,11 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 		WallMinutes:    statusWorkflowWallDuration(state, now),
 	}
 	for _, spec := range compactStageSpecs {
-		stages := matchingStatusStages(state, spec)
 		row := statusStageRow(repo, state, spec, now)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
 		}
 		view.Rows = append(view.Rows, row)
-		view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages), now)...)
 	}
 	applyStatusRunningMarker(&view, runningMarker)
 	return view
@@ -94,15 +90,11 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 		WallMinutes:    statusWorkflowWallDuration(state, now),
 	}
 	for _, spec := range compactStageSpecs {
-		stages := matchingStatusStages(state, spec)
 		row := statusStageRow(repo, state, spec, now)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
 		}
 		view.Rows = append(view.Rows, row)
-		if spec.stage != "planning" {
-			view.Rows = append(view.Rows, statusSubagentRows(repo, state, statusStageArtifactStage(state, spec, stages), now)...)
-		}
 	}
 	applyStatusRunningMarker(&view, runningMarker)
 	return view
@@ -124,9 +116,6 @@ func statusStageRow(repo string, state State, spec compactStageSpec, now time.Ti
 		SessionID: statusRoleSessionID(state, spec.role),
 		Marker:    statusStageMarker(state, stages),
 		Artifacts: map[string]string{"stage_artifact": statusStageArtifact(repo, state, statusStageArtifactStage(state, spec, stages))},
-	}
-	if spec.role == "planner" && row.Marker == "-" && statusPlanningContextCompleted(repo, state) {
-		row.Marker = "✓"
 	}
 	if state.Status == statusBlocked && spec.role == "reviewer" {
 		row.Marker = "x"
@@ -273,16 +262,6 @@ func applyStatusRunningMarker(view *statusView, runningMarker string) {
 	}
 }
 
-// statusPlanningContextCompleted treats execution preflight context fan-in as the completed planning marker.
-func statusPlanningContextCompleted(repo string, state State) bool {
-	for _, id := range []string{parallelGroupPlanning + "_fanin"} {
-		if node, ok := state.DAGNodes[id]; ok && statusDAGNodeSucceeded(node.Status) {
-			return true
-		}
-	}
-	return fileExists(parallelArtifactPath(runDir(repo, state.RunID), parallelGroupPlanning, 0))
-}
-
 // statusDAGNodeSucceeded normalizes durable DAG node success values used across runners.
 func statusDAGNodeSucceeded(status string) bool {
 	return status == "success" || status == "completed" || status == statusDone
@@ -357,161 +336,6 @@ func statusStageArtifact(repo string, state State, stage string) string {
 		return filepath.Join(base, "qa-"+strings.TrimPrefix(stage, "qa_")+".json")
 	}
 	return base
-}
-
-// statusSubagentRows returns reached helper member rows owned by a compact parent stage.
-func statusSubagentRows(repo string, state State, parentStage string, now time.Time) []statusViewRow {
-	if !state.Workflow.Parallel.Enabled {
-		return nil
-	}
-	var rows []statusViewRow
-	for _, groupName := range statusGroupsForStage(parentStage) {
-		group, ok := state.Workflow.Parallel.Groups[groupName]
-		if !ok {
-			continue
-		}
-		iteration, err := statusGroupIteration(parentStage, groupName)
-		if err != nil {
-			continue
-		}
-		groupArtifact := parallelArtifactPath(runDir(repo, state.RunID), groupName, iteration)
-		for index, member := range group.Members {
-			_, node, hasNode := statusSubagentNode(state, groupName, parentStage, iteration, index)
-			sessionID := statusSubagentSessionID(state, groupName, member, iteration)
-			memberArtifact := memberArtifactPath(repo, state.RunID, groupName, iteration, member.Name)
-			if hasNode && node.Artifact != "" {
-				memberArtifact = node.Artifact
-			}
-			if sessionID == "" && !hasNode && !fileExists(memberArtifact) {
-				continue
-			}
-			row := statusViewRow{
-				Kind:      "subagent",
-				Name:      compactSubagentName(member.Name),
-				FullName:  member.Name,
-				Stage:     parentStage,
-				Group:     groupName,
-				SessionID: sessionID,
-				Marker:    statusSubagentMarker(node, hasNode, memberArtifact),
-				Indent:    2,
-				Artifacts: map[string]string{
-					"member_artifact": memberArtifact,
-					"group_artifact":  groupArtifact,
-				},
-			}
-			if minutes, ok := statusNodeDuration(node, now); ok {
-				row.DurationMinutes = &minutes
-			}
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
-// statusGroupsForStage maps compact parent stages to configured parallel helper groups.
-func statusGroupsForStage(stage string) []string {
-	return parallelGroupForCompactStage(stage)
-}
-
-// statusGroupIteration returns the artifact iteration for one helper group.
-func statusGroupIteration(stage, group string) (int, error) {
-	if group == "review" {
-		return stageIteration(stage)
-	}
-	if group == "qa" {
-		return stageIteration(stage)
-	}
-	return 0, nil
-}
-
-// statusSubagentNode finds the DAG node for a configured member index.
-func statusSubagentNode(state State, groupName, parentStage string, iteration, index int) (string, DAGNodeState, bool) {
-	var candidates []string
-	if groupName == parallelGroupPlanning {
-		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
-	} else if groupName == parallelGroupImplementation {
-		candidates = append(candidates,
-			fmt.Sprintf("%s_%d", parallelGroupImplementation, index+1),
-			fmt.Sprintf("%s_%d", parallelAnchorBeforeRun, index+1),
-		)
-	} else if groupName == parallelGroupReview || groupName == parallelGroupQA {
-		if iteration > 0 {
-			candidates = append(candidates, fmt.Sprintf("%s_%d_%d", statusVisualGroupName(groupName), iteration, index+1))
-		}
-	} else {
-		candidates = append(candidates, fmt.Sprintf("%s_%d", groupName, index+1))
-	}
-	for _, id := range candidates {
-		if node, ok := state.DAGNodes[id]; ok {
-			return id, node, true
-		}
-	}
-	return "", DAGNodeState{}, false
-}
-
-// statusVisualGroupName maps configured helper groups to the DAG node prefix used by graph.go.
-func statusVisualGroupName(groupName string) string {
-	return visualGroupForConfigGroup(groupName)
-}
-
-// statusSubagentSessionID returns the helper session id recorded by the subagent runner.
-func statusSubagentSessionID(state State, groupName string, member ParallelMemberConfig, iteration int) string {
-	tool := nonEmpty(member.Tool, "pi")
-	keys := []string{
-		sessionStateKey(tool, "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
-		sessionStateKey("pi", "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
-		sessionStateKey("codex", "subagent:"+groupName+":"+member.Name+":"+strconv.Itoa(iteration)),
-	}
-	for _, key := range keys {
-		if id := state.Sessions[key]; id != "" {
-			return id
-		}
-	}
-	return ""
-}
-
-// statusSubagentMarker reports helper progress with strict artifact visibility for reached nodes.
-func statusSubagentMarker(node DAGNodeState, hasNode bool, memberArtifact string) string {
-	if !hasNode {
-		if fileExists(memberArtifact) {
-			return "✓"
-		}
-		return "-"
-	}
-	switch node.Status {
-	case "success", "completed", statusDone:
-		if node.Artifact != "" && !fileExists(node.Artifact) {
-			return "x"
-		}
-		return "✓"
-	case statusRunning:
-		return "→"
-	case statusFailed, "error":
-		return "x"
-	default:
-		if fileExists(memberArtifact) {
-			return "✓"
-		}
-		return "-"
-	}
-}
-
-// compactSubagentName shortens configured helper names for dense human output.
-func compactSubagentName(name string) string {
-	short := strings.TrimSpace(name)
-	short = strings.ReplaceAll(short, "代码库", "代码")
-	short = strings.ReplaceAll(short, "一致性", "")
-	for _, suffix := range []string{"研究员", "审核员", "测试员", "采集员", "员"} {
-		short = strings.TrimSuffix(short, suffix)
-	}
-	if strings.Contains(short, "风险") {
-		short = "风险检查"
-	}
-	if utf8.RuneCountInString(short) <= 4 || isASCII(short) {
-		return short
-	}
-	runes := []rune(short)
-	return string(runes[:4])
 }
 
 // statusRootArtifacts returns fixed run and change artifact paths for JSON observability.

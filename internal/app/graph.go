@@ -92,38 +92,25 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 	normalizeWorkflowConfig(&workflow)
 	spec := WorkflowSpec{
 		ChangeName: changeName,
+		Nodes:      []WorkflowNode{},
+		Edges:      []WorkflowEdge{},
+		Artifacts:  []WorkflowArtifact{},
+		Gates:      []WorkflowGate{},
 		Display:    WorkflowDisplay{Title: "oz flow workflow: " + changeName},
 	}
-	var beforeExecutionPrereqs []WorkflowEdge
-	if planning := addParallelGroup(&spec, workflow, parallelGroupPlanning, "planning", "execution", 0, nil); planning != "" {
-		beforeExecutionPrereqs = append(beforeExecutionPrereqs, WorkflowEdge{From: planning})
-	}
 	spec.addNode(WorkflowNode{ID: "execution", Name: "execution", Type: "main_stage", Stage: "execution"})
-	if before := addParallelGroup(&spec, workflow, parallelGroupImplementation, "execution", "execution", 0, beforeExecutionPrereqs); before != "" {
-		spec.addEdge(before, "execution", "")
-	} else if len(beforeExecutionPrereqs) > 0 {
-		spec.addEdge(beforeExecutionPrereqs[0].From, "execution", "")
-	}
 	previous := "execution"
 	for i := 1; i <= workflow.MaxReviewIterations; i++ {
 		review := fmt.Sprintf("review_%d", i)
 		qa := fmt.Sprintf("qa_%d", i)
 		fix := fmt.Sprintf("fix_%d", i)
 		spec.addNode(WorkflowNode{ID: review, Name: review, Type: "main_stage", Stage: review, Iteration: i})
-		if fanin := addParallelGroup(&spec, workflow, parallelAnchorReview, review, review, i, []WorkflowEdge{{From: previous}}); fanin != "" {
-			spec.addEdge(fanin, review, "")
-		} else {
-			spec.addEdge(previous, review, "")
-		}
+		spec.addEdge(previous, review, "")
 		reviewGate := fmt.Sprintf("gate_review_%d", i)
 		spec.addGate(reviewGate, "review gate", review, i)
 		spec.addEdge(review, reviewGate, "")
 		spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: i})
-		if fanin := addParallelGroup(&spec, workflow, parallelAnchorQA, qa, qa, i, []WorkflowEdge{{From: reviewGate, Label: "review clean"}}); fanin != "" {
-			spec.addEdge(fanin, qa, "")
-		} else {
-			spec.addEdge(reviewGate, qa, "review clean")
-		}
+		spec.addEdge(reviewGate, qa, "review clean")
 		qaGate := fmt.Sprintf("gate_qa_%d", i)
 		spec.addGate(qaGate, "QA gate", qa, i)
 		spec.addEdge(qa, qaGate, "")
@@ -148,36 +135,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 	var out strings.Builder
 	out.WriteString("flowchart TD\n")
-
-	if group, ok := workflow.Parallel.Groups[parallelGroupPlanning]; ok && workflow.Parallel.Enabled {
-		for i, member := range group.Members {
-			id := fmt.Sprintf("planning_m%d", i)
-			fmt.Fprintf(&out, "  %s[%s]\n", mermaidID(id), member.Name)
-		}
-		out.WriteString("  planning_summary[规划上下文]\n")
-		for i := range group.Members {
-			id := fmt.Sprintf("planning_m%d", i)
-			fmt.Fprintf(&out, "  %s --> planning_summary\n", mermaidID(id))
-		}
-	}
-
 	out.WriteString("  execution[执行]\n")
-	if workflow.Parallel.Enabled && len(workflow.Parallel.Groups[parallelGroupPlanning].Members) > 0 {
-		out.WriteString("  planning_summary --> execution\n")
-	}
-
-	if group, ok := workflow.Parallel.Groups[parallelGroupImplementation]; ok && workflow.Parallel.Enabled {
-		for i, member := range group.Members {
-			id := fmt.Sprintf("impl_m%d", i)
-			fmt.Fprintf(&out, "  %s[%s]\n", mermaidID(id), member.Name)
-		}
-		out.WriteString("  impl_summary[执行上下文]\n")
-		for i := range group.Members {
-			id := fmt.Sprintf("impl_m%d", i)
-			fmt.Fprintf(&out, "  %s --> impl_summary\n", mermaidID(id))
-		}
-		out.WriteString("  impl_summary --> execution\n")
-	}
 
 	out.WriteString("  review[审核]\n")
 	out.WriteString("  qa[测试]\n")
@@ -191,40 +149,6 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 	out.WriteString("  qa --> archive\n")
 
 	return out.String()
-}
-
-// addParallelGroup expands a configured subagent group into fan-out member nodes and a fan-in node.
-func addParallelGroup(spec *WorkflowSpec, workflow WorkflowConfig, visualGroup, displayStage, runStage string, iteration int, prerequisites []WorkflowEdge) string {
-	groupName := configGroupNameForVisualGroup(visualGroup)
-	group, ok := workflow.Parallel.Groups[visualGroup]
-	if !ok {
-		group, ok = workflow.Parallel.Groups[groupName]
-	}
-	if !workflow.Parallel.Enabled || !ok || len(group.Members) == 0 {
-		return ""
-	}
-	memberIDs := make([]string, 0, len(group.Members))
-	for i, member := range group.Members {
-		id := fmt.Sprintf("%s_%d", visualGroup, i+1)
-		if iteration > 0 {
-			id = fmt.Sprintf("%s_%d_%d", visualGroup, iteration, i+1)
-		}
-		spec.addNode(WorkflowNode{ID: id, Name: groupName + " subagent: " + member.Name, Type: "subagent", Group: visualGroup, Stage: displayStage, RunStage: runStage, Member: member.Name, Mode: group.Mode, Iteration: iteration})
-		for _, prerequisite := range prerequisites {
-			spec.addEdge(prerequisite.From, id, prerequisite.Label)
-		}
-		memberIDs = append(memberIDs, id)
-	}
-	fanin := visualGroup + "_fanin"
-	if iteration > 0 {
-		fanin = fmt.Sprintf("%s_%d_fanin", visualGroup, iteration)
-	}
-	spec.addNode(WorkflowNode{ID: fanin, Name: groupName + " fan-in", Type: "fanin", Group: visualGroup, Stage: displayStage, RunStage: runStage, Mode: group.Mode, Iteration: iteration})
-	for _, id := range memberIDs {
-		spec.addEdge(id, fanin, "")
-	}
-	spec.Artifacts = append(spec.Artifacts, WorkflowArtifact{ID: fanin + "_artifact", Path: parallelArtifactName(visualGroup, iteration), NodeID: fanin})
-	return fanin
 }
 
 func (spec *WorkflowSpec) addGate(id, name, stage string, iteration int) {

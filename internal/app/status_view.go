@@ -13,7 +13,7 @@ func stageChecklistLines(state State, runtime map[string]stageRuntime) []string 
 	return stageChecklistLinesForRepo("", state, runtime)
 }
 
-// stageChecklistLinesWithParallel formats human status lines with run-local parallel summaries.
+// stageChecklistLinesWithParallel preserves the historical status API without helper rows.
 func stageChecklistLinesWithParallel(repo string, state State, runtime map[string]stageRuntime) []string {
 	return stageChecklistLinesForRepo(repo, state, runtime)
 }
@@ -32,9 +32,6 @@ func stageChecklistLinesForRepo(repo string, state State, runtime map[string]sta
 		}
 		line := strings.Join(parts, " ")
 		lines = append(lines, line)
-		if repo != "" {
-			lines = append(lines, parallelStatusLinesForRole(repo, state, item.role, "  ")...)
-		}
 	}
 	if state.Status == statusBlocked || state.Stage == statusBlocked {
 		reason := state.Error

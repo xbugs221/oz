@@ -11,53 +11,6 @@ import (
 	"time"
 )
 
-// TestStatusViewReadsImplementationContextDAGNodes verifies status/watch sees renamed execution context nodes.
-func TestStatusViewReadsImplementationContextDAGNodes(t *testing.T) {
-	state := statusViewImplementationContextState()
-	state.DAGNodes = map[string]DAGNodeState{
-		"implementation_context_1": {Status: statusRunning},
-		"implementation_context_2": {Status: "success"},
-	}
-
-	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	if marker := statusViewSubagentMarker(t, view, "代码库侦察员"); marker != "→" {
-		t.Fatalf("running implementation_context marker = %q, want →", marker)
-	}
-	if marker := statusViewSubagentMarker(t, view, "外部资料研究员"); marker != "✓" {
-		t.Fatalf("success implementation_context marker = %q, want ✓", marker)
-	}
-}
-
-// TestRunningSubagentDurationShowsBeforeFinish verifies active helpers show elapsed wall time immediately.
-func TestRunningSubagentDurationShowsBeforeFinish(t *testing.T) {
-	state := statusViewImplementationContextState()
-	state.DAGNodes = map[string]DAGNodeState{
-		"implementation_context_1": {
-			Status: statusRunning,
-			StartedAt: time.Now().UTC().
-				Add(-2 * time.Minute).
-				Format(time.RFC3339Nano),
-		},
-	}
-
-	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	row := statusViewSubagentRow(t, view, "代码库侦察员")
-	if row.DurationMinutes == nil || *row.DurationMinutes < 1.5 {
-		t.Fatalf("running subagent duration = %#v, want visible wall time before finish", row.DurationMinutes)
-	}
-}
-
-// TestStatusViewKeepsSkippedImplementationContextUnreached verifies completed-task skips do not look executed.
-func TestStatusViewKeepsSkippedImplementationContextUnreached(t *testing.T) {
-	state := statusViewImplementationContextState()
-
-	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	marker, found := statusViewOptionalSubagentMarker(view, "代码库侦察员")
-	if found && marker != "-" {
-		t.Fatalf("skipped implementation_context marker = %q, want -", marker)
-	}
-}
-
 // TestCompactStatusLinesSkipsCompletedPlanningPlaceholder verifies pre-created proposals do not show a noise row.
 func TestCompactStatusLinesSkipsCompletedPlanningPlaceholder(t *testing.T) {
 	state := statusViewImplementationContextState()
@@ -370,22 +323,10 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 	t.Fatalf("runner observability missing running execution row: %s", data)
 }
 
-// statusViewImplementationContextState returns a minimal execution state with toz flow configured helpers.
+// statusViewImplementationContextState returns a minimal execution state for compact status tests.
 func statusViewImplementationContextState() State {
 	workflow := DefaultWorkflowConfig()
 	workflow.Engine = "go-dag"
-	workflow.Parallel = ParallelConfig{
-		Enabled: true,
-		Groups: map[string]ParallelGroupConfig{
-			"implementation_context": {
-				Mode: "advisory",
-				Members: []ParallelMemberConfig{
-					{Name: "代码库侦察员", Purpose: "汇总 execution 需要读取的文件和测试模式", Tool: "pi"},
-					{Name: "外部资料研究员", Purpose: "查询 execution 依赖的外部库文档", Tool: "pi"},
-				},
-			},
-		},
-	}
 	return State{
 		RunID:      "status-view-run",
 		Status:     statusRunning,
@@ -397,12 +338,6 @@ func statusViewImplementationContextState() State {
 		Workflow:   workflow,
 		ChangeName: "demo",
 	}
-}
-
-// statusViewSubagentMarker finds one subagent row by full configured member name.
-func statusViewSubagentMarker(t *testing.T, view statusView, fullName string) string {
-	t.Helper()
-	return statusViewSubagentRow(t, view, fullName).Marker
 }
 
 // statusLineEndingWith returns the first compact line whose final visible column matches value.
@@ -443,26 +378,4 @@ func statusDecimalColumn(line, value string) (int, bool) {
 func statusTestUUIDv7(startedAt time.Time) string {
 	timestamp := fmt.Sprintf("%012x", startedAt.UnixMilli())
 	return timestamp[:8] + "-" + timestamp[8:12] + "-7abc-8000-000000000000"
-}
-
-// statusViewSubagentRow finds one subagent row by full configured member name.
-func statusViewSubagentRow(t *testing.T, view statusView, fullName string) statusViewRow {
-	t.Helper()
-	for _, row := range view.Rows {
-		if row.Kind == "subagent" && row.FullName == fullName {
-			return row
-		}
-	}
-	t.Fatalf("subagent row %q not found in %#v", fullName, view.Rows)
-	return statusViewRow{}
-}
-
-// statusViewOptionalSubagentMarker returns a subagent marker only when the row is visible.
-func statusViewOptionalSubagentMarker(view statusView, fullName string) (string, bool) {
-	for _, row := range view.Rows {
-		if row.Kind == "subagent" && row.FullName == fullName {
-			return row.Marker, true
-		}
-	}
-	return "", false
 }
