@@ -231,6 +231,53 @@ func TestLoopArchivesFailedBatchAndStartsContinuation(t *testing.T) {
 	}
 }
 
+// TestLoopKeepsRunningBatchOwnedRunWithFreshBatchHeartbeat verifies loop does
+// not fail a batch-owned run while the batch worker is still heartbeating.
+func TestLoopKeepsRunningBatchOwnedRunWithFreshBatchHeartbeat(t *testing.T) {
+	repo := gitRepo(t)
+	now := time.Now()
+	runID := "20260617T033000.000000000Z"
+	batchID := "20260617T033001.000000000Z"
+	state := flowControlBatchRunState(runID, batchID, now.Add(-workerHeartbeatStaleAfter-time.Minute))
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	writeFlowControlRunLock(t, repo, runID)
+	batch := flowControlBatchState(batchID, "1-a", runID, now)
+	if err := saveBatchState(repo, batch); err != nil {
+		t.Fatal(err)
+	}
+
+	decision := assessBatchForLoop(repo, batch)
+	if decision.Status != loopDecisionRunning {
+		t.Fatalf("assessBatchForLoop = %#v, want running while batch worker heartbeat is fresh", decision)
+	}
+}
+
+// TestLoopFailsBatchOwnedRunWhenBatchHeartbeatIsStale verifies stale run
+// heartbeat remains actionable when no live batch worker owns the current run.
+func TestLoopFailsBatchOwnedRunWhenBatchHeartbeatIsStale(t *testing.T) {
+	repo := gitRepo(t)
+	now := time.Now()
+	stale := now.Add(-workerHeartbeatStaleAfter - time.Minute)
+	runID := "20260617T033100.000000000Z"
+	batchID := "20260617T033101.000000000Z"
+	state := flowControlBatchRunState(runID, batchID, stale)
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	writeFlowControlRunLock(t, repo, runID)
+	batch := flowControlBatchState(batchID, "1-a", runID, stale)
+	if err := saveBatchState(repo, batch); err != nil {
+		t.Fatal(err)
+	}
+
+	decision := assessBatchForLoop(repo, batch)
+	if decision.Status != loopDecisionFailed || decision.Reason != staleRunWorkerHeartbeatReason {
+		t.Fatalf("assessBatchForLoop = %#v, want failed stale heartbeat", decision)
+	}
+}
+
 // TestLoopStartsActiveChangesAfterCompletedBatch verifies done history does not hide active proposals.
 func TestLoopStartsActiveChangesAfterCompletedBatch(t *testing.T) {
 	repo := gitRepo(t)
@@ -277,6 +324,49 @@ func TestLoopStartsActiveChangesAfterCompletedBatch(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "已完成") {
 		t.Fatalf("loop should not print completed while starting active changes: %s", stdout.String())
+	}
+}
+
+// flowControlBatchRunState creates a running batch-owned run with controlled heartbeat age.
+func flowControlBatchRunState(runID, batchID string, heartbeat time.Time) State {
+	state := workerRuntimeTestState(runID)
+	state.ChangeName = "1-a"
+	state.BatchID = batchID
+	state.Worker = &WorkerRuntimeState{
+		PID:             os.Getpid(),
+		StartedAt:       timestampUTC(heartbeat),
+		LastHeartbeatAt: timestampUTC(heartbeat),
+	}
+	return state
+}
+
+// flowControlBatchState creates a one-change running batch with controlled worker heartbeat.
+func flowControlBatchState(batchID, changeName, runID string, heartbeat time.Time) BatchState {
+	return BatchState{
+		BatchID:      batchID,
+		Status:       batchStatusRunning,
+		Changes:      []string{changeName},
+		CurrentIndex: 0,
+		RunIDs:       map[string]string{changeName: runID},
+		Worker: &WorkerRuntimeState{
+			PID:             os.Getpid(),
+			StartedAt:       timestampUTC(heartbeat),
+			LastHeartbeatAt: timestampUTC(heartbeat),
+		},
+	}
+}
+
+// writeFlowControlRunLock records an active lock owned by the test process.
+func writeFlowControlRunLock(t *testing.T, repo, runID string) {
+	t.Helper()
+	hostname, _ := os.Hostname()
+	if err := writeJSONFile(filepath.Join(runDir(repo, runID), "lock"), LockInfo{
+		PID:       os.Getpid(),
+		Hostname:  hostname,
+		RunID:     runID,
+		StartedAt: timestampUTC(time.Now()),
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

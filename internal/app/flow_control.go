@@ -388,6 +388,8 @@ const (
 	loopDecisionStopped loopDecisionStatus = "stopped"
 )
 
+const staleRunWorkerHeartbeatReason = "当前 run worker heartbeat 已失效"
+
 type loopDecision struct {
 	Status loopDecisionStatus
 	Reason string
@@ -408,6 +410,7 @@ func assessBatchForLoop(repo string, batch BatchState) loopDecision {
 	if batch.Status != batchStatusRunning {
 		return loopDecision{Status: loopDecisionFailed, Reason: "未知批量状态 " + batch.Status}
 	}
+	now := time.Now()
 	if batch.CurrentIndex >= len(batch.Changes) {
 		if err := markBatchDone(repo, batch.BatchID); err != nil {
 			return loopDecision{Status: loopDecisionFailed, Reason: err.Error()}
@@ -416,7 +419,7 @@ func assessBatchForLoop(repo string, batch BatchState) loopDecision {
 	}
 	runID := restartBatchCurrentRunID(batch)
 	if runID == "" {
-		if pendingBatchStartExpired(repo, batch, time.Now()) {
+		if pendingBatchStartExpired(repo, batch, now) {
 			return loopDecision{Status: loopDecisionFailed, Reason: "批量 worker 未创建当前 run"}
 		}
 		return loopDecision{Status: loopDecisionRunning}
@@ -428,7 +431,7 @@ func assessBatchForLoop(repo string, batch BatchState) loopDecision {
 	if isBatchTerminalState(state) {
 		return loopDecision{Status: loopDecisionFailed, Reason: humanRunFailureSummary(state, state.ChangeName)}
 	}
-	if stopped, reason := runningRunCannotAdvance(repo, state, time.Now()); stopped {
+	if stopped, reason := runningBatchRunCannotAdvance(repo, batch, state, now); stopped {
 		return loopDecision{Status: loopDecisionFailed, Reason: reason}
 	}
 	return loopDecision{Status: loopDecisionRunning}
@@ -492,7 +495,7 @@ func runningRunCannotAdvance(repo string, state State, now time.Time) (bool, str
 	switch status {
 	case lockStatusActive:
 		if workerHeartbeatExpired(state.Worker, now) {
-			return true, "当前 run worker heartbeat 已失效"
+			return true, staleRunWorkerHeartbeatReason
 		}
 	case lockStatusStale:
 		return true, "当前 run lock 已失效"
@@ -503,6 +506,34 @@ func runningRunCannotAdvance(repo string, state State, now time.Time) (bool, str
 		}
 	}
 	return false, ""
+}
+
+// runningBatchRunCannotAdvance keeps a batch-owned run alive while the batch
+// worker is still heartbeating, even if the run heartbeat is temporarily stale.
+func runningBatchRunCannotAdvance(repo string, batch BatchState, state State, now time.Time) (bool, string) {
+	stopped, reason := runningRunCannotAdvance(repo, state, now)
+	if !stopped || reason != staleRunWorkerHeartbeatReason {
+		return stopped, reason
+	}
+	if batchWorkerOwnsCurrentRun(batch, state, now) {
+		return false, ""
+	}
+	return stopped, reason
+}
+
+// batchWorkerOwnsCurrentRun reports whether the running batch worker still owns
+// the current run and can continue refreshing it across stage boundaries.
+func batchWorkerOwnsCurrentRun(batch BatchState, state State, now time.Time) bool {
+	if batch.Status != batchStatusRunning || state.BatchID == "" || state.BatchID != batch.BatchID {
+		return false
+	}
+	if batch.CurrentIndex < 0 || batch.CurrentIndex >= len(batch.Changes) {
+		return false
+	}
+	if batch.RunIDs[batch.Changes[batch.CurrentIndex]] != state.RunID {
+		return false
+	}
+	return workerHeartbeatFresh(batch.Worker, now)
 }
 
 // markBatchFailedForLoop records a monitor-detected failure before archival.

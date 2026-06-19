@@ -354,6 +354,18 @@ func workerHeartbeatExpired(worker *WorkerRuntimeState, now time.Time) bool {
 	return now.Sub(last) > workerHeartbeatStaleAfter
 }
 
+// workerHeartbeatFresh reports live state whose worker heartbeat is still current.
+func workerHeartbeatFresh(worker *WorkerRuntimeState, now time.Time) bool {
+	if worker == nil || worker.Exit != "" || worker.LastHeartbeatAt == "" {
+		return false
+	}
+	last, err := time.Parse(time.RFC3339Nano, worker.LastHeartbeatAt)
+	if err != nil {
+		return false
+	}
+	return now.Sub(last) <= workerHeartbeatStaleAfter
+}
+
 // workerPanicError converts recovered panic values into a normal workflow error.
 func workerPanicError(recovered any) error {
 	return fmt.Errorf("worker panic: %v", recovered)
