@@ -73,7 +73,7 @@ func (e *Engine) runSubagentAttempts(request subagentAttemptsRequest) (subagentA
 			}
 		}
 		var attemptHead, attemptDiff, attemptContent string
-		var attemptRunFiles map[string]string
+		var attemptRunFiles map[string]runArtifactFile
 		if subagentGuardEnabled(request.GuardMode) {
 			var err error
 			attemptHead, attemptDiff, err = gitSnapshot(e.Repo)

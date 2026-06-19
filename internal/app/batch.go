@@ -20,14 +20,15 @@ const (
 
 // BatchState is the durable queue state for a serial batch run.
 type BatchState struct {
-	BatchID      string            `json:"batch_id"`
-	Status       string            `json:"status"`
-	Changes      []string          `json:"changes"`
-	CurrentIndex int               `json:"current_index"`
-	RunIDs       map[string]string `json:"run_ids"`
-	FailedChange string            `json:"failed_change,omitempty"`
-	FailedRunID  string            `json:"failed_run_id,omitempty"`
-	Error        string            `json:"error"`
+	BatchID      string              `json:"batch_id"`
+	Status       string              `json:"status"`
+	Changes      []string            `json:"changes"`
+	CurrentIndex int                 `json:"current_index"`
+	RunIDs       map[string]string   `json:"run_ids"`
+	FailedChange string              `json:"failed_change,omitempty"`
+	FailedRunID  string              `json:"failed_run_id,omitempty"`
+	Error        string              `json:"error"`
+	Worker       *WorkerRuntimeState `json:"worker,omitempty"`
 }
 
 // withBatchState locks a batch with a cross-process file lock, reads its state,
@@ -555,8 +556,5 @@ func startDetachedBatchResumeCommand(repo, batchID string) error {
 	cmd := exec.Command(exe, flowWorkerCommandArgs("batch", "--batch-id", batchID, "--json")...)
 	cmd.Dir = repo
 	configureDetachedCommand(cmd)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	return startDetachedWorkerCommand(cmd, batchWorkerLogPath(repo, batchID))
 }

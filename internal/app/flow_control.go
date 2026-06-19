@@ -3,9 +3,11 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -60,10 +62,25 @@ func dispatchArchiveCommand(args []string, stdout io.Writer, repo string) error 
 
 // dispatchLoopCommand monitors batch progress and starts continuation batches after failures.
 func dispatchLoopCommand(ctx context.Context, args []string, stdout io.Writer, repo string, engine *Engine) error {
+	if len(args) == 3 && args[1] == "--worker" && args[2] == "--json" {
+		return runBatchLoopWorker(ctx, stdout, repo, engine, time.Minute)
+	}
 	if len(args) != 1 {
 		return fmt.Errorf("用法：oz flow loop")
 	}
-	return runBatchLoop(ctx, stdout, repo, engine, time.Minute)
+	active, err := loopWorkerActive(repo)
+	if err != nil {
+		return err
+	}
+	if active {
+		fmt.Fprintln(stdout, "后台 loop 监控已在运行")
+		return nil
+	}
+	if err := startDetachedLoopCommand(repo); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "已启动后台 loop 监控")
+	return nil
 }
 
 // ResolveArchiveTarget maps archive arguments to the newest archivable batch or run.
@@ -175,6 +192,18 @@ func runBatchLoop(ctx context.Context, stdout io.Writer, repo string, engine *En
 	}
 }
 
+// runBatchLoopWorker holds the repo loop lock while the detached monitor is active.
+func runBatchLoopWorker(ctx context.Context, stdout io.Writer, repo string, engine *Engine, interval time.Duration) error {
+	unlock, acquired, err := acquireLoopWorkerLock(repo)
+	if err != nil || !acquired {
+		return err
+	}
+	defer unlock()
+	return withLoopWorkerLifecycle(repo, func() error {
+		return runBatchLoop(ctx, stdout, repo, engine, interval)
+	})
+}
+
 // runBatchLoopTick performs one monitor cycle and returns true when monitoring is complete.
 func runBatchLoopTick(ctx context.Context, stdout io.Writer, repo string, engine *Engine) (bool, error) {
 	batchID, err := FindUnfinishedBatch(repo)
@@ -208,11 +237,9 @@ func runBatchLoopTick(ctx context.Context, stdout io.Writer, repo string, engine
 		decision := assessBatchForLoop(repo, *latest)
 		switch decision.Status {
 		case loopDecisionDone:
-			fmt.Fprintf(stdout, "批量工作流 %s 已完成\n", latest.BatchID)
-			return true, nil
+			return submitActiveChangesOrFinishLoop(ctx, stdout, repo, engine, fmt.Sprintf("批量工作流 %s 已完成\n", latest.BatchID))
 		case loopDecisionStopped:
-			fmt.Fprintf(stdout, "批量工作流 %s 已停止，loop 退出\n", latest.BatchID)
-			return true, nil
+			return submitActiveChangesOrFinishLoop(ctx, stdout, repo, engine, fmt.Sprintf("批量工作流 %s 已停止，loop 退出\n", latest.BatchID))
 		case loopDecisionFailed:
 			return archiveAndSubmitContinuation(ctx, stdout, repo, engine, *latest, decision.Reason)
 		}
@@ -252,18 +279,104 @@ func archiveAndSubmitContinuation(ctx context.Context, stdout io.Writer, repo st
 
 // submitActiveChangesForLoop starts a batch when loop is launched without an active one.
 func submitActiveChangesForLoop(ctx context.Context, stdout io.Writer, repo string, engine *Engine) (bool, error) {
+	return submitActiveChangesOrFinishLoop(ctx, stdout, repo, engine, "没有 active 变更提案，loop 退出\n")
+}
+
+// submitActiveChangesOrFinishLoop starts active proposals, otherwise prints the terminal message.
+func submitActiveChangesOrFinishLoop(ctx context.Context, stdout io.Writer, repo string, engine *Engine, terminalMessage string) (bool, error) {
 	changes, err := ListChanges(repo)
 	if err != nil {
 		return false, err
 	}
 	if len(changes) == 0 {
-		fmt.Fprintln(stdout, "没有 active 变更提案，loop 退出")
+		fmt.Fprint(stdout, terminalMessage)
 		return true, nil
 	}
 	if err := engine.SubmitBatch(ctx, changes); err != nil {
 		return false, err
 	}
 	return false, nil
+}
+
+// startDetachedLoopWorkerCommand starts the long-running loop monitor outside the terminal.
+func startDetachedLoopWorkerCommand(repo string) error {
+	exe, err := currentExecutable()
+	if err != nil {
+		return fmt.Errorf("解析 oz flow 可执行文件失败：%w", err)
+	}
+	cmd := exec.Command(exe, flowWorkerCommandArgs("loop", "--worker", "--json")...)
+	cmd.Dir = repo
+	configureDetachedCommand(cmd)
+	logPath, err := loopWorkerLogPath(repo)
+	if err != nil {
+		return err
+	}
+	return startDetachedWorkerCommand(cmd, logPath)
+}
+
+// loopWorkerActive reports whether a live background loop monitor already owns this repository.
+func loopWorkerActive(repo string) (bool, error) {
+	path, err := loopWorkerLockPath(repo)
+	if err != nil {
+		return false, err
+	}
+	status, err := lockInfoFileStatus(path, runtime.GOOS)
+	if err != nil {
+		return false, err
+	}
+	if status == lockStatusUnknown {
+		return false, fmt.Errorf("loop lock 无法确认，请稍后重试或手动检查 %s", path)
+	}
+	return status == lockStatusActive, nil
+}
+
+// acquireLoopWorkerLock creates the repo-level lock for one detached loop monitor.
+func acquireLoopWorkerLock(repo string) (func(), bool, error) {
+	path, err := loopWorkerLockPath(repo)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, false, err
+	}
+	status, err := lockInfoFileStatus(path, runtime.GOOS)
+	if err != nil {
+		return nil, false, err
+	}
+	switch status {
+	case lockStatusActive:
+		return nil, false, nil
+	case lockStatusUnknown:
+		return nil, false, fmt.Errorf("loop lock 无法确认，请稍后重试或手动检查 %s", path)
+	case lockStatusStale:
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return nil, false, err
+		}
+	}
+	hostname, _ := os.Hostname()
+	lock := LockInfo{
+		PID:       os.Getpid(),
+		Hostname:  hostname,
+		RunID:     "loop",
+		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	data, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		return nil, false, err
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		return nil, false, err
+	}
+	return func() { _ = os.Remove(path) }, true, nil
+}
+
+// loopWorkerLockPath returns the repository-scoped monitor lock file.
+func loopWorkerLockPath(repo string) (string, error) {
+	base, err := repoRuntimeDir(repo)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "loop.lock"), nil
 }
 
 type loopDecisionStatus string
@@ -377,6 +490,10 @@ func runningRunCannotAdvance(repo string, state State, now time.Time) (bool, str
 		return false, ""
 	}
 	switch status {
+	case lockStatusActive:
+		if workerHeartbeatExpired(state.Worker, now) {
+			return true, "当前 run worker heartbeat 已失效"
+		}
 	case lockStatusStale:
 		return true, "当前 run lock 已失效"
 	case lockStatusNone:

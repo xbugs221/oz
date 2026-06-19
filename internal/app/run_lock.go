@@ -125,7 +125,12 @@ func lockActive(repo, runID string) (bool, error) {
 
 // lockFileStatus classifies a run lock without killing any external process.
 func lockFileStatus(repo, runID, goos string) (lockStatus, error) {
-	data, err := os.ReadFile(filepath.Join(runDir(repo, runID), "lock"))
+	return lockInfoFileStatus(filepath.Join(runDir(repo, runID), "lock"), goos)
+}
+
+// lockInfoFileStatus classifies a JSON process lock without killing any external process.
+func lockInfoFileStatus(path, goos string) (lockStatus, error) {
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return lockStatusNone, nil
 	}

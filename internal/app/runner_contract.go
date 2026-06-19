@@ -22,16 +22,17 @@ var runnerCapabilities = []string{"list-changes", "run", "run-acceptance", "resu
 
 // RunnerState is the JSON DTO consumed by workflow runners.
 type RunnerState struct {
-	RunID         string            `json:"run_id"`
-	ChangeName    string            `json:"change_name"`
-	Status        string            `json:"status"`
-	Stage         string            `json:"stage"`
-	Stages        map[string]string `json:"stages"`
-	Paths         map[string]string `json:"paths"`
-	Sessions      map[string]string `json:"sessions"`
-	Processes     []ProcessState    `json:"processes,omitempty"`
-	Error         string            `json:"error"`
-	Observability *statusView       `json:"observability,omitempty"`
+	RunID         string              `json:"run_id"`
+	ChangeName    string              `json:"change_name"`
+	Status        string              `json:"status"`
+	Stage         string              `json:"stage"`
+	Stages        map[string]string   `json:"stages"`
+	Paths         map[string]string   `json:"paths"`
+	Sessions      map[string]string   `json:"sessions"`
+	Processes     []ProcessState      `json:"processes,omitempty"`
+	Worker        *WorkerRuntimeState `json:"worker,omitempty"`
+	Error         string              `json:"error"`
+	Observability *statusView         `json:"observability,omitempty"`
 }
 
 // runnerContract is the capability discovery payload for oz flow.
@@ -66,6 +67,7 @@ func runnerStateFromState(state State) RunnerState {
 		Paths:      state.Paths,
 		Sessions:   state.Sessions,
 		Processes:  state.Processes,
+		Worker:     state.Worker,
 		Error:      state.Error,
 	}
 }

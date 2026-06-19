@@ -95,11 +95,67 @@ func TestArchiveCommandArchivesLatestFailedBatch(t *testing.T) {
 	}
 }
 
+// TestLoopCommandStartsDetachedWorker verifies human loop returns after submitting the monitor.
+func TestLoopCommandStartsDetachedWorker(t *testing.T) {
+	repo := gitRepo(t)
+	var started []string
+	previousStart := startDetachedLoopCommand
+	startDetachedLoopCommand = func(repo string) error {
+		started = append(started, repo)
+		return nil
+	}
+	t.Cleanup(func() { startDetachedLoopCommand = previousStart })
+
+	var stdout bytes.Buffer
+	engine := NewEngine(repo, NewAgentRegistry())
+	if err := dispatchLoopCommand(context.Background(), []string{"loop"}, &stdout, repo, engine); err != nil {
+		t.Fatal(err)
+	}
+	if len(started) != 1 || started[0] != repo {
+		t.Fatalf("started loop workers = %#v, want repo %s", started, repo)
+	}
+	if !strings.Contains(stdout.String(), "已启动后台 loop 监控") {
+		t.Fatalf("loop output missing detached confirmation: %s", stdout.String())
+	}
+}
+
+// TestLoopCommandSkipsDuplicateWorker verifies repeated loop commands do not stack monitors.
+func TestLoopCommandSkipsDuplicateWorker(t *testing.T) {
+	repo := gitRepo(t)
+	path, err := loopWorkerLockPath(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hostname, _ := os.Hostname()
+	if err := writeJSONFile(path, LockInfo{PID: os.Getpid(), Hostname: hostname, RunID: "loop", StartedAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+		t.Fatal(err)
+	}
+
+	previousStart := startDetachedLoopCommand
+	startDetachedLoopCommand = func(repo string) error {
+		t.Fatalf("duplicate loop command should not start a new worker for %s", repo)
+		return nil
+	}
+	t.Cleanup(func() { startDetachedLoopCommand = previousStart })
+
+	var stdout bytes.Buffer
+	engine := NewEngine(repo, NewAgentRegistry())
+	if err := dispatchLoopCommand(context.Background(), []string{"loop"}, &stdout, repo, engine); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "后台 loop 监控已在运行") {
+		t.Fatalf("loop output missing duplicate notice: %s", stdout.String())
+	}
+}
+
 // TestLoopArchivesFailedBatchAndStartsContinuation verifies loop continues from unfinished active changes.
 func TestLoopArchivesFailedBatchAndStartsContinuation(t *testing.T) {
 	repo := gitRepo(t)
 	installFlowControlFakeOz(t)
-	for _, name := range []string{"1-a", "2-b", "3-c"} {
+	for _, name := range []string{"2-b", "3-c"} {
 		writeFlowControlChange(t, repo, name)
 	}
 	runID := "20260617T030000.000000000Z"
@@ -124,6 +180,15 @@ func TestLoopArchivesFailedBatchAndStartsContinuation(t *testing.T) {
 	previousStart := startDetachedBatchCommand
 	startDetachedBatchCommand = func(repo, batchID string) error {
 		started = append(started, batchID)
+		batch, err := loadBatchState(repo, batchID)
+		if err != nil {
+			return err
+		}
+		for _, change := range batch.Changes {
+			if err := os.RemoveAll(changePath(repo, change)); err != nil {
+				return err
+			}
+		}
 		return withBatchState(repo, batchID, func(batch *BatchState) error {
 			batch.Status = batchStatusDone
 			batch.CurrentIndex = len(batch.Changes)
@@ -163,6 +228,55 @@ func TestLoopArchivesFailedBatchAndStartsContinuation(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "已归档失败批量工作流") || !strings.Contains(stdout.String(), "已完成") {
 		t.Fatalf("loop output missing archive/done messages: %s", stdout.String())
+	}
+}
+
+// TestLoopStartsActiveChangesAfterCompletedBatch verifies done history does not hide active proposals.
+func TestLoopStartsActiveChangesAfterCompletedBatch(t *testing.T) {
+	repo := gitRepo(t)
+	installFlowControlFakeOz(t)
+	for _, name := range []string{"1-a", "2-b"} {
+		writeFlowControlChange(t, repo, name)
+	}
+	if err := saveBatchState(repo, BatchState{
+		BatchID:      "20260617T040000.000000000Z",
+		Status:       batchStatusDone,
+		Changes:      []string{"1-a"},
+		CurrentIndex: 1,
+		RunIDs:       map[string]string{"1-a": "done-run"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var started []string
+	previousStart := startDetachedBatchCommand
+	startDetachedBatchCommand = func(repo, batchID string) error {
+		started = append(started, batchID)
+		return nil
+	}
+	t.Cleanup(func() { startDetachedBatchCommand = previousStart })
+
+	var stdout bytes.Buffer
+	engine := NewEngine(repo, NewAgentRegistry())
+	done, err := runBatchLoopTick(context.Background(), &stdout, repo, engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done {
+		t.Fatalf("loop tick returned done while active changes still exist")
+	}
+	if len(started) != 1 {
+		t.Fatalf("started batches = %v, want exactly one", started)
+	}
+	newBatch, err := loadBatchState(repo, started[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(newBatch.Changes, ","); got != "1-a,2-b" {
+		t.Fatalf("new batch changes = %s, want 1-a,2-b", got)
+	}
+	if strings.Contains(stdout.String(), "已完成") {
+		t.Fatalf("loop should not print completed while starting active changes: %s", stdout.String())
 	}
 }
 

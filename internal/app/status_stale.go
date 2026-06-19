@@ -1,7 +1,7 @@
 // Package app detects stale status runs for human display without mutating state.
 package app
 
-import "runtime"
+import "time"
 
 // humanDisplayState marks unowned running runs as stale without mutating durable state.
 func humanDisplayState(repo string, state State) State {
@@ -13,12 +13,6 @@ func humanDisplayState(repo string, state State) State {
 
 // isStaleRunningRun reports running state whose owner lock is no longer live.
 func isStaleRunningRun(repo string, state State) bool {
-	if state.Status != statusRunning || state.RunID == "" {
-		return false
-	}
-	status, err := lockFileStatus(repo, state.RunID, runtime.GOOS)
-	if err != nil {
-		return false
-	}
-	return status == lockStatusStale
+	stopped, _ := runningRunCannotAdvance(repo, state, time.Now())
+	return stopped
 }

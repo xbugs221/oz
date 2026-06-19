@@ -127,7 +127,11 @@ func (e *Engine) resumeRun(ctx context.Context, runID string, allowUnknownLock b
 		flushWriter(startupJSON)
 	}
 	if stateUsesGoDAG(state) {
-		return e.runGoDAGLocked(ctx, state)
+		return withRunWorkerLifecycle(e.Repo, state, func() error {
+			return e.runGoDAGLocked(ctx, state)
+		})
 	}
-	return e.runLoop(ctx, state)
+	return withRunWorkerLifecycle(e.Repo, state, func() error {
+		return e.runLoop(ctx, state)
+	})
 }

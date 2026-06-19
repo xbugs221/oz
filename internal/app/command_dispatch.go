@@ -161,7 +161,9 @@ func dispatchBatchCommand(ctx context.Context, args []string, stdout io.Writer, 
 		return fmt.Errorf("用法：oz flow batch --batch-id <batch-id> --json")
 	}
 	engine.Output = nil
-	return engine.RunBatch(ctx, batchID)
+	return withBatchWorkerLifecycle(repo, batchID, func() error {
+		return engine.RunBatch(ctx, batchID)
+	})
 }
 
 // dispatchRestartCommand handles JSON restart and human restart aliases.

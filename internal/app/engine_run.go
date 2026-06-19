@@ -40,6 +40,7 @@ var (
 	currentExecutable         = os.Executable
 	startDetachedCommand      = startDetachedResumeCommand
 	startDetachedBatchCommand = startDetachedBatchResumeCommand
+	startDetachedLoopCommand  = startDetachedLoopWorkerCommand
 )
 
 // NewEngine creates a workflow engine rooted at a git repository.
@@ -142,7 +143,9 @@ func (e *Engine) run(ctx context.Context, state State) error {
 			return err
 		}
 		defer unlock()
-		return e.runLoop(ctx, state)
+		return withRunWorkerLifecycle(e.Repo, state, func() error {
+			return e.runLoop(ctx, state)
+		})
 	}
 	return e.runGoDAG(ctx, state)
 }

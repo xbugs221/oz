@@ -249,8 +249,5 @@ func startDetachedResumeCommand(repo, runID string) error {
 	cmd := exec.Command(exe, flowWorkerCommandArgs("resume", "--run-id", runID, "--json")...)
 	cmd.Dir = repo
 	configureDetachedCommand(cmd)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	return startDetachedWorkerCommand(cmd, runWorkerLogPath(repo, runID))
 }

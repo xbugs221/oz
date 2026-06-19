@@ -23,6 +23,11 @@ func TestDetachedWorkerCommandsUseOzFlowPrefix(t *testing.T) {
 			args: []string{"batch", "--batch-id", "batch-1", "--json"},
 			want: []string{"flow", "batch", "--batch-id", "batch-1", "--json"},
 		},
+		{
+			name: "loop worker",
+			args: []string{"loop", "--worker", "--json"},
+			want: []string{"flow", "loop", "--worker", "--json"},
+		},
 	}
 
 	for _, tt := range tests {

@@ -49,7 +49,9 @@ func (e *Engine) runGoDAG(ctx context.Context, state State) error {
 		return err
 	}
 	defer unlock()
-	return e.runGoDAGLocked(ctx, state)
+	return withRunWorkerLifecycle(e.Repo, state, func() error {
+		return e.runGoDAGLocked(ctx, state)
+	})
 }
 
 // runGoDAGLocked executes ready graph nodes concurrently while the caller owns the run lock.

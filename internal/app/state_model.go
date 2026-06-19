@@ -60,7 +60,20 @@ type State struct {
 	ArtifactGates       map[string]StageValidationState `json:"artifact_gates,omitempty"`
 	AcceptanceRun       map[string]StageValidationState `json:"acceptance_run,omitempty"`
 	AcceptancePreflight AcceptancePreflightState        `json:"acceptance_preflight,omitempty"`
+	Worker              *WorkerRuntimeState             `json:"worker,omitempty"`
 	Workflow            WorkflowConfig                  `json:"workflow_config"`
+}
+
+// WorkerRuntimeState records one oz worker process for post-mortem diagnosis.
+type WorkerRuntimeState struct {
+	PID             int    `json:"pid,omitempty"`
+	Hostname        string `json:"hostname,omitempty"`
+	StartedAt       string `json:"started_at,omitempty"`
+	LastHeartbeatAt string `json:"last_heartbeat_at,omitempty"`
+	FinishedAt      string `json:"finished_at,omitempty"`
+	Exit            string `json:"exit,omitempty"`
+	Error           string `json:"error,omitempty"`
+	LogPath         string `json:"log_path,omitempty"`
 }
 
 // DAGNodeState records observable Go DAG node progress for human status and debugging.

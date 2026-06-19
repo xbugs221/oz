@@ -154,7 +154,9 @@ func (e *Engine) RestartBatchJSON(ctx context.Context, batchID string) error {
 	if err := e.prepareRestartBatch(batchID, false); err != nil {
 		return err
 	}
-	return e.RunBatch(ctx, batchID)
+	return withBatchWorkerLifecycle(e.Repo, batchID, func() error {
+		return e.RunBatch(ctx, batchID)
+	})
 }
 
 // prepareRestartBatch validates the current queue item before restoring batch state.
