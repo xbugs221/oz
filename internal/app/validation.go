@@ -15,11 +15,15 @@ import (
 )
 
 const (
-	validationStatusPassed = "passed"
-	validationStatusFailed = "failed"
-	validationKindCommands = "commands"
-	validationKindArtifact = "artifact"
-	artifactGateCommand    = "oz flow artifact gate"
+	validationStatusPassed             = "passed"
+	validationStatusFailed             = "failed"
+	validationKindCommands             = "commands"
+	validationKindArtifact             = "artifact"
+	validationKindChange               = "change"
+	validationKindAcceptancePreflight  = "acceptance_preflight"
+	artifactGateCommand                = "oz flow artifact gate"
+	acceptancePreflightGateCommand     = "oz flow acceptance preflight"
+	changeValidationCommandDescription = "oz validate"
 )
 
 // StageValidationState is persisted in state.json so failed validation reruns the same stage.
@@ -50,11 +54,19 @@ type ValidationCommandResult struct {
 
 // shouldValidateStage limits validation to stages that can change implementation files.
 func shouldValidateStage(state State) bool {
-	if len(state.Workflow.Validation.Commands) == 0 {
+	stage, err := parseWorkflowStage(state.Stage)
+	if err != nil {
 		return false
 	}
-	stage, err := parseWorkflowStage(state.Stage)
-	return err == nil && (stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix))
+	if shouldRunChangeValidation(stage) {
+		return true
+	}
+	return len(state.Workflow.Validation.Commands) > 0 && stage.isKind(workflowStageFix)
+}
+
+// shouldRunChangeValidation forces oz validate after stages that may rewrite the active change.
+func shouldRunChangeValidation(stage workflowStage) bool {
+	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix)
 }
 
 // shouldForceStageRerun reports whether a failed validation gate must re-enter the same stage.
@@ -63,6 +75,9 @@ func shouldForceStageRerun(state State) bool {
 		return true
 	}
 	if state.AcceptanceRun != nil && state.AcceptanceRun[state.Stage].Status == validationStatusFailed {
+		return true
+	}
+	if state.AcceptancePreflight.Status == validationStatusFailed {
 		return true
 	}
 	return state.Validation != nil && state.Validation[state.Stage].Status == validationStatusFailed
@@ -219,6 +234,77 @@ func runValidationCommands(ctx context.Context, repo, stage string, attempt int,
 	return result
 }
 
+// runStageValidation executes mandatory change validation before user-configured commands.
+func runStageValidation(ctx context.Context, repo, changeName, stage string, attempt int, config ValidationConfig) ValidationAttempt {
+	// runStageValidation keeps oz validate failures in the normal same-stage retry path.
+	result := ValidationAttempt{
+		Stage:     stage,
+		Attempt:   attempt,
+		Status:    validationStatusPassed,
+		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	parsed, err := parseWorkflowStage(stage)
+	if err == nil && shouldRunChangeValidation(parsed) {
+		commandResult := runChangeValidationCommand(ctx, repo, changeName)
+		result.Commands = append(result.Commands, commandResult)
+		if commandResult.ExitCode != 0 {
+			result.Status = validationStatusFailed
+			result.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			return result
+		}
+	}
+	configured := runValidationCommands(ctx, repo, stage, attempt, config)
+	result.Commands = append(result.Commands, configured.Commands...)
+	if configured.Status == validationStatusFailed {
+		result.Status = validationStatusFailed
+	}
+	result.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	return result
+}
+
+// runChangeValidationCommand runs oz validate for the active change and captures its JSON diagnostics.
+func runChangeValidationCommand(ctx context.Context, repo, changeName string) ValidationCommandResult {
+	// runChangeValidationCommand uses the same oz command resolution as workflow startup validation.
+	path, err := resolveCommand(ozCommand)
+	label := changeValidationCommandDescription + " " + changeName + " --json"
+	if err != nil {
+		return ValidationCommandResult{Command: label, ExitCode: -1, Output: limitValidationOutput(err.Error())}
+	}
+	args := append([]string{}, ozCommandPrefix...)
+	args = append(args, "validate", changeName, "--json")
+	cmd := commandContext(ctx, path, args...)
+	cmd.Dir = repo
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	runErr := cmd.Run()
+	exitCode := commandExitCode(runErr)
+	if exitCode == 0 {
+		var response ozValidateResponse
+		if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+			exitCode = -1
+			output.WriteString("\n解析 oz validate JSON 失败：" + err.Error())
+		} else if !response.Valid {
+			exitCode = 1
+		}
+	}
+	return ValidationCommandResult{
+		Command:  label,
+		ExitCode: exitCode,
+		Output:   limitValidationOutput(output.String()),
+	}
+}
+
+// validationAttemptKind classifies the persisted validation failure for retry prompts.
+func validationAttemptKind(attempt ValidationAttempt) string {
+	for _, command := range attempt.Commands {
+		if command.ExitCode != 0 && strings.HasPrefix(command.Command, changeValidationCommandDescription+" ") {
+			return validationKindChange
+		}
+	}
+	return validationKindCommands
+}
+
 // validationExecCommand builds the OS process for one configured validation command.
 func validationExecCommand(ctx context.Context, command ValidationCommand) *exec.Cmd {
 	if strings.TrimSpace(command.Run) != "" {
@@ -273,6 +359,14 @@ func validationFailurePrompt(repo string, state State) string {
 	if gate, ok := state.AcceptanceRun[state.Stage]; ok && gate.Status == validationStatusFailed {
 		current = gate
 	}
+	if state.AcceptancePreflight.Status == validationStatusFailed {
+		current = StageValidationState{
+			Kind:         validationKindAcceptancePreflight,
+			Status:       state.AcceptancePreflight.Status,
+			LastArtifact: state.AcceptancePreflight.LastArtifact,
+			LastError:    state.AcceptancePreflight.LastError,
+		}
+	}
 	if current.Status != validationStatusFailed || current.LastArtifact == "" {
 		return ""
 	}
@@ -290,6 +384,12 @@ func validationFailurePrompt(repo string, state State) string {
 		body = "# Acceptance run gate failed\n\n" +
 			"The previous attempt for this same stage failed the active change required_tests contract. " +
 			"Read the result below, fix every failing required test and missing evidence, then rerun the same stage.\n\n" +
+			"- Artifact: `" + current.LastArtifact + "`\n"
+	}
+	if current.Kind == validationKindAcceptancePreflight {
+		body = "# Acceptance preflight gate failed\n\n" +
+			"The previous attempt for this same stage left the active change acceptance contract unable to prove its evidence producer chain. " +
+			"Read the artifact below, fix acceptance.json or the bound tests, then rerun the same stage.\n\n" +
 			"- Artifact: `" + current.LastArtifact + "`\n"
 	}
 	if current.LastError != "" {

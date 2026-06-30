@@ -1157,26 +1157,38 @@
 
 // Sources: 19-拆分wo门禁状态并新增验收预检阻断
 
-系统必须在 execution artifact gate 通过后、进入 validation gate 或 review/archive 前预检 sealed acceptance 合同，提前阻断不可执行或不可复核的验收证据要求。
+系统必须在 execution artifact gate 通过后先强制运行 `oz validate <change> --json`，再在进入 required_tests、review 或 archive 前预检 sealed acceptance 合同；合同问题必须优先回到 executor 同阶段修复，而不是直接跳过修复通道。
 
-#### 场景：evidence 无 producer 时阻断为验收合同问题
+#### 场景：execution 后 oz validate 失败时回到 executor
+
+- **给定** sealed run 处于 `execution` 阶段
+- **并且** executor 修改了当前 active change 的 `acceptance.json`、测试文件或同目录 wrapper
+- **当** execution artifact gate 已通过
+- **且** `oz validate <change> --json` 返回失败
+- **则** 系统必须写入 `state.validation[execution].status=failed`
+- **且** validation artifact 必须包含 `oz validate` 的 JSON 诊断输出
+- **且** run 必须保持 `running/execution`，下一轮继续使用 executor 会话修复
+- **测试**：`tests/specs/codex-workflow-cli/test_gate_state_acceptance_preflight_contract.sh`
+- **关键断言**：execution 后 active change 合同不合法时进入 `validation_failed` 重试，而不是 `blocked_acceptance_contract`
+
+#### 场景：evidence 无 producer 时回到 executor 修复
 
 - **给定** `acceptance.json.required_evidence` 中存在一个 evidence id
 - **并且** 该 evidence 虽被 `coverage[].evidence` 引用，但同一 coverage 引用的 `required_tests` 没有在 `command`、`path`、`purpose` 或 `assertions` 中追溯到该 evidence 的 id 或 path
-- **当** execution artifact gate 已通过
+- **当** execution artifact gate 和 `oz validate` 已通过，但 sealed acceptance preflight 失败
 - **则** 系统必须写入 `state.acceptance_preflight.status=failed`
-- **且** run 状态必须变为 `blocked_acceptance_contract`
-- **且** 错误信息必须指出无法追溯 producer 的 evidence id
-- **且** 不得进入 review、QA、fix 或 archive
+- **且** preflight artifact 必须包含无法追溯 producer 的 evidence id
+- **且** run 必须保持 `running/execution`，下一轮继续使用 executor 会话修复
 - **且** preflight 失败不得写入 `state.validation[execution]` 或消耗 review/fix 轮次
+- **且** 达到同阶段重试上限时必须进入 `blocked_validation_limit`
 - **测试**：`tests/specs/codex-workflow-cli/test_gate_state_acceptance_preflight_contract.sh`
-- **关键断言**：无 producer 的 evidence 使 run 进入 `blocked_acceptance_contract`，并写入 `state.acceptance_preflight.status=failed`
+- **关键断言**：无 producer 的 evidence 写入 `state.acceptance_preflight.status=failed` 并触发同阶段重试
 
 #### 场景：evidence 可追溯 producer 时 preflight 通过
 
 - **给定** `acceptance.json.required_evidence` 中的 evidence id 被 `coverage[].evidence` 引用
 - **并且** 同一 coverage 引用的某个 `required_tests` 在 `command`、`path`、`purpose` 或 `assertions` 中追溯到该 evidence 的 id 或 path
-- **当** execution artifact gate 已通过
+- **当** execution artifact gate 和 `oz validate` 已通过
 - **则** 系统必须写入 `state.acceptance_preflight.status=passed`
 - **且** run 保持 `running/execution`，继续执行正常 validation gate 和后续推进
 - **测试**：`tests/specs/codex-workflow-cli/test_gate_state_acceptance_preflight_contract.sh`

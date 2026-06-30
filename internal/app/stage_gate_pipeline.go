@@ -30,13 +30,20 @@ func (e *Engine) completeMainStage(ctx context.Context, state *State, mode stage
 		return stageGatePipelineResult{}, nil
 	}
 	clearStageArtifactGateFailure(state)
+	validationPassed, err := e.validateStage(ctx, state)
+	if err != nil {
+		return stageGatePipelineResult{}, err
+	}
+	if !validationPassed {
+		return stageGatePipelineResult{Done: true, Blocked: true, ProgressLabel: failedGateProgressLabel(*state)}, nil
+	}
 	if state.Stage == workflowStageExecution {
 		preflightPassed, err := e.runAcceptancePreflight(state)
 		if err != nil {
 			return stageGatePipelineResult{}, err
 		}
 		if !preflightPassed {
-			return stageGatePipelineResult{Done: true, Blocked: true, ProgressLabel: "blocked"}, nil
+			return stageGatePipelineResult{Done: true, Blocked: true, ProgressLabel: failedGateProgressLabel(*state)}, nil
 		}
 	}
 	acceptancePassed, err := e.runAcceptanceGate(ctx, state)
@@ -44,13 +51,6 @@ func (e *Engine) completeMainStage(ctx context.Context, state *State, mode stage
 		return stageGatePipelineResult{}, err
 	}
 	if !acceptancePassed {
-		return stageGatePipelineResult{Done: true, Blocked: true, ProgressLabel: failedGateProgressLabel(*state)}, nil
-	}
-	validationPassed, err := e.validateStage(ctx, state)
-	if err != nil {
-		return stageGatePipelineResult{}, err
-	}
-	if !validationPassed {
 		return stageGatePipelineResult{Done: true, Blocked: true, ProgressLabel: failedGateProgressLabel(*state)}, nil
 	}
 	if !normalizeRunStatus(state.Status).isRunning() {

@@ -131,12 +131,12 @@ func (e *Engine) validateStage(ctx context.Context, state *State) (bool, error) 
 	}
 	current := state.Validation[state.Stage]
 	current.Attempts++
-	current.Kind = validationKindCommands
-	attempt := runValidationCommands(ctx, e.Repo, state.Stage, current.Attempts, state.Workflow.Validation)
+	attempt := runStageValidation(ctx, e.Repo, state.ChangeName, state.Stage, current.Attempts, state.Workflow.Validation)
 	artifactPath, err := writeValidationAttempt(e.Repo, state.RunID, attempt)
 	if err != nil {
 		return false, err
 	}
+	current.Kind = validationAttemptKind(attempt)
 	current.LastArtifact = artifactPath
 	current.Status = attempt.Status
 	current.LastError = firstValidationError(attempt)

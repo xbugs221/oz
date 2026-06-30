@@ -1,7 +1,8 @@
-// Package app tests oz flow gate-state separation and acceptance preflight blocking.
+// Package app tests oz flow gate-state separation and acceptance preflight repair.
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,8 +33,47 @@ func TestRootArtifactGateFailureUsesArtifactGateState(t *testing.T) {
 	}
 }
 
-// TestRootAcceptancePreflightBlocksEvidenceWithoutProducer proves unproducible evidence blocks before review.
-func TestRootAcceptancePreflightBlocksEvidenceWithoutProducer(t *testing.T) {
+// TestRootExecutionRunsOzValidateAsRetryableGate proves oz validate failures return to executor repair.
+func TestRootExecutionRunsOzValidateAsRetryableGate(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(repo, "state"))
+	installGateStateFakeOz(t, false)
+	state := State{
+		RunID:      "run-change-validate",
+		ChangeName: "19-gate-state-preflight",
+		Status:     statusRunning,
+		Stage:      "execution",
+		Workflow:   DefaultWorkflowConfig(),
+		Validation: map[string]StageValidationState{},
+		Stages:     map[string]string{},
+	}
+	engine := NewEngine(repo, nil)
+
+	passed, err := engine.validateStage(context.Background(), &state)
+	if err != nil {
+		t.Fatalf("validateStage returned unexpected error: %v", err)
+	}
+	if passed {
+		t.Fatal("oz validate failure should fail the stage validation gate")
+	}
+	if state.Status != statusRunning || state.Stage != "execution" {
+		t.Fatalf("state = %s/%s, want retryable running execution", state.Status, state.Stage)
+	}
+	current := state.Validation["execution"]
+	if current.Kind != validationKindChange || current.Status != validationStatusFailed {
+		t.Fatalf("validation state = %#v, want failed change validation", current)
+	}
+	if state.Stages["execution"] != "validation_failed" {
+		t.Fatalf("stage marker = %q, want validation_failed", state.Stages["execution"])
+	}
+	prompt := validationFailurePrompt(repo, state)
+	if !strings.Contains(prompt, "oz validate 19-gate-state-preflight --json") || !strings.Contains(prompt, "producer missing") {
+		t.Fatalf("retry prompt should include oz validate diagnostics, got: %s", prompt)
+	}
+}
+
+// TestRootAcceptancePreflightReturnsEvidenceWithoutProducerToExecutor proves unproducible evidence is repairable.
+func TestRootAcceptancePreflightReturnsEvidenceWithoutProducerToExecutor(t *testing.T) {
 	repo := t.TempDir()
 	state := rootPreflightState(t, repo, "run-preflight-fail", rootAcceptanceWithoutEvidenceProducer())
 	engine := NewEngine(repo, nil)
@@ -45,15 +85,62 @@ func TestRootAcceptancePreflightBlocksEvidenceWithoutProducer(t *testing.T) {
 	if passed {
 		t.Fatal("preflight should fail when required_evidence has no producer")
 	}
-	if state.Status != statusAcceptanceContractBlocked || state.Stage != statusAcceptanceContractBlocked {
-		t.Fatalf("state = %s/%s, want blocked_acceptance_contract", state.Status, state.Stage)
+	if state.Status != statusRunning || state.Stage != "execution" {
+		t.Fatalf("state = %s/%s, want retryable running execution", state.Status, state.Stage)
 	}
 	if !strings.Contains(state.AcceptancePreflight.LastError, "console-without-producer") {
 		t.Fatalf("preflight error should name missing evidence producer, got %q", state.AcceptancePreflight.LastError)
 	}
+	if state.AcceptancePreflight.LastArtifact == "" || state.Stages["execution"] != "validation_failed" {
+		t.Fatalf("preflight should persist retry artifact and marker: %#v stages=%#v", state.AcceptancePreflight, state.Stages)
+	}
+	if !shouldForceStageRerun(state) {
+		t.Fatal("preflight failure should force the same execution stage to rerun")
+	}
+	prompt := validationFailurePrompt(repo, state)
+	if !strings.HasPrefix(prompt, "# Acceptance preflight gate failed") || !strings.Contains(prompt, "console-without-producer") {
+		t.Fatalf("preflight retry prompt missing producer diagnostics: %s", prompt)
+	}
 	if _, contaminated := state.Validation["execution"]; contaminated {
 		t.Fatalf("acceptance preflight failure must not write validation.execution, got %#v", state.Validation["execution"])
 	}
+}
+
+func installGateStateFakeOz(t *testing.T, valid bool) {
+	t.Helper()
+	previous := ozCommand
+	previousPrefix := ozCommandPrefix
+	ozCommand = os.Args[0]
+	ozCommandPrefix = []string{"-test.run=TestGateStateFakeOzCommand", "--"}
+	if valid {
+		t.Setenv("OZ_GATE_STATE_FAKE_VALIDATE", "valid")
+	} else {
+		t.Setenv("OZ_GATE_STATE_FAKE_VALIDATE", "invalid")
+	}
+	t.Cleanup(func() {
+		ozCommand = previous
+		ozCommandPrefix = previousPrefix
+	})
+}
+
+// TestGateStateFakeOzCommand serves oz validate JSON to validation gate subprocesses.
+func TestGateStateFakeOzCommand(t *testing.T) {
+	mode := os.Getenv("OZ_GATE_STATE_FAKE_VALIDATE")
+	if mode == "" {
+		return
+	}
+	args := os.Args
+	for _, arg := range args {
+		if arg == "--" {
+			if mode == "valid" {
+				_, _ = os.Stdout.WriteString(`{"valid":true,"errors":[]}` + "\n")
+				os.Exit(0)
+			}
+			_, _ = os.Stdout.WriteString(`{"valid":false,"errors":["producer missing"]}` + "\n")
+			os.Exit(1)
+		}
+	}
+	os.Exit(1)
 }
 
 // TestRootAcceptancePreflightPassesWhenEvidenceHasRequiredTestProducer proves traceable evidence may advance.
@@ -141,7 +228,7 @@ func rootAcceptanceWithoutEvidenceProducer() string {
   "summary": "preflight should block evidence without producer",
   "coverage": [
     {
-      "spec": "需求：execution 后执行 acceptance preflight / 场景：evidence 无 producer 时阻断为验收合同问题",
+      "spec": "需求：execution 后执行 acceptance preflight / 场景：evidence 无 producer 时回到 executor 修复",
       "tests": ["contract-only"],
       "evidence": ["console-without-producer"],
       "risk": "preflight should reject this contract before review"
@@ -207,7 +294,7 @@ func rootAcceptanceWithEvidenceProducer() string {
   "summary": "preflight should pass evidence with producer",
   "coverage": [
     {
-      "spec": "需求：execution 后执行 acceptance preflight / 场景：evidence 无 producer 时阻断为验收合同问题",
+      "spec": "需求：execution 后执行 acceptance preflight / 场景：evidence 无 producer 时回到 executor 修复",
       "tests": ["contract-produces-log"],
       "evidence": ["gate-state-preflight-log"],
       "risk": "preflight only checks producer traceability, not full command execution"
