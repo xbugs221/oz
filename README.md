@@ -21,6 +21,28 @@ url: https://github.com/xbugs221/oz
 
 `oz flow run-acceptance --change <change-name> --json` 可以在本地执行某个 active change 的 `acceptance.json.required_tests`，并把每个测试结果、日志路径和 evidence 存在性汇总到 `test-results/acceptance-run/<change-name>/result.json`。sealed run 在 execution 和 fix 后也会复用这个执行器做 gate，失败时回到同一阶段修复。
 
+## 工作流定位
+
+`oz` 可以和通用 agent skill 包一起理解，但它的边界更窄：skill 负责告诉智能体怎么做，`oz flow` 负责按当前 change 决定何时推进、何时停下，`acceptance.json` 负责声明什么证据才算通过。
+
+```text
+用户意图
+  |
+  v
+plan -> create -> exec -> review/QA -> fix -> archive
+          |         |        ^          |
+          v         v        |          v
+     change 目录  required_tests   findings   长期规格
+          \________ acceptance.json _________/
+```
+
+| 层次 | 作用 | 产物 |
+| --- | --- | --- |
+| skill | 说明当前阶段怎么做、何时退出、哪些理由不能跳过步骤 | `skills/oz-*/SKILL.md` |
+| change | 把单个需求隔离成可复查事实边界 | `docs/changes/<change>/` |
+| acceptance | 把验收从口头判断变成可执行合同 | `acceptance.json`、`tests/`、`test-results/` |
+| flow | 串联执行、审核、验收、修复和归档门禁 | `oz flow run/status/watch` |
+
 文件树示意：
 
 ```text

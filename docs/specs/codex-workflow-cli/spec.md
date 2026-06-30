@@ -714,6 +714,29 @@
 - **则** 任务或设计说明必须记录保留原因
 - **且** 测试仍必须保证内置默认和生成 YAML 不发生分叉
 
+### 需求：README 和内置 skill 保持流程化表达
+
+系统必须把 oz 的用户入口描述为可验证工作流，而不是零散提示词集合。README 必须说明 skill、change、acceptance 和 flow 的职责边界；内置 `oz-*` skill 必须保留流程、退出条件和反偷懒检查。
+
+#### 场景：README 说明工作流职责边界
+
+- **当** 用户阅读 README
+- **则** README 必须说明 skill 负责阶段怎么做
+- **且** README 必须说明 `oz flow` 负责何时推进和门禁
+- **且** README 必须说明 `acceptance.json` 负责可复核证据或可执行合同
+- **且** README 必须说明 change 目录是单个需求的事实边界
+- **测试**：`tests/specs/codex-workflow-cli/test_skill_workflow_docs_contract.sh`
+- **关键断言**：README 不只介绍命令，也解释工作流各层职责
+
+#### 场景：内置 skill 保留流程和退出条件
+
+- **给定** 仓库包含 `skills/oz-plan`、`skills/oz-create`、`skills/oz-exec` 和 `skills/oz-archive`
+- **当** 维护者修改内置 skill 文档
+- **则** 每个 `SKILL.md` 必须包含 `## 流程`、`## 退出条件` 和 `## 反偷懒检查`
+- **且** 反偷懒检查必须明确列出常见跳步理由
+- **测试**：`tests/specs/codex-workflow-cli/test_skill_workflow_docs_contract.sh`
+- **关键断言**：内置 skill 是可执行流程，不退化成普通说明文档
+
 ### 需求：默认工作流不再生成固定外置子代理
 
 // Sources: 42-拆除固定子代理编排
