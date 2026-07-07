@@ -5,10 +5,10 @@ stages:
     reasoning: xhigh
   execution:
     agent: codex
-    reasoning: low
+    reasoning: medium
   fix:
     agent: codex
-    reasoning: low
+    reasoning: medium
   review:
     agent: codex
     reasoning: high
