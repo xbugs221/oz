@@ -55,6 +55,9 @@ func ensureTasksDone(path string) error {
 	// ensureTasksDone prevents archiving unfinished task lists.
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return err
 	}
 	for _, line := range strings.Split(string(data), "\n") {

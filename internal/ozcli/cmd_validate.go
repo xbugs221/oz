@@ -59,8 +59,18 @@ func validateChange(root, change string) validationResult {
 	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json"} {
 		path := filepath.Join(changeDir, name)
 		result.Artifacts[name] = path
-		if info, err := os.Stat(path); err != nil || info.IsDir() {
+	}
+	for _, name := range []string{"brief.md", "acceptance.json"} {
+		if !regularFileExists(filepath.Join(changeDir, name)) {
 			result.Errors = append(result.Errors, "缺少 "+name)
+		}
+	}
+	longDocs := []string{"proposal.md", "design.md", "spec.md", "task.md"}
+	if changeUsesStandardDocs(changeDir, longDocs) {
+		for _, name := range longDocs {
+			if !regularFileExists(filepath.Join(changeDir, name)) {
+				result.Errors = append(result.Errors, "缺少 "+name)
+			}
 		}
 	}
 	testsDir := filepath.Join(changeDir, "tests")
@@ -99,6 +109,22 @@ func validateChange(root, change string) validationResult {
 	result.Errors = unique(result.Errors)
 	result.Valid = len(result.Errors) == 0
 	return result
+}
+
+func regularFileExists(path string) bool {
+	// regularFileExists treats missing paths and directories as absent change artifacts.
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func changeUsesStandardDocs(changeDir string, names []string) bool {
+	// changeUsesStandardDocs promotes any partial long-document shape to standard validation.
+	for _, name := range names {
+		if regularFileExists(filepath.Join(changeDir, name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateAcceptanceFiles(projectRoot, acceptancePath string) ([]acceptance.LifecycleDiagnostic, []string) {

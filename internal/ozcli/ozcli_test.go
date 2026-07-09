@@ -420,6 +420,56 @@ func TestValidateOutputsStableJSON(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsSmallBriefOnlyChange(t *testing.T) {
+	// TestValidateAcceptsSmallBriefOnlyChange covers the small proposal entry without long documents.
+	project := newProject(t)
+	change := "3-明确-small-入口"
+	writeValidChange(t, project, change)
+	changeDir := filepath.Join(project, "docs", "changes", change)
+	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md"} {
+		if err := os.Remove(filepath.Join(changeDir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result := runCLI(t, project, "validate", change, "--json")
+	if result.code != 0 {
+		t.Fatalf("small brief-only validate failed:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+
+	if err := os.Remove(filepath.Join(changeDir, "tests", "archive_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(changeDir, "tests", "README.md"), []byte("只是说明文档\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected small change without real test code to fail")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "tests 包含非测试代码") {
+		t.Fatalf("missing small tests hard-contract diagnostic:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+
+	if err := os.WriteFile(filepath.Join(changeDir, "tests", "small_test.sh"), []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(changeDir, "tests", "README.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(changeDir, "proposal.md"), []byte("## 部分长文档\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected partial standard documents to fail")
+	}
+	for _, want := range []string{"缺少 design.md", "缺少 spec.md", "缺少 task.md"} {
+		if !strings.Contains(result.stdout+result.stderr, want) {
+			t.Fatalf("missing standard diagnostic %q:\nstdout=%s\nstderr=%s", want, result.stdout, result.stderr)
+		}
+	}
+}
+
 func TestValidateChecksAcceptanceContract(t *testing.T) {
 	// TestValidateChecksAcceptanceContract keeps oz and oz flow aligned on sealed-run inputs.
 	project := newProject(t)
@@ -732,6 +782,26 @@ func TestArchiveKeepsProposalTestsWithoutEditingMainSpec(t *testing.T) {
 	}
 	if string(data) != "主规格保持不变\n" {
 		t.Fatalf("archive edited main spec: %q", string(data))
+	}
+}
+
+func TestArchiveAcceptsSmallBriefOnlyChange(t *testing.T) {
+	// TestArchiveAcceptsSmallBriefOnlyChange keeps CLI archiving compatible with small proposals.
+	project := newProject(t)
+	change := "2-登录能力"
+	writeValidChange(t, project, change)
+	changeDir := filepath.Join(project, "docs", "changes", change)
+	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md"} {
+		if err := os.Remove(filepath.Join(changeDir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result := runCLI(t, project, "archive", change, "--yes")
+	if result.code != 0 {
+		t.Fatalf("small archive failed:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
+	}
+	if _, err := os.Stat(filepath.Join(project, "docs", "changes", "archive", "2026-05-08-"+change, "brief.md")); err != nil {
+		t.Fatalf("small change should be archived with brief.md: %v", err)
 	}
 }
 

@@ -6,6 +6,18 @@
 
 系统必须把 `list` 和 `install` 作为用户日常命令，同时保留 `create`、`status`、`validate`、`archive` 作为下游 `oz flow` 工具和内置 skill 使用的自动化接口。
 
+### 场景：变更入口分为 micro、small 和 standard
+
+- **给定** 用户要处理不改变用户可感知行为、命令契约、状态语义或长期规格的纯实现修复
+- **则** 应选择 micro，用 TDD + git commit 完成，不创建 change 目录
+- **给定** 用户要处理单一业务意图、最多 2 个验收场景或 2 个 required tests、且没有复杂设计分歧的变更
+- **则** 应选择 small，产物只需要 `brief.md`、`acceptance.json` 和 `tests/`，也可称为 brief-only
+- **并且** `oz validate` 必须接受合法 small brief-only 目录
+- **并且** small 归档时必须把长期行为合并进 `docs/specs/`，把测试意图合并进 `tests/specs/`
+- **给定** 变更跨模块、高风险、包含多个业务场景，或超过 small 的 2 个验收场景 / 2 个 required tests 上限
+- **则** 必须升级 standard，保留完整提案文档
+- **并且** standard 升级触发器不得被解释为必须硬凑测试或任务数量
+
 ### 场景：顶层帮助区分日常命令和自动化接口
 
 - **当** 用户运行 `oz --help`
@@ -32,7 +44,7 @@
 - **则** 命令保持稳定 JSON 输出
 - **并且** JSON 内容包含 `valid`、`change`、`errors`、`warnings` 和 `artifacts`
 
-### 场景：下游校验接口要求验收硬合同
+### 场景：下游校验接口要求 standard 验收硬合同
 
 - **给定** 一个活动提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `oz flow` 允许的 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
@@ -80,6 +92,7 @@
 - **并且** acceptance 摘要必须暴露 `required_tests`、`required_evidence` 和 `coverage` 的数量
 - **当** 下游工具运行 `oz archive 1-需求 --yes`
 - **则** 命令继续按既有规则校验任务完成状态并归档提案
+- **并且** small brief-only 提案没有 `task.md` 时不得因为缺少任务清单被 CLI 拒绝
 - **并且** 命令不得机械移动、改写或合并提案测试文件
 - **并且** 归档后的提案测试留在 `docs/changes/archive/<date>-1-需求/tests/` 作为后续规格测试合并来源
 

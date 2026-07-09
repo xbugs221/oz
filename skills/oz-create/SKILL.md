@@ -1,35 +1,44 @@
 ---
 name: oz-create
-description: 当用户提到 oz create，或要求创建 oz 变更提案时使用；用于创建 docs/changes/<编号>-<中文提案名>/ 及 brief.md、proposal.md、design.md、spec.md、task.md、acceptance.json、tests/
+description: 当用户提到 oz create，或要求创建 oz 变更提案时使用；用于创建 small brief-only 或 standard 完整提案
 ---
 
 # oz Create
 
-创建 `oz` 变更提案并生成所有产物。创建阶段不是写愿景文档，而是建立可执行的交付合同；`brief.md`、`proposal.md`、`spec.md`、`acceptance.json` 和 `tests/` 的承诺必须等强度对齐。
+创建 `oz` 变更提案并生成对应产物。创建阶段不是写愿景文档，而是建立可执行的交付合同；`brief.md`、`acceptance.json` 和 `tests/` 始终是硬边界，standard 的 `proposal.md`、`design.md`、`spec.md`、`task.md` 也必须和合同等强度对齐。
+
+## 入口分类
+
+| 类型 | 适用场景 | 产物 |
+| --- | --- | --- |
+| small | 单一业务意图，最多 2 个验收场景或 2 个 required tests，且没有复杂设计分歧 | `brief.md`、`acceptance.json`、`tests/`，即 brief-only |
+| standard | 跨模块、高风险、多场景，或超过 small 上限 | `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`tests/` |
+
+micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器是风险、跨度和场景复杂度，不得为了进入 standard 硬凑测试或任务。
 
 ## 流程
 
 1. 先运行 `oz create` 获取下一个编号，只把输出整数作为 `<number>`。
 2. 根据规划结果创建 `docs/changes/<number>-<change-name>/`。
-3. 先列出 `spec.md` 场景到 `required_tests`、`required_evidence` 的验收矩阵。
-4. 再写 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`。
+3. 按 small 或 standard 先列出验收矩阵：small 可直接从 `brief.md` 的验收条目映射到 `required_tests`、`required_evidence`；standard 先列出 `spec.md` 场景到矩阵。
+4. small 写 `brief.md`、`acceptance.json` 和 `tests/`；standard 写 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`。
 5. 运行 `oz validate <change> --json`，并人工核对文档、测试和 JSON 合同是否一致。
 6. 创建阶段完成后提交提案产物，避免执行阶段误删或混入无关改动。
 
 ## 产物合同
 
 - `brief.md`：用短文说明用户问题、交付目标、非目标、验收入口和执行阶段默认上下文；让执行器无需先读长文档也能理解本次变更
-- `proposal.md`：说明做什么和为什么
-- `design.md`：说明关键技术决策、取舍和风险
-- `spec.md`：使用中文 `### 需求：` 和 `#### 场景：` 描述验收行为；每个场景都必须说明对应 `tests/` 文件、真实数据来源、入口路径、关键断言和剩余风险
-- `task.md`：拆分实现步骤和验证条件，第一组任务必须是先运行创建阶段写好的契约测试；如果功能尚未实现，预期应因目标行为缺失而失败，不得因测试语法、路径或环境配置错误失败
+- `proposal.md`：standard 必填，说明做什么和为什么；small 不要求
+- `design.md`：standard 必填，说明关键技术决策、取舍和风险；small 不要求
+- `spec.md`：standard 必填，使用中文 `### 需求：` 和 `#### 场景：` 描述验收行为；每个场景都必须说明对应 `tests/` 文件、真实数据来源、入口路径、关键断言和剩余风险；small 不要求
+- `task.md`：standard 必填，拆分实现步骤和验证条件，第一组任务必须是先运行创建阶段写好的契约测试；small 不要求
 - `acceptance.json`：结构化验收合同，必须逐条覆盖 `spec.md` 中的需求和场景，复用 `tests/` 中的契约测试，并补齐根目录端到端/回归测试、截图、trace、network、console、runtime log 等 QA 证据要求
 - `tests/`：必须包含真实项目测试代码，用来表达本次变更的核心契约；不得为空，不写测试说明文档或占位文件，但是测试文件内部要多用中文写批注，确保非专业软件工程师也能看懂
 
 创建阶段负责定义简报、核心契约测试和完整验收合同，执行阶段负责让这些测试通过。不得把核心行为标准推迟给执行器自行制定，也不得让文档承诺高于测试能证明的行为。
 
-- 先列出 `spec.md` 中每个 `#### 场景：` 的验收矩阵，再写正文；每个场景至少对应一个 `required_tests`，关键用户路径还必须对应 `required_evidence`
-- `proposal.md` 和 `spec.md` 不得写入没有测试或证据覆盖的承诺；如果暂时无法验证，只能降级为风险、非目标或开放问题
+- standard 先列出 `spec.md` 中每个 `#### 场景：` 的验收矩阵，再写正文；small 先列出 `brief.md` 验收条目到矩阵；每个场景至少对应一个 `required_tests`，关键用户路径还必须对应 `required_evidence`
+- `proposal.md`、`spec.md` 或 small `brief.md` 不得写入没有测试或证据覆盖的承诺；如果暂时无法验证，只能降级为风险、非目标或开放问题
 - 覆盖用户可感知行为：页面可见结果、CLI 输出、API 契约、状态变化、持久化结果或权限边界
 - 使用真实业务样例、真实入口和真实调用链；Web app 参照 debug 技能的端到端规则，不能跳过登录、权限、真实导航、真实 API 或真实数据库
 - 不得 mock API、mock 数据库、伪造认证、硬编码成功结果、只断言 HTTP 200、只检查元素存在、只跑组件浅层渲染，除非用户明确要求且在 `design.md` 写清原因和风险
