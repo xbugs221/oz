@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
@@ -63,10 +64,10 @@ func (r *AgentRegistry) Tool(name string) (AgentTool, error) {
 	return tool, nil
 }
 
-// ResolveForWorkflow checks every supported sealed-run CLI before state exists.
+// ResolveForWorkflow checks only the agent CLIs referenced by the effective workflow snapshot.
 func (r *AgentRegistry) ResolveForWorkflow(config WorkflowConfig) error {
 	normalizeWorkflowConfig(&config)
-	for _, name := range requiredAgentTools() {
+	for _, name := range requiredAgentTools(config) {
 		tool, err := r.Tool(name)
 		if err != nil {
 			return err
@@ -83,9 +84,18 @@ func validAgentTool(name string) bool {
 	return name == "codex" || name == "pi" || name == "agy"
 }
 
-// requiredAgentTools returns every mandatory backend checked before sealed runs.
-func requiredAgentTools() []string {
-	return []string{"codex", "pi", "agy"}
+// requiredAgentTools returns the unique backends referenced by the effective stage snapshot.
+func requiredAgentTools(config WorkflowConfig) []string {
+	required := map[string]bool{}
+	for _, options := range config.Stages {
+		required[options.Tool] = true
+	}
+	names := make([]string, 0, len(required))
+	for name := range required {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // limitAgentDiagnostics keeps process error messages useful without recreating log files.

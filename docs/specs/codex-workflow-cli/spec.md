@@ -856,23 +856,25 @@
 - **当** 当前阶段的 effective tool 为 `pi`
 - **则** 系统不得向 Pi 传递 Codex fast mode 参数
 
-### 需求：Pi 工具发现和失败边界
+### 需求：按工作流快照发现工具和约束失败边界
 
 // Sources: 14-精简后端为-codex-pi-并迁移测试
 
-系统必须在 sealed run 启动前同时检查 Codex 和 Pi 可执行文件，并在缺失时避免创建不完整运行态。
+系统必须在 sealed run 启动前只检查有效工作流快照中实际引用的 agent tool 可执行文件，并在缺失时避免创建不完整运行态。默认配置全部使用 Codex，因此不得要求用户额外安装 Pi 或 Agy。
 
-#### 场景：sealed run 启动前检查 Codex/Pi
+#### 场景：sealed run 启动前按快照检查 CLI
 
 - **给定** 任意 active change
 - **当** 用户启动 sealed run
-- **则** 系统必须同时要求本机存在 `codex` 和 `pi`
+- **且** 有效工作流快照只引用 `codex`
+- **则** 系统必须只要求本机存在 `codex`
+- **且** 不得因为缺少 `pi` 或 `agy` 而拒绝启动
 - **测试**：`tests/specs/codex-workflow-cli/test_agent_cli_preflight_contract.sh`
-- **关键断言**：缺失 `codex` 或 `pi` 时命令失败、提示安装、且不创建 run state
+- **关键断言**：只检查快照去重后的 agent tool；缺失被引用工具时提示安装且不创建 run state
 
-#### 场景：Codex 或 Pi 缺失时不创建 sealed run
+#### 场景：快照引用的 CLI 缺失时不创建 sealed run
 
-- **给定** PATH 中不存在 `codex` 或 `pi`
+- **给定** PATH 中不存在有效工作流快照引用的 agent tool
 - **当** 用户启动 sealed run
 - **则** 系统返回找不到对应可执行文件的错误
 - **且** 不创建用户状态目录中的 `runs/` 运行态文件

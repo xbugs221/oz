@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 sealed run 启动前同时检查 codex/pi/agy，并在缺失 CLI 或无效后端配置时不创建运行态。
+# 文件功能目的：验证 sealed run 启动前只检查快照引用的 agent CLI，并在依赖缺失或配置无效时不创建运行态。
 # Sources: 14-精简后端为-codex-pi-并迁移测试, 15-支持-agy-cli作为pi候选
 set -euo pipefail
 
@@ -102,6 +102,14 @@ write_demo_change "$PROJECT" "$CHANGE"
 (cd "$PROJECT" && git add . && git commit -q -m init)
 
 note "缺少 pi 时必须失败且不创建 run state"
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
+max_review_iterations: 0
+stages:
+  execution:
+    agent: pi
+  archive:
+    agent: codex
+YAML
 FAKEBIN="$TMP/bin-missing-pi"
 mkdir -p "$FAKEBIN"
 cat >"$FAKEBIN/codex" <<'SH'
@@ -126,6 +134,14 @@ assert_no_run_state "$TMP/state-missing-pi" "$STATE_SNAPSHOT"
 printf 'missing pi: no run state created\n' >"$STATE_SNAPSHOT"
 
 note "缺少 agy 时必须失败且不创建 run state"
+cat >"$PROJECT/oz-flow.yaml" <<'YAML'
+max_review_iterations: 0
+stages:
+  execution:
+    agent: agy
+  archive:
+    agent: codex
+YAML
 FAKEBIN="$TMP/bin-missing-agy"
 mkdir -p "$FAKEBIN"
 cat >"$FAKEBIN/codex" <<'SH'
@@ -154,6 +170,7 @@ assert_no_run_state "$TMP/state-missing-agy" "$TMP/missing-agy-state.txt"
 printf 'missing agy: no run state created\n' >>"$STATE_SNAPSHOT"
 
 note "缺少 codex 时必须失败且不创建 run state"
+rm -f "$PROJECT/oz-flow.yaml"
 FAKEBIN="$TMP/bin-missing-codex"
 mkdir -p "$FAKEBIN"
 cat >"$FAKEBIN/pi" <<'SH'
@@ -185,7 +202,6 @@ note "第三后端配置必须按未知工具失败"
 legacy_tool="open""code"
 cat >"$PROJECT/oz-flow.yaml" <<YAML
 max_review_iterations: 0
-parallel: false
 stages:
   execution:
     agent: ${legacy_tool}
@@ -203,4 +219,4 @@ cat "$TMP/invalid-tool.out" "$TMP/invalid-tool.err" | tee -a "$LOG"
 [[ "$code" -ne 0 ]] || fail "第三后端配置不应启动成功"
 grep -Eiq '未知|unknown|agent tool|invalid' "$TMP/invalid-tool.out" "$TMP/invalid-tool.err" || fail "第三后端配置必须报告未知工具"
 
-note "contract passed: startup preflight and backend validation are strict"
+note "contract passed: startup preflight follows the workflow snapshot and backend validation is strict"
