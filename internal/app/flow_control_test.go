@@ -278,6 +278,54 @@ func TestLoopFailsBatchOwnedRunWhenBatchHeartbeatIsStale(t *testing.T) {
 	}
 }
 
+// TestLoopReclaimsStaleLockedRun verifies loop archives an orphan before continuing.
+func TestLoopReclaimsStaleLockedRun(t *testing.T) {
+	repo := gitRepo(t)
+	installFlowControlFakeOz(t)
+	const changeName = "1-a"
+	const runID = "stale-locked-run"
+	const batchID = "stale-locked-batch"
+	writeFlowControlChange(t, repo, changeName)
+	state := workerRuntimeTestState(runID)
+	state.ChangeName = changeName
+	state.BatchID = batchID
+	if err := saveState(repo, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(runDir(repo, runID), "lock"), LockInfo{PID: 99999999, RunID: runID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveBatchState(repo, BatchState{
+		BatchID: batchID, Status: batchStatusFailed, Changes: []string{changeName},
+		RunIDs:       map[string]string{changeName: runID},
+		FailedChange: changeName, FailedRunID: runID, Error: "当前 run lock 已失效",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	previousStart := startDetachedBatchCommand
+	startDetachedBatchCommand = func(repo, batchID string) error { return nil }
+	t.Cleanup(func() { startDetachedBatchCommand = previousStart })
+
+	if _, err := runBatchLoopTick(context.Background(), &bytes.Buffer{}, repo, NewEngine(repo, NewAgentRegistry())); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := loadBatchState(repo, batchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err = loadState(repo, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Status != batchStatusArchived || state.Status != statusArchived {
+		t.Fatalf("stale recovery = batch %q run %q, want archived/%q", batch.Status, state.Status, statusArchived)
+	}
+	if _, err := os.Stat(filepath.Join(runDir(repo, runID), "lock")); !os.IsNotExist(err) {
+		t.Fatalf("stale lock remains after recovery: %v", err)
+	}
+}
+
 // TestLoopStartsActiveChangesAfterCompletedBatch verifies done history does not hide active proposals.
 func TestLoopStartsActiveChangesAfterCompletedBatch(t *testing.T) {
 	repo := gitRepo(t)

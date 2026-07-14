@@ -253,6 +253,9 @@ func archiveAndSubmitContinuation(ctx context.Context, stdout io.Writer, repo st
 	if err != nil {
 		return false, err
 	}
+	if err := markStaleRunForLoop(repo, failedRunIDForBatch(batch), reason); err != nil {
+		return false, err
+	}
 	if batch.Status == batchStatusRunning {
 		if err := markBatchFailedForLoop(repo, batch, reason); err != nil {
 			return false, err
@@ -555,6 +558,33 @@ func markBatchFailedForLoop(repo string, batch BatchState, reason string) error 
 	})
 }
 
+// markStaleRunForLoop records a monitor-confirmed orphan before batch archival.
+func markStaleRunForLoop(repo, runID, reason string) error {
+	if runID == "" {
+		return nil
+	}
+	state, err := loadState(repo, runID)
+	if err != nil {
+		return err
+	}
+	if state.Status != statusRunning {
+		return nil
+	}
+	status, err := lockFileStatus(repo, runID, runtime.GOOS)
+	if err != nil {
+		return err
+	}
+	if status != lockStatusStale {
+		return fmt.Errorf("run %s 的 lock 状态已变化，拒绝回收", runID)
+	}
+	return mergeState(repo, runID, func(state *State) {
+		if state.Status == statusRunning {
+			state.Status = statusStale
+			state.Error = reason
+		}
+	})
+}
+
 // failedRunIDForBatch returns the run that caused a failed batch to stop.
 func failedRunIDForBatch(batch BatchState) string {
 	if batch.FailedRunID != "" {
@@ -574,7 +604,7 @@ func isArchivableBatch(batch BatchState) bool {
 // isArchivableRun reports whether a run stopped because the workflow could not proceed.
 func isArchivableRun(state State) bool {
 	switch state.Status {
-	case statusFailed, statusInterrupted, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked:
+	case statusFailed, statusStale, statusInterrupted, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked:
 		return true
 	default:
 		return state.Stage == statusBlocked || state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked
