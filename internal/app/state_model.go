@@ -101,10 +101,11 @@ type StageTiming struct {
 
 // LockInfo records conservative process ownership for a run lock file.
 type LockInfo struct {
-	PID       int    `json:"pid"`
-	Hostname  string `json:"hostname"`
-	RunID     string `json:"run_id"`
-	StartedAt string `json:"started_at"`
+	PID        int    `json:"pid"`
+	Hostname   string `json:"hostname"`
+	RunID      string `json:"run_id"`
+	StartedAt  string `json:"started_at"`
+	OwnerToken string `json:"owner_token,omitempty"`
 }
 
 func parallelGroupConfigured(workflow WorkflowConfig, name string) bool {

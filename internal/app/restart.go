@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -165,6 +163,16 @@ func (e *Engine) prepareRestartBatch(batchID string, allowUnknownLock bool) erro
 	if err != nil {
 		return err
 	}
+	workerLock, err := batchWorkerLockStatus(e.Repo, batchID)
+	if err != nil {
+		return err
+	}
+	if workerLock == lockStatusActive {
+		return fmt.Errorf("批量任务 %s 仍有活动 worker，不能重启", batchID)
+	}
+	if workerLock == lockStatusUnknown {
+		return fmt.Errorf("批量任务 %s 的 worker lock 无法确认，不能重启", batchID)
+	}
 	switch batch.Status {
 	case batchStatusRunning:
 	case batchStatusFailed:
@@ -292,7 +300,7 @@ func restartLockActive(repo, runID string) (bool, error) {
 
 // clearRestartLock removes only stale or explicitly allowed unknown locks.
 func clearRestartLock(repo, runID string, allowUnknownLock bool) error {
-	status, err := lockFileStatus(repo, runID, runtime.GOOS)
+	status, err := clearInactiveRunLock(repo, runID, runtime.GOOS, allowUnknownLock)
 	if err != nil {
 		return err
 	}
@@ -302,11 +310,6 @@ func clearRestartLock(repo, runID string, allowUnknownLock bool) error {
 	case lockStatusUnknown:
 		if !allowUnknownLock {
 			return fmt.Errorf("run %s 存在无法确认的 lock，请通过交互菜单恢复或中止", runID)
-		}
-	}
-	if status == lockStatusStale || status == lockStatusUnknown {
-		if err := os.Remove(filepath.Join(runDir(repo, runID), "lock")); err != nil && !os.IsNotExist(err) {
-			return err
 		}
 	}
 	return nil

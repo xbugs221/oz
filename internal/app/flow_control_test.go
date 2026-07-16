@@ -326,6 +326,41 @@ func TestLoopReclaimsStaleLockedRun(t *testing.T) {
 	}
 }
 
+// TestAcquireLoopWorkerLockAllowsOneOwner verifies loop uses the shared atomic lease path.
+func TestAcquireLoopWorkerLockAllowsOneOwner(t *testing.T) {
+	repo := gitRepo(t)
+	unlock, acquired, err := acquireLoopWorkerLock(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired {
+		t.Fatal("first loop worker did not acquire lock")
+	}
+	defer unlock()
+	secondUnlock, secondAcquired, err := acquireLoopWorkerLock(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondAcquired || secondUnlock != nil {
+		t.Fatal("second loop worker unexpectedly acquired lock")
+	}
+	path, err := loopWorkerLockPath(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := parseLockInfo(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock.RunID != "loop" || lock.OwnerToken == "" {
+		t.Fatalf("loop lock identity is incomplete: %#v", lock)
+	}
+}
+
 // TestLoopStartsActiveChangesAfterCompletedBatch verifies done history does not hide active proposals.
 func TestLoopStartsActiveChangesAfterCompletedBatch(t *testing.T) {
 	repo := gitRepo(t)

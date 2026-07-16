@@ -3,7 +3,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -323,7 +322,7 @@ func loopWorkerActive(repo string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	status, err := lockInfoFileStatus(path, runtime.GOOS)
+	status, err := lockInfoFileStatusForResource(path, runtime.GOOS, "loop")
 	if err != nil {
 		return false, err
 	}
@@ -339,38 +338,20 @@ func acquireLoopWorkerLock(repo string) (func(), bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, false, err
-	}
-	status, err := lockInfoFileStatus(path, runtime.GOOS)
+	unlock, acquired, status, err := acquireOwnedLock(path, "loop", runtime.GOOS)
 	if err != nil {
 		return nil, false, err
 	}
-	switch status {
-	case lockStatusActive:
+	if !acquired && status == lockStatusActive {
 		return nil, false, nil
-	case lockStatusUnknown:
+	}
+	if !acquired && status == lockStatusUnknown {
 		return nil, false, fmt.Errorf("loop lock 无法确认，请稍后重试或手动检查 %s", path)
-	case lockStatusStale:
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return nil, false, err
-		}
 	}
-	hostname, _ := os.Hostname()
-	lock := LockInfo{
-		PID:       os.Getpid(),
-		Hostname:  hostname,
-		RunID:     "loop",
-		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	if !acquired {
+		return nil, false, fmt.Errorf("获取 loop lock 失败")
 	}
-	data, err := json.MarshalIndent(lock, "", "  ")
-	if err != nil {
-		return nil, false, err
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return nil, false, err
-	}
-	return func() { _ = os.Remove(path) }, true, nil
+	return unlock, true, nil
 }
 
 // loopWorkerLockPath returns the repository-scoped monitor lock file.
@@ -613,7 +594,7 @@ func isArchivableRun(state State) bool {
 
 // clearArchiveLock refuses to archive a run that may still be owned by a live worker.
 func clearArchiveLock(repo, runID string) error {
-	status, err := lockFileStatus(repo, runID, runtime.GOOS)
+	status, err := clearInactiveRunLock(repo, runID, runtime.GOOS, false)
 	if err != nil {
 		return err
 	}
@@ -622,10 +603,6 @@ func clearArchiveLock(repo, runID string) error {
 		return newRunLockedError(runID)
 	case lockStatusUnknown:
 		return fmt.Errorf("run %s 存在无法确认的 lock，不能归档", runID)
-	case lockStatusStale:
-		if err := os.Remove(filepath.Join(runDir(repo, runID), "lock")); err != nil && !os.IsNotExist(err) {
-			return err
-		}
 	}
 	return nil
 }

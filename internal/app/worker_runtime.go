@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"time"
 )
@@ -110,6 +111,11 @@ func runLifecycleLogPath(repo string, state State) string {
 
 // withBatchWorkerLifecycle records start, heartbeat, and terminal exit for one batch worker.
 func withBatchWorkerLifecycle(repo, batchID string, fn func() error) (err error) {
+	unlock, err := acquireBatchWorkerLock(repo, batchID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := recordBatchWorkerStart(repo, batchID, batchWorkerLogPath(repo, batchID), time.Now()); err != nil {
 		return err
 	}
@@ -131,6 +137,36 @@ func withBatchWorkerLifecycle(repo, batchID string, fn func() error) (err error)
 		warnWorkflowWrite("record batch worker completion", recordBatchWorkerExit(repo, batchID, workerExitCompleted, "", time.Now()))
 	}()
 	return fn()
+}
+
+// acquireBatchWorkerLock holds one batch generation exclusively for its worker lifetime.
+func acquireBatchWorkerLock(repo, batchID string) (func(), error) {
+	path := batchWorkerLockPath(repo, batchID)
+	resourceID := "batch:" + batchID
+	unlock, acquired, status, err := acquireOwnedLock(path, resourceID, runtime.GOOS)
+	if err != nil {
+		return nil, err
+	}
+	if !acquired && status == lockStatusActive {
+		return nil, fmt.Errorf("batch %s 已有活动 worker", batchID)
+	}
+	if !acquired && status == lockStatusUnknown {
+		return nil, fmt.Errorf("batch %s 的 worker lock 无法确认", batchID)
+	}
+	if !acquired {
+		return nil, fmt.Errorf("batch %s 获取 worker lock 失败", batchID)
+	}
+	return unlock, nil
+}
+
+// batchWorkerLockPath returns the lifecycle lease path for one batch worker.
+func batchWorkerLockPath(repo, batchID string) string {
+	return filepath.Join(batchDir(repo, batchID), "worker.lock")
+}
+
+// batchWorkerLockStatus classifies the lifecycle lease for restart decisions.
+func batchWorkerLockStatus(repo, batchID string) (lockStatus, error) {
+	return lockInfoFileStatusForResource(batchWorkerLockPath(repo, batchID), runtime.GOOS, "batch:"+batchID)
 }
 
 // withLoopWorkerLifecycle records start, heartbeat, and terminal exit for the repo monitor.
@@ -300,7 +336,7 @@ func writeLoopWorkerState(repo string, state WorkerRuntimeState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	return atomicWriteFile(path, append(data, '\n'), 0o644)
 }
 
 // loopWorkerStatePath returns the repo monitor diagnostic JSON path.

@@ -119,6 +119,50 @@ func TestRunWorkerLifecycleUsesBatchLogPath(t *testing.T) {
 	}
 }
 
+// TestBatchWorkerLifecycleRejectsDuplicateOwner keeps one batch generation single-worker.
+func TestBatchWorkerLifecycleRejectsDuplicateOwner(t *testing.T) {
+	repo := gitRepo(t)
+	const batchID = "single-owner-batch"
+	if err := saveBatchState(repo, BatchState{
+		BatchID: batchID,
+		Status:  batchStatusRunning,
+		Changes: []string{"1-a"},
+		RunIDs:  map[string]string{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- withBatchWorkerLifecycle(repo, batchID, func() error {
+			close(started)
+			<-release
+			return nil
+		})
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first batch worker did not acquire its lifecycle lock")
+	}
+	secondRan := false
+	err := withBatchWorkerLifecycle(repo, batchID, func() error {
+		secondRan = true
+		return nil
+	})
+	if err == nil {
+		t.Fatal("duplicate batch worker unexpectedly acquired lifecycle lock")
+	}
+	if secondRan {
+		t.Fatal("duplicate batch worker callback ran")
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRunningRunCannotAdvanceOnExpiredHeartbeat catches live-PID workers that stopped heartbeating.
 func TestRunningRunCannotAdvanceOnExpiredHeartbeat(t *testing.T) {
 	repo := gitRepo(t)

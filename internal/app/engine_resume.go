@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 )
 
@@ -35,17 +33,12 @@ func (e *Engine) ResumeDetachedAfterUserChoice(ctx context.Context, runID string
 		e.printProgress(state, "blocked")
 		return fmt.Errorf("run %s 已到达 blocked_validation_limit，无法自动继续", runID)
 	}
-	status, err := lockFileStatus(e.Repo, runID, runtime.GOOS)
+	status, err := clearInactiveRunLock(e.Repo, runID, runtime.GOOS, true)
 	if err != nil {
 		return err
 	}
 	if status == lockStatusActive {
 		return newRunLockedError(runID)
-	}
-	if status == lockStatusUnknown {
-		if err := os.Remove(filepath.Join(runDir(e.Repo, runID), "lock")); err != nil && !os.IsNotExist(err) {
-			return err
-		}
 	}
 	if err := startDetachedCommand(e.Repo, runID); err != nil {
 		return err
@@ -89,7 +82,7 @@ func (e *Engine) resumeRun(ctx context.Context, runID string, allowUnknownLock b
 		e.printProgress(state, "blocked")
 		return fmt.Errorf("run %s 已到达 blocked_validation_limit，无法自动继续", runID)
 	}
-	status, err := lockFileStatus(e.Repo, runID, runtime.GOOS)
+	status, err := clearInactiveRunLock(e.Repo, runID, runtime.GOOS, allowUnknownLock)
 	if err != nil {
 		return err
 	}
@@ -99,9 +92,6 @@ func (e *Engine) resumeRun(ctx context.Context, runID string, allowUnknownLock b
 	if status == lockStatusUnknown {
 		if !allowUnknownLock {
 			return fmt.Errorf("run %s 存在无法确认的 lock，请通过交互菜单恢复或中止", runID)
-		}
-		if err := os.Remove(filepath.Join(runDir(e.Repo, runID), "lock")); err != nil && !os.IsNotExist(err) {
-			return err
 		}
 	}
 	unlock, err := acquireLock(e.Repo, runID)

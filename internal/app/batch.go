@@ -360,7 +360,7 @@ func saveBatchState(repo string, batch BatchState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(root, "state.json"), append(data, '\n'), 0o644)
+	return atomicWriteFile(filepath.Join(root, "state.json"), append(data, '\n'), 0o644)
 }
 
 func loadBatchState(repo, batchID string) (BatchState, error) {
