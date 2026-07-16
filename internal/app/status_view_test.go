@@ -120,6 +120,39 @@ func TestStageDurationUsesUUIDv7SessionStart(t *testing.T) {
 	}
 }
 
+// TestStageDurationUsesSessionStartOnlyOnce verifies reused sessions do not backdate every repeated stage.
+func TestStageDurationUsesSessionStartOnlyOnce(t *testing.T) {
+	sessionStartedAt := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
+	state := statusViewImplementationContextState()
+	state.Status = statusDone
+	state.Stage = statusDone
+	state.Stages = map[string]string{
+		"review_1": "completed",
+		"review_2": "completed",
+	}
+	state.Sessions = map[string]string{
+		sessionStateKey("codex", "reviewer"): statusTestUUIDv7(sessionStartedAt),
+	}
+	state.StageTimings = map[string]StageTiming{
+		"review_1": {
+			StartedAt:  sessionStartedAt.Add(5 * time.Minute).Format(time.RFC3339Nano),
+			FinishedAt: sessionStartedAt.Add(15 * time.Minute).Format(time.RFC3339Nano),
+		},
+		"review_2": {
+			StartedAt:  sessionStartedAt.Add(20 * time.Minute).Format(time.RFC3339Nano),
+			FinishedAt: sessionStartedAt.Add(30 * time.Minute).Format(time.RFC3339Nano),
+		},
+	}
+
+	row := statusStageRow(t.TempDir(), state, compactStageSpecs[2], sessionStartedAt.Add(30*time.Minute))
+	if row.DurationMinutes == nil {
+		t.Fatalf("review duration missing")
+	}
+	if got, want := *row.DurationMinutes, 25.0; got != want {
+		t.Fatalf("review duration = %.2f, want %.2f", got, want)
+	}
+}
+
 // TestHumanStatusMarksUnownedRunningRunStale verifies stale locks are not shown as live work.
 func TestHumanStatusMarksUnownedRunningRunStale(t *testing.T) {
 	repo := t.TempDir()

@@ -272,6 +272,7 @@ func statusStageDuration(state State, stages []string, sessionID string, now tim
 	total := 0.0
 	found := false
 	sessionStartedAt, hasSessionStartedAt := statusUUIDv7StartedAt(sessionID)
+	mayApplySessionStart := hasSessionStartedAt
 	for _, stage := range stages {
 		timing, ok := state.StageTimings[stage]
 		if !ok || timing.StartedAt == "" {
@@ -281,9 +282,10 @@ func statusStageDuration(state State, stages []string, sessionID string, now tim
 		if err != nil {
 			continue
 		}
-		if hasSessionStartedAt && sessionStartedAt.Before(startedAt) {
+		if mayApplySessionStart && sessionStartedAt.Before(startedAt) {
 			startedAt = sessionStartedAt
 		}
+		mayApplySessionStart = false
 		finishedAt := now
 		if timing.FinishedAt != "" {
 			finishedAt, err = time.Parse(time.RFC3339Nano, timing.FinishedAt)
