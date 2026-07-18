@@ -19,7 +19,7 @@
 - **则** 输出第一行必须是 `- <change-name>`
 - **并且** 输出中不得出现独立的 `b1 1/1` 或 `w1` 顶部 header
 - **并且** 默认“正在查看最近一次批量工作流”提示不得出现在列表前
-- **测试**：`docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库和真实 `XDG_STATE_HOME` runtime 目录中写入 batch state 与 run state
 - **入口路径**：`printHumanStatus` 和 `watchStatusLines`，覆盖 `wo status/watch` human 渲染核心路径
 - **关键断言**：第一行是提案名；禁止 batch/workflow header；status running 阶段保留 `→`
@@ -32,7 +32,7 @@
 - **则** spinner 必须出现在 `执行阶段` 行的 marker 列
 - **并且** 顶部不得显示 spinner header
 - **并且** `wo status` 同一状态仍显示静态 `→`
-- **测试**：`docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`
 - **真实数据来源**：同一份 run state 中的 `status=running`、`stage=execution`、executor session
 - **入口路径**：`watchStatusLines(repo, "batch", ...)` 和 `watchStatusLines(repo, "run", ...)`
 - **关键断言**：watch 中 `执行阶段 writer-session | -` 和 `执行阶段 writer-session / -` 存在；`| b1`、`/ w1` 不存在
@@ -48,7 +48,7 @@
 - **当** 用户在伪 TTY 中运行 `wo watch` 并捕获多个刷新帧
 - **则** 根据终端控制序列还原出的最终屏幕第一条业务行必须是 `- <change-name>`
 - **并且** 最终屏幕不得残留 `b1`、`w1` 或旧 spinner header
-- **测试**：`docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh`
 - **真实数据来源**：测试构建真实 `wo` 二进制，创建临时 git 仓库、真实 runtime state 和 batch state
 - **入口路径**：`script -q -c "wo watch"` 提供伪 TTY，`timeout -s INT` 捕获多个刷新帧
 - **关键断言**：最终屏幕无 batch/workflow header；第一条业务行是长提案名；running 阶段仍存在 spinner marker

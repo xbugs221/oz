@@ -5,7 +5,7 @@
 交付目标：
 
 - 非开发用户可见的帮助、配置、状态、graph、错误输出和文档中不再出现 `go-dag`、Dagu 或“engine”选择概念。
-- 根目录历史 `tests/2026-*` shell 测试不再作为活跃测试层保留；仍有价值的业务场景迁移到当前 `tests/specs` 或 Go 测试。
+- 根目录历史 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/2026-*` shell 测试不再作为活跃测试层保留；仍有价值的业务场景迁移到当前 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs` 或 Go 测试。
 - 活跃源码、规格、测试和模板不再保留旧 `wo` 产品面、旧 `.wo` 运行态、`wo.yaml`、独立 `cmd/wo` 或 legacy-agent/opencode 迁移残留。
 - 保留必要的“旧输入被拒绝”合同，但这些合同只能证明旧格式失败，不能把旧格式写成当前用户合同。
 
@@ -17,9 +17,9 @@
 
 验收入口：
 
-- `bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh`
-- `bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh`
-- `bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh`
-- `bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh`
+- `bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh`
+- `bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh`
+- `bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh`
+- `bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh`
 
-执行阶段默认上下文：先读 `README.md`、`docs/specs/codex-workflow-cli/spec.md`、`tests/specs/codex-workflow-cli/test_no_wo_legacy_surface_contract.sh`、`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`、`internal/app/command_dispatch.go`、`internal/app/graph.go`、`internal/app/config.go`、`internal/app/state_store.go` 和根目录 `tests/`。清理时优先迁移仍有业务价值的当前合同，再删除过期历史脚本。
+执行阶段默认上下文：先读 `README.md`、`docs/specs/codex-workflow-cli/spec.md`、`tests/specs/codex-workflow-cli/test_no_wo_legacy_surface_contract.sh`、`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`、`internal/app/command_dispatch.go`、`internal/app/graph.go`、`internal/app/config.go`、`internal/app/state_store.go` 和根目录 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/`。清理时优先迁移仍有业务价值的当前合同，再删除过期历史脚本。

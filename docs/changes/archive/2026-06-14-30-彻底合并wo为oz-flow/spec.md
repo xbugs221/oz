@@ -13,7 +13,7 @@
 
 #### 场景：仓库只构建一个 oz 二进制且 flow 命令组可用
 
-- **测试文件**：`docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`
 - **真实数据来源**：仓库真实 Go CLI 入口、GitHub Actions 配置、README、当前 git 临时项目和 `oz flow` 实际命令输出。
 - **入口路径**：从仓库根目录运行 shell 合同测试，测试内部执行 `go build -o "$tmp/oz" ./cmd/oz` 和多个 `oz flow` 只读命令。
 - **关键断言**：
@@ -30,7 +30,7 @@
 
 #### 场景：活跃产品面不再残留 wo 命名或兼容合同
 
-- **测试文件**：`docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`
 - **真实数据来源**：仓库活跃源码目录、模板目录、README、GitHub Actions、长期 specs/tests 和 Go module 元数据。
 - **入口路径**：从仓库根目录运行 shell 合同测试，测试内部使用 `rg` 扫描当前产品路径。
 - **关键断言**：

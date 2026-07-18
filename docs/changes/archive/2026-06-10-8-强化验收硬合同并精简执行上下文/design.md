@@ -31,7 +31,7 @@ skill 是生成建议，不能作为硬门槛。`oz validate` 必须在实现前
 - `state.json`
 - 当前 change 的 `brief.md`
 - 当前 change 的 `acceptance.json`
-- 当前 change 的 `tests/`
+- 当前 change 的 `docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/`
 
 `proposal.md`、`design.md`、`spec.md`、`task.md` 只在以下情况下按需读取：验收合同和用户最新意图冲突、历史测试需要更新、实现路径存在会影响架构的分歧、或 review/QA 证据指向长文档中的风险。
 

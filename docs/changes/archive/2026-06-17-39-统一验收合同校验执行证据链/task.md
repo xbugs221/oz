@@ -2,7 +2,7 @@
 
 ## 契约测试先行
 
-- [x] 运行 `bash docs/changes/39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh`，确认失败点来自 lifecycle 边界缺失。
+- [x] 运行 `bash docs/changes/archive/2026-06-17-39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh`，确认失败点来自 lifecycle 边界缺失。
 - [x] 记录失败日志到 `test-results/39-acceptance-lifecycle/contract.log`。
 - [x] 运行 `go test ./internal/acceptance ./internal/ozcli ./internal/app`，确认基线。
 - [x] 阅读 `internal/acceptance/acceptance.go`。

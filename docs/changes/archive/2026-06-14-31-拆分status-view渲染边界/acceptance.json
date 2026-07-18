@@ -12,8 +12,8 @@
     {
       "id": "status-view-boundary",
       "source": "change_contract",
-      "path": "docs/changes/31-拆分status-view渲染边界/tests/status_view_boundary_test.sh",
-      "command": "bash docs/changes/31-拆分status-view渲染边界/tests/status_view_boundary_test.sh",
+      "path": "docs/changes/archive/2026-06-14-31-拆分status-view渲染边界/tests/status_view_boundary_test.sh",
+      "command": "bash docs/changes/archive/2026-06-14-31-拆分status-view渲染边界/tests/status_view_boundary_test.sh",
       "purpose": "通过 status-view-boundary-log 证明 status view 的模型、耗时、渲染和 stale 判断已经拆分，并且相关 Go 回归通过。",
       "assertions": [
         "status view 模型构建、耗时计算、紧凑渲染和 stale 判断分别位于独立 Go 文件",

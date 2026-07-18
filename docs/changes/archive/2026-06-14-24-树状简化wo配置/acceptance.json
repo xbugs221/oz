@@ -36,8 +36,8 @@
     {
       "id": "tree-config-contract",
       "source": "change_contract",
-      "path": "docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh",
-      "command": "bash docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_tree_config_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_tree_config_contract.sh",
       "purpose": "证明默认 wo.yaml 使用根节点树状 stages.before 配置，并显式生成 test-results/24-树状简化wo配置/tree-config.log、generated-wo.yaml 和 graph.json 作为证据。",
       "assertions": [
         "默认 wo.yaml 不包含 wo/workflow/engine/defaults/iterations/permissions/cli/tool/groups/mode/model 等旧字段或默认模型字段",
@@ -49,8 +49,8 @@
     {
       "id": "legacy-config-rejection-contract",
       "source": "change_contract",
-      "path": "docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh",
-      "command": "bash docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh",
       "purpose": "证明旧字段被硬拒绝，并显式生成 test-results/24-树状简化wo配置/legacy-config-rejection.log 作为证据。",
       "assertions": [
         "包含 wo 或 workflow 顶层的旧格式 wo.yaml 被拒绝",
@@ -62,8 +62,8 @@
     {
       "id": "subagent-relevance-contract",
       "source": "change_contract",
-      "path": "docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh",
-      "command": "bash docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_subagent_relevance_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_subagent_relevance_contract.sh",
       "purpose": "证明阶段和子代理会话模型透传、validation.limit、默认子代理启动和 relevant:false 快速退出，并显式生成 test-results/24-树状简化wo配置/subagent-relevance.log 与 subagent-relevance-state.json。",
       "assertions": [
         "execution 主阶段收到 -m codex-exec-model，浏览器子代理收到 --model pi-browser-model，未配置模型的子代理不收到 --model",

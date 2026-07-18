@@ -12,7 +12,7 @@
 
 #### 场景：dry-run JSON 展示将删除和保护项且不删除文件
 
-- **测试**：`docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`
+- **测试**：`docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`
 - **真实数据来源**：契约测试创建的临时真实 git 仓库和 XDG runtime state。
 - **入口路径**：`oz flow clean --dry-run --json`。
 - **关键断言**：输出包含 failed run 的 delete 计划；dry-run 后 run 目录仍存在。
@@ -24,7 +24,7 @@
 
 #### 场景：apply 使用同一计划删除 failed run
 
-- **测试**：`docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`
+- **测试**：`docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`
 - **真实数据来源**：同一个临时 runtime state。
 - **入口路径**：`oz flow clean`。
 - **关键断言**：dry-run 不删除；实际 clean 删除同一个 failed run。
@@ -36,7 +36,7 @@
 
 #### 场景：核心 workflow 测试存在共享 fixture
 
-- **测试**：`docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`
+- **测试**：`docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`
 - **真实数据来源**：`internal/app` 测试源码。
 - **入口路径**：shell 契约测试静态检查并运行 `go test ./internal/app`。
 - **关键断言**：存在 workflow fixture 测试 helper；核心 Go 测试继续通过。

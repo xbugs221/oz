@@ -35,10 +35,10 @@
 
 本提案通过以下真实测试和回归测试验收：
 
-- `docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh`
-- `docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh`
-- `docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh`
-- `docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`
+- `docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh`
+- `docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh`
+- `docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh`
+- `docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`
 - `go test ./...`
 
 这些测试使用真实构建出的 `wo` 二进制、真实 `go-dag` 入口、临时 git 仓库、fake `codex/pi/oz` CLI 和真实状态目录。执行阶段不得通过删除测试、放宽断言、禁用 artifact gate 或绕过 batch 状态来通过验收。

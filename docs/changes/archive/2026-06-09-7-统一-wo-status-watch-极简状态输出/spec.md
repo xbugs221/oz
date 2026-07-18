@@ -15,7 +15,7 @@
 
 #### 场景：单 workflow status/watch 使用同一套固定列视图
 
-- **对应测试**：`docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库中创建真实 run state、真实 `stage_timings`、真实 `dag_nodes`、真实 subagent session 记录和真实 `parallel-members/...json` / `parallel-implementation-context.json` artifact。
 - **入口路径**：调用 `internal/app.Run([]string{"status", "-w1"}, ...)` 覆盖 `wo status -w1` 命令解析和状态读取；调用 `watchStatusLines` 覆盖 `wo watch -w1` 的刷新帧渲染。
 - **关键断言**：`status` 第一行为 `→ w1`；`watch` 第一行为 `| w1`；主阶段行固定为 `规划阶段 planner-session ✓ 2.00`、`执行阶段 writer-session → 6.50` 等四列；子代理行缩进两格并显示 `代码侦察`、`外部资料` 短名；输出不包含 `工作流`、`引擎`、`并行`、`耗时`、`implementation_context` 或完整子代理长名。
@@ -27,7 +27,7 @@
 
 #### 场景：batch 外层只包装多个极简 workflow 视图
 
-- **对应测试**：`docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh`
 - **真实数据来源**：同一测试创建真实 batch state，包含一个已创建 running run 和一个尚未开始的 change。
 - **入口路径**：调用 `watchStatusLines(repo, "batch", StatusRef{Alias:"b1", ...}, "|")` 覆盖 `wo watch -b1` 的 batch 帧渲染。
 - **关键断言**：batch 第一行为 `| b1 1/2`；已创建 run 在 change 名下缩进展示 `→ w1` 和固定列阶段/子代理行；未开始 change 只显示 change 名，不伪造 workflow 行。
@@ -39,7 +39,7 @@
 
 #### 场景：JSON rows 给出阶段和子代理固定产物路径
 
-- **对应测试**：`docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库中创建真实 change 文档、真实 run state、真实 DAG node artifact 路径和真实 subagent artifact 文件。
 - **入口路径**：调用 `internal/app.Run([]string{"status", "--run-id", runID, "--json"}, ...)` 覆盖 `wo status --run-id <run-id> --json` 路径。
 - **关键断言**：JSON 包含 `observability.engine`、`observability.rows` 和 `observability.artifacts`；执行阶段 row 的 `artifacts.stage_artifact` 指向 `docs/changes/<change>/task.md`；审核、测试、归档阶段即使尚未开始也给出 `review-1.json`、`qa-1.json`、`delivery-summary.md` 预期路径；子代理 row 给出 `member_artifact` 和 `group_artifact` 绝对路径。
@@ -51,7 +51,7 @@
 
 #### 场景：新增 observability 时保留既有 runner 顶层字段
 
-- **对应测试**：`docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh` 和 `go test ./internal/app`
+- **对应测试**：`docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh` 和 `go test ./internal/app`
 - **真实数据来源**：同一真实 run state 通过 `wo status --run-id --json` 输出，现有 `internal/app` 回归测试覆盖历史 runner DTO 行为。
 - **入口路径**：`internal/app.Run([]string{"status", "--run-id", runID, "--json"}, ...)` 和 `go test ./internal/app`。
 - **关键断言**：旧顶层字段仍存在且值不变；`observability` 是新增字段，不替代 `paths` 或 `sessions`；既有 internal/app 回归测试通过。

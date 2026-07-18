@@ -24,8 +24,8 @@
     {
       "id": "strict-acceptance-contract-validation",
       "source": "change_contract",
-      "path": "docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_strict_acceptance_contract_validation.sh",
-      "command": "bash docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_strict_acceptance_contract_validation.sh",
+      "path": "docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/test_strict_acceptance_contract_validation.sh",
+      "command": "bash docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/test_strict_acceptance_contract_validation.sh",
       "purpose": "证明 oz validate 会拒绝缺少业务级断言或只包含弱表面断言的验收合同，并接受强合同",
       "assertions": [
         "缺少 required_tests[].assertions 的 acceptance.json 被 oz validate 拒绝",
@@ -37,20 +37,20 @@
     {
       "id": "execution-hard-contract-prompt",
       "source": "change_contract",
-      "path": "docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_execution_prompt_hard_contract_focus.sh",
-      "command": "bash docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_execution_prompt_hard_contract_focus.sh",
+      "path": "docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/test_execution_prompt_hard_contract_focus.sh",
+      "command": "bash docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/test_execution_prompt_hard_contract_focus.sh",
       "purpose": "证明 execution prompt 默认聚焦 brief、acceptance 和 tests，不再要求读取所有长文档",
       "assertions": [
         "渲染后的 execution prompt 包含 brief.md、acceptance.json、tests/ 和 required_tests[].command",
         "渲染后的 execution prompt 不再包含旧的 proposal/design/spec/task/acceptance/tests 全量必读句式"
       ],
-      "expected_initial_failure": "当前 wo-start.md 仍要求读取 proposal.md、design.md、spec.md、task.md、acceptance.json 和 tests/"
+      "expected_initial_failure": "当前 wo-start.md 仍要求读取 proposal.md、design.md、spec.md、task.md、acceptance.json 和 docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/"
     },
     {
       "id": "status-hard-contract-summary",
       "source": "change_contract",
-      "path": "docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_status_hard_contract_summary.sh",
-      "command": "bash docs/changes/8-强化验收硬合同并精简执行上下文/tests/test_status_hard_contract_summary.sh",
+      "path": "docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/test_status_hard_contract_summary.sh",
+      "command": "bash docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/test_status_hard_contract_summary.sh",
       "purpose": "证明 oz status --json 暴露 brief.md artifact 和验收合同摘要",
       "assertions": [
         "status artifacts 包含 brief.md 且状态为 present",

@@ -12,7 +12,7 @@
 
 #### 场景：status 展示统一到共享 view model
 
-- **测试文件**：`docs/changes/27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-14-27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh`
 - **真实数据来源**：现有 `internal/app/status_view_test.go` 构造的真实 `State`、DAG 节点、session、parallel artifact 和 stale lock 状态。
 - **入口路径**：从仓库根目录运行 shell 合同测试，测试内部执行 `go test ./internal/app` 的 status/view/watch/runner JSON 回归。
 - **关键断言**：

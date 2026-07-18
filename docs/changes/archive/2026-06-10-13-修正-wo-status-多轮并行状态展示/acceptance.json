@@ -30,8 +30,8 @@
     {
       "id": "status-multiround-parallel-display-contract",
       "source": "change_contract",
-      "path": "docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh",
-      "command": "bash docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh",
       "purpose": "证明 human status/watch 在多轮 review/fix 与 parallel subagent 并存时输出极简、准确、当前轮次一致的状态视图。",
       "assertions": [
         "输出不包含 parallel fan-in summary、internal group name 或 raw member status",

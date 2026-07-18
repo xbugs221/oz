@@ -29,9 +29,9 @@
 
 本提案通过两个真实 CLI 合同测试验收：
 
-- `docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`
-- `docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh`
-- `docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`
-- `docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh`
+- `docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`
+- `docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh`
+- `docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`
+- `docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh`
 
 这些测试都从源码构建真实 `wo` 二进制，在临时 git 仓库中执行公开命令，避免依赖当前仓库的 `wo.yaml` 覆盖默认行为。

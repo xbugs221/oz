@@ -2,8 +2,8 @@
 
 ## 1. 先运行创建阶段契约测试
 
-- [x] 1.1 运行 `bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh`，确认当前实现因新增非当前 change 被误拦截而失败。
-- [x] 1.2 运行 `bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh`，确认主规格尚未描述新的保护边界。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh`，确认当前实现因新增非当前 change 被误拦截而失败。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh`，确认主规格尚未描述新的保护边界。
 
 ## 2. 实现路径感知保护
 
@@ -21,5 +21,5 @@
 ## 4. 文档和长期测试
 
 - [x] 4.1 更新 `docs/specs/codex-workflow-cli/spec.md` 的人工干预保护描述。
-- [x] 4.2 补充 `tests/app` 或 `tests/specs/codex-workflow-cli` 长期回归测试。
+- [x] 4.2 补充 `docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/app` 或 `tests/specs/codex-workflow-cli` 长期回归测试。
 - [x] 4.3 运行本提案契约测试、对应长期测试和 `oz validate 16-允许运行中追加新需求但保留subagent写保护 --json`。

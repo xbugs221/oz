@@ -21,7 +21,7 @@
 
 验收入口：
 
-- `bash docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
+- `bash docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
 - `oz validate 42-拆除固定子代理编排 --json`
 
 执行阶段默认上下文：先运行创建阶段契约测试，确认失败点来自现有固定子代理编排仍存在；再按 `task.md` 拆除配置、DAG、prompt 和 status 观测边界。实现时不要新增替代性的 oz 子代理调度层。

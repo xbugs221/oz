@@ -22,8 +22,8 @@ mkdir -p "$RESULT_DIR"
 
 cd "$ROOT"
 
-note "确认当前 tests/specs 仍作为业务合同入口存在"
-[[ -d tests/specs ]] || fail "缺少当前 specs 测试目录 tests/specs"
+note "确认当前 docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs 仍作为业务合同入口存在"
+[[ -d docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs ]] || fail "缺少当前 specs 测试目录 docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs"
 
 note "根目录 tests 不应再保留 2026-* 历史 shell 测试"
 dated_tests="$(fd -t f '^2026-.*\.sh$' tests 2>/dev/null || true)"

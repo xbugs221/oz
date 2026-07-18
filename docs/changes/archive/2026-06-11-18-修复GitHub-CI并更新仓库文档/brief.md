@@ -8,5 +8,5 @@ GitHub `xbugs221/oz` 的最新 CI 在 `2026-06-10` 连续失败，最新失败 r
 
 验收入口：
 
-- `docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh`
-- `docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh`
+- `docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh`
+- `docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh`

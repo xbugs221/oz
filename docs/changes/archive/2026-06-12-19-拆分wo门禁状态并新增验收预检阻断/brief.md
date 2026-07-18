@@ -30,7 +30,7 @@ wo 目前把阶段产物门禁和确定性命令门禁都记录到 `state.valida
 创建阶段契约测试：
 
 ```bash
-bash docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh
+bash docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh
 ```
 
 执行阶段默认上下文：

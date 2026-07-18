@@ -2,9 +2,9 @@
 
 ## 1. 先运行创建阶段契约测试
 
-- [x] 1.1 运行 `bash docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh`，确认当前实现失败于旧 YAML 结构或旧默认模板仍存在，而不是测试语法错误
-- [x] 1.2 运行 `bash docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh`，确认当前实现失败于旧字段仍被接受，而不是测试环境错误
-- [x] 1.3 运行 `bash docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`，确认当前实现失败于树状配置、`relevant:false` schema 或模型透传缺失
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_tree_config_contract.sh`，确认当前实现失败于旧 YAML 结构或旧默认模板仍存在，而不是测试语法错误
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh`，确认当前实现失败于旧字段仍被接受，而不是测试环境错误
+- [x] 1.3 运行 `bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`，确认当前实现失败于树状配置、`relevant:false` schema 或模型透传缺失
 - [x] 1.4 保存测试输出到 `test-results/24-树状简化wo配置/`
 
 ## 2. 重构配置解析

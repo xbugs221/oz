@@ -42,8 +42,8 @@
     {
       "id": "review-non-blocking-debt",
       "source": "change_contract",
-      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh",
-      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh",
       "purpose": "证明 clean review 可以记录 out-of-scope 历史债务，但 blocking findings 仍不能出现在 clean review。",
       "assertions": [
         "包含 non_blocking_findings 且 scope=out_of_scope_existing 的 clean review artifact 可以被 ReadReview 和 ValidateReview 接受",
@@ -55,8 +55,8 @@
     {
       "id": "parallel-scope-gate",
       "source": "change_contract",
-      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh",
-      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh",
       "purpose": "证明 parallel review gate 只阻断当前提案范围内 severe finding，且旧格式 missing scope 保持硬阻断。",
       "assertions": [
         "scope=out_of_scope_existing 的 major finding 不阻断 clean review",
@@ -68,8 +68,8 @@
     {
       "id": "qa-acceptance-scope",
       "source": "change_contract",
-      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh",
-      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh",
       "purpose": "证明 QA 可以记录非阻断历史债务，但 acceptance_matrix 仍只能覆盖 acceptance.json 已定义 id。",
       "assertions": [
         "clean QA artifact 的 acceptance_matrix 覆盖 required_tests 和 required_evidence 后通过",
@@ -81,8 +81,8 @@
     {
       "id": "legacy-active-change-compatibility",
       "source": "change_contract",
-      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh",
-      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh",
       "purpose": "证明已创建但未运行的旧提案不需要补 scope 或 non_blocking 字段，仍能通过 oz validate。",
       "assertions": [
         "临时旧格式 active change 包含既有文档、tests 和 acceptance.json 后通过 oz validate",
@@ -94,8 +94,8 @@
     {
       "id": "prompt-scope-contract",
       "source": "change_contract",
-      "path": "docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh",
-      "command": "bash docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh",
       "purpose": "证明 review 和 QA prompt 明确要求 scope 分类、非阻断历史债务和当前范围硬阻断边界。",
       "assertions": [
         "review prompt 包含 non_blocking_findings 和 out_of_scope_existing",

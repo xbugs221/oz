@@ -18,8 +18,8 @@
     {
       "id": "status-view-contract",
       "source": "change_contract",
-      "path": "docs/changes/23-统一状态展示视图模型/tests/status-view-contract_test.sh",
-      "command": "bash docs/changes/23-统一状态展示视图模型/tests/status-view-contract_test.sh",
+      "path": "docs/changes/archive/2026-06-14-23-统一状态展示视图模型/tests/status-view-contract_test.sh",
+      "command": "bash docs/changes/archive/2026-06-14-23-统一状态展示视图模型/tests/status-view-contract_test.sh",
       "purpose": "验证状态展示视图统一并生成 status-view-contract-log 到 test-results/refactor-stability/status-view-contract.log",
       "assertions": [
         "internal/app 必须存在 status_render.go 或等价 status render 源文件",

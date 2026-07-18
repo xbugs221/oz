@@ -15,7 +15,7 @@
 
 验收入口：
 
-- `bash docs/changes/26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh`
+- `bash docs/changes/archive/2026-06-14-26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh`
 - `go test ./internal/app -count=1`
 
 执行阶段默认上下文：先读 `internal/app/state.go`、`internal/app/stage_decision.go`、`internal/app/go_dag.go`、`internal/app/runner_contract.go` 和本提案测试，先让合同测试因目标边界缺失而失败，再做最小拆分。

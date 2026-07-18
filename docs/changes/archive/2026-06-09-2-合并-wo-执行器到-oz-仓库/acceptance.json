@@ -4,15 +4,15 @@
     {
       "id": "monorepo-cli-release-contract",
       "source": "change_contract",
-      "path": "docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh",
-      "command": "bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh",
       "purpose": "证明合并后的仓库可以从同一 checkout 构建 oz 和 wo，wo 不再引用旧模块路径，CI/Release 不再下载外部 latest oz。"
     },
     {
       "id": "oz-acceptance-validation-contract",
       "source": "change_contract",
-      "path": "docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh",
-      "command": "bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh",
       "purpose": "证明 oz validate 接受当前 wo 允许的 acceptance.json 格式，并拒绝缺失或包含未知字段的验收合同。"
     }
   ],

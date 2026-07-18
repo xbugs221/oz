@@ -48,7 +48,7 @@ agy help 暂未显示 JSONL session 输出。首次执行如果无法从 stdout/
 - 配置和预检测试：证明 `agy` 可作为 stage 和 parallel member tool，且缺失 agy 时 sealed run 不创建状态。
 - 参数映射测试：用 fake agy 捕获 argv，证明 sealed runner 和 planning command 使用正确参数，不 shell 拼接 prompt，不把 agy 当成 pi。
 
-执行阶段应把这些契约沉淀为 `tests/specs/codex-workflow-cli/` 或 `tests/app/` 下的长期回归测试。
+执行阶段应把这些契约沉淀为 `tests/specs/codex-workflow-cli/` 或 `docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/app/` 下的长期回归测试。
 
 ## 风险
 

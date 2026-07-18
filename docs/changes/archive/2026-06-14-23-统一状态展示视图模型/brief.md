@@ -20,7 +20,7 @@
 
 ## 验收入口
 
-执行 `bash docs/changes/23-统一状态展示视图模型/tests/status-view-contract_test.sh`。
+执行 `bash docs/changes/archive/2026-06-14-23-统一状态展示视图模型/tests/status-view-contract_test.sh`。
 
 ## 执行阶段默认上下文
 

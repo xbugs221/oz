@@ -16,7 +16,7 @@
 
 验收入口：
 
-- `bash docs/changes/27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh`
+- `bash docs/changes/archive/2026-06-14-27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh`
 - `go test ./internal/app -run 'TestStatusView|TestPrintHumanStatus|TestWatch|TestRunner|TestCompactStatus|TestHumanStatus' -count=1`
 
 执行阶段默认上下文：先读 `internal/app/status_view.go`、`internal/app/status_render.go`、`internal/app/status_view_test.go` 和 `internal/app/app.go` 中的旧 checklist helper，保持输出合同再迁移。

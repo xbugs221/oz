@@ -23,7 +23,7 @@ go-dag nodeRunStage
 | 阶段模板 | 首轮必须包含 | 续轮允许省略 |
 | --- | --- | --- |
 | `wo-discuss.md` | 当前处于讨论规划阶段，并明确调用 `oz-plan` | 无主阶段 artifact，不强制续轮分支 |
-| `wo-start.md` | `state.json`、change 目录、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`tests/`、`required_tests`、不得删除/弱化/跳过契约、`oz status` task 完成标准、只实现当前 change | execution 没有可省略的首轮合同；如果后续增加 execution resume，也必须保留当前 change、acceptance 和 task 完成标准 |
+| `wo-start.md` | `state.json`、change 目录、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/`、`required_tests`、不得删除/弱化/跳过契约、`oz status` task 完成标准、只实现当前 change | execution 没有可省略的首轮合同；如果后续增加 execution resume，也必须保留当前 change、acceptance 和 task 完成标准 |
 | `wo-review.md` | baseline diff、change 文档、acceptance 合同、task 完成状态、测试/运行证据、`review-N.json` 输出路径、严格 JSON schema、clean/needs_fix 规则、parallel review 汇总规则 | JSON 示例和长 schema 示例；仍必须保留 `review-N.json`、上一轮 review/fix 引用和“只输出 JSON” |
 | `wo-qa.md` | `review-N.json`、change 文档、`acceptance.json`、`required_tests`、`required_evidence`、真实用户路径复测、`acceptance_matrix`、`qa-N.json` 输出路径、不得修改源码或 acceptance | clean/needs_fix 示例；仍必须保留 `qa-N.json`、acceptance matrix 和 role session |
 | `wo-fix.md` | 当前 review/QA findings、只修当前 findings、根因分析、禁止只按错误文本打补丁、不得删除/弱化 acceptance、验证命令、`fix-N-summary.md` 输出路径 | 根因分析方法论长文；仍必须保留当前 review/QA 路径、fix summary 路径和验证要求 |

@@ -26,7 +26,7 @@ GitHub CI
 README 需要说明 GitHub `CI` 和 `Release` 的公共门禁，至少覆盖：
 
 - `go test ./...`
-- 遍历运行根目录 `tests/*.sh`
+- 遍历运行根目录 `docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/*.sh`
 - 本地构建 `./cmd/oz` 和 `./cmd/wo`
 - GitHub 失败后如何先用本地命令复现
 

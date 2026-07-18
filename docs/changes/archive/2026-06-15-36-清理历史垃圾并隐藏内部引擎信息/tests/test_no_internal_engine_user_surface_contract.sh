@@ -43,7 +43,7 @@ scan_paths=(
   docs/specs
   prompts-template
   profiles-template
-  tests/specs
+  docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs
   .github/workflows
 )
 if hits="$(rg -n -i --glob '!docs/changes/archive/**' '\bgo-dag\b|\bdagu\b|engine: go-dag|引擎 go-dag' "${scan_paths[@]}" 2>/dev/null || true)" && [[ -n "$hits" ]]; then

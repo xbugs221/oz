@@ -1,6 +1,6 @@
 # 任务
 
-- [x] 1.1 先运行 `bash docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh`，确认失败点是配置边界文件缺失或 `config.go` 仍承载拆分职责。
+- [x] 1.1 先运行 `bash docs/changes/archive/2026-06-14-29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh`，确认失败点是配置边界文件缺失或 `config.go` 仍承载拆分职责。
 - [x] 1.2 新增 `config_schema.go`，迁出 YAML input 类型、严格解码、legacy root 检测和 input 合并。
 - [x] 1.3 新增 `config_profiles.go`，迁出 profile registry、profile YAML 渲染和 prompt 注入。
 - [x] 1.4 新增 `config_parallel.go`，迁出 parallel/subagents/stages.before 展开与校验。

@@ -17,7 +17,7 @@
 
 #### 场景：wo graph 不再暴露 Dagu 格式
 
-- **测试文件**：`docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`
 - **真实数据来源**：测试脚本构造临时 git 仓库，使用源码构建出的真实 `wo` 二进制执行 `wo graph --change demo --format json|mermaid|dagu`
 - **入口路径**：`wo graph --change demo --format <format>`
 - **关键断言**：
@@ -29,7 +29,7 @@
 
 #### 场景：workflow.engine 只接受 go-dag
 
-- **测试文件**：`docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_no_dagu_graph_engine_contract.sh`
 - **真实数据来源**：同一个临时 git 仓库写入不同 `wo.yaml`，分别使用 `engine: legacy`、`engine: dagu` 和 `wo run --engine dagu --json` 验证公开入口
 - **入口路径**：`wo graph --change demo --format json`、`wo run --change demo --engine dagu --json`
 - **关键断言**：
@@ -45,7 +45,7 @@
 
 #### 场景：默认 subagent tool 为 pi
 
-- **测试文件**：`docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_default_subagent_pi_contract.sh`
 - **真实数据来源**：测试脚本构造没有 `wo.yaml` 的临时 git 仓库，运行源码构建出的真实 `wo config`
 - **入口路径**：`wo config`、`wo graph --change demo --format json`
 - **关键断言**：
@@ -61,7 +61,7 @@
 
 #### 场景：默认最大迭代数为 5
 
-- **测试文件**：`docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`
 - **真实数据来源**：测试脚本构造没有 `wo.yaml` 的临时 git 仓库，运行源码构建出的真实 `wo config`
 - **入口路径**：`wo config`
 - **关键断言**：
@@ -72,7 +72,7 @@
 
 #### 场景：wo graph 输出紧凑中文图
 
-- **测试文件**：`docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_compact_chinese_graph_and_iteration_limit.sh`
 - **真实数据来源**：同一个临时 git 仓库使用默认 `wo.yaml` 执行真实 `wo graph --change demo --format mermaid`
 - **入口路径**：`wo graph --change demo --format mermaid`
 - **关键断言**：
@@ -88,7 +88,7 @@
 
 #### 场景：subagent artifact 类型错误会 resume 原会话修正
 
-- **测试文件**：`docs/changes/4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-4-清理-Dagu-残留并统一-pi-subagents/tests/test_subagent_artifact_retry_contract.sh`
 - **真实数据来源**：测试脚本构造临时 git 仓库和 fake `pi`，使用源码构建出的真实 `wo` 二进制运行默认 go-dag workflow；fake `pi` 第一次为同一个 subagent 写出对象数组 `evidence`，第二次在收到 schema 修正提示和原 session id 后写出字符串数组 `evidence`
 - **入口路径**：`wo run --change <change> --json`
 - **关键断言**：

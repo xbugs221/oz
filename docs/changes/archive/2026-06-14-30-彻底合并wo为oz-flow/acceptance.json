@@ -18,8 +18,8 @@
     {
       "id": "single-oz-flow-binary-contract",
       "source": "change_contract",
-      "path": "docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh",
-      "command": "bash docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh",
       "purpose": "证明仓库最终只构建 oz 一个 CLI，且工作流入口通过 oz flow 真实可用",
       "assertions": [
         "cmd/oz/main.go 存在且 cmd/wo 不存在",
@@ -32,8 +32,8 @@
     {
       "id": "no-wo-legacy-surface-contract",
       "source": "change_contract",
-      "path": "docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh",
-      "command": "bash docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh",
       "purpose": "证明活跃源码、文档、CI、规格、测试和模板不再保留 wo 历史兼容产品面",
       "assertions": [
         "活跃产品路径中不存在 cmd/wo、./cmd/wo、wo.yaml、XDG_STATE_HOME/wo 等旧合同",

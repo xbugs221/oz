@@ -36,8 +36,8 @@
     {
       "id": "acceptance-run-surface-contract",
       "source": "change_contract",
-      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh",
-      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh",
+      "path": "docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh",
+      "command": "bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh",
       "purpose": "验证 run-acceptance 命令面并生成 test-results/37-执行验收合同测试并汇总结果/surface/contract.log",
       "assertions": [
         "真实 cmd/oz 二进制的 oz flow --help 暴露 run-acceptance JSON runner 命令",
@@ -49,8 +49,8 @@
     {
       "id": "acceptance-run-success-contract",
       "source": "change_contract",
-      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh",
-      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh",
+      "path": "docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh",
       "purpose": "验证成功执行 required_tests 并生成 test-results/37-执行验收合同测试并汇总结果/success/contract.log",
       "assertions": [
         "真实临时 git 项目中的 active change required test 被 oz flow run-acceptance 执行",
@@ -62,8 +62,8 @@
     {
       "id": "acceptance-run-failure-contract",
       "source": "change_contract",
-      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh",
-      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh",
+      "path": "docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh",
       "purpose": "验证失败不短路并生成 test-results/37-执行验收合同测试并汇总结果/failure/contract.log",
       "assertions": [
         "一个 required test 失败时 oz flow run-acceptance 返回非零",
@@ -75,8 +75,8 @@
     {
       "id": "acceptance-run-gate-contract",
       "source": "change_contract",
-      "path": "docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh",
-      "command": "bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh",
+      "path": "docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh",
       "purpose": "验证 execution/fix gate 和边界收敛并生成 test-results/37-执行验收合同测试并汇总结果/gate/contract.log",
       "assertions": [
         "internal/app 存在独立 acceptance run 边界文件和结果 DTO",

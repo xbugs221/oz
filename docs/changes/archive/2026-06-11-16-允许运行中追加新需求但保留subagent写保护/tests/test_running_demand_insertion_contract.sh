@@ -21,7 +21,7 @@ mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
 trap cleanup EXIT
 
-note "构造临时 Go 测试包，复用真实 internal/app 源码和 tests/app 迁移测试"
+note "构造临时 Go 测试包，复用真实 internal/app 源码和 docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/app 迁移测试"
 cp "$ROOT/go.mod" "$TMP/go.mod"
 if [[ -f "$ROOT/go.sum" ]]; then
   cp "$ROOT/go.sum" "$TMP/go.sum"

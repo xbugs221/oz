@@ -18,8 +18,8 @@
     {
       "id": "skip-execution-context-when-tasks-done",
       "source": "change_contract",
-      "path": "docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh",
-      "command": "bash docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh",
+      "path": "docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh",
+      "command": "bash docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh",
       "purpose": "证明 task 已全部完成时 wo 不再启动 execution 前代码侦察和外部资料 subagents。",
       "assertions": [
         "当 active change 的 task 已全部勾选时，fake subagent 一旦收到 SUBAGENT_OUTPUT 就让 workflow 失败",
@@ -31,8 +31,8 @@
     {
       "id": "run-execution-context-when-tasks-pending",
       "source": "change_contract",
-      "path": "docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh",
-      "command": "bash docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh",
+      "path": "docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh",
+      "command": "bash docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh",
       "purpose": "证明 task 未完成时 execution 前代码侦察和外部资料 subagents 仍按既有路径运行。",
       "assertions": [
         "当 active change 的 task 尚未勾选时，代码侦察和外部资料两个 subagents 都必须被调用",

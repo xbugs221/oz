@@ -12,8 +12,8 @@
 
 #### 场景：用户可见面不暴露内部引擎名称
 
-- **测试文件**：`docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh`
-- **真实数据来源**：真实仓库 README、当前规格、prompt/profile 模板、`tests/specs`，以及真实编译出的 `oz` 二进制。
+- **测试文件**：`docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh`
+- **真实数据来源**：真实仓库 README、当前规格、prompt/profile 模板、`docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs`，以及真实编译出的 `oz` 二进制。
 - **入口路径**：`go build ./cmd/oz`、`oz flow --help`、`oz flow config`、`oz flow graph --format json|mermaid`、`oz flow status`、`oz flow run --engine unknown --json`。
 - **关键断言**：
   - 用户文档、当前规格、模板和当前 specs 测试不包含 `go-dag` 或 Dagu 叙述。
@@ -24,17 +24,17 @@
 
 ### 需求：根历史测试层退出活跃维护面
 
-系统必须删除或迁移根目录 `tests/2026-*` 历史 shell 测试，避免旧 `wo` 时代脚本继续作为活跃测试入口。
+系统必须删除或迁移根目录 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/2026-*` 历史 shell 测试，避免旧 `wo` 时代脚本继续作为活跃测试入口。
 
 #### 场景：根目录历史测试层已清理
 
-- **测试文件**：`docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh`
-- **真实数据来源**：仓库真实 `tests/` 目录。
+- **测试文件**：`docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh`
+- **真实数据来源**：仓库真实 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/` 目录。
 - **入口路径**：`fd '^2026-' tests`、`rg` 扫描根测试层。
 - **关键断言**：
-  - `tests/` 根目录下不存在 `2026-*` dated shell 测试。
+  - `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/` 根目录下不存在 `2026-*` dated shell 测试。
   - 根测试层不再引用 `cmd/wo`、`wo.yaml`、`.wo`、`/wo/repos`、`XDG_STATE_HOME/wo` 或旧 `wo` 命令。
-  - `tests/specs` 和 Go 测试继续作为当前业务测试入口。
+  - `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs` 和 Go 测试继续作为当前业务测试入口。
 - **剩余风险**：该测试不判断每个历史脚本业务场景是否已迁移；执行阶段需要人工归类并用 `go test ./...` 和 specs 测试兜底。
 
 ### 需求：活跃维护面不保留旧产品合同
@@ -43,7 +43,7 @@
 
 #### 场景：活跃维护面不保留旧产品合同
 
-- **测试文件**：`docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh`
 - **真实数据来源**：真实 `cmd/`、`internal/`、`prompts-template/`、`profiles-template/`、`README.md`、`docs/specs/`、`tests/specs/`、`.github/workflows/`、`go.mod` 和 `go.sum`。
 - **入口路径**：`rg` 扫描活跃维护路径、`go test ./...`。
 - **关键断言**：

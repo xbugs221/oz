@@ -6,6 +6,6 @@
 
 验收入口：
 
-- `docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh`
-- `docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh`
+- `docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh`
+- `docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh`
 

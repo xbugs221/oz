@@ -19,7 +19,7 @@
 - **当** 用户启动 sealed run
 - **则** 配置读取不得报 `未知 agent tool "agy"`
 - **且** 状态 key 必须按 `agy:<role>` 隔离，不得写入 `pi:<role>`
-- **对应测试**：`docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh`
 - **真实数据来源**：临时仓库中的真实 `wo.yaml` 和真实 `wo run` CLI 入口
 - **入口路径**：`wo run --change <change> --json`
 - **关键断言**：配置接受 agy；执行失败时错误不是未知工具；state/session key 不把 agy 写成 pi
@@ -37,7 +37,7 @@ sealed run 创建任何运行态之前，必须检查 `codex`、`pi`、`agy` 都
 - **则** 命令必须失败
 - **且** 输出明确提到缺少 `agy` 和安装指引
 - **且** 用户状态目录不得创建 run state
-- **对应测试**：`docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh`
 - **真实数据来源**：临时 PATH、临时用户状态目录、真实 `wo run` CLI 入口
 - **入口路径**：`wo run --change <change> --json`
 - **关键断言**：缺少 agy 时失败；错误含 agy；没有 run state
@@ -56,7 +56,7 @@ sealed run 创建任何运行态之前，必须检查 `codex`、`pi`、`agy` 都
 - **且** prompt 作为单个参数传入，不能被 shell 拆分
 - **当** planning 阶段配置 `tool: agy`
 - **则** planning command 必须包含 `--prompt-interactive`
-- **对应测试**：`docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh`
 - **真实数据来源**：fake agy 记录的真实 argv、Go 测试调用的真实 runner/planning command 构造
 - **入口路径**：`go test ./tests/app`
 - **关键断言**：argv 包含 agy 参数；session 使用 conversation；prompt 未被 shell 拆分；状态 key 使用 agy

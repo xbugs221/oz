@@ -2,7 +2,7 @@
 
 ## 契约测试先行
 
-- [x] 运行 `bash docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`，确认失败点来自 dry-run plan 或 fixture 缺失。
+- [x] 运行 `bash docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh`，确认失败点来自 dry-run plan 或 fixture 缺失。
 - [x] 记录失败日志到 `test-results/40-clean-plan-fixture/contract.log`。
 - [x] 运行 `go test ./internal/app`，确认基线。
 - [x] 阅读 `internal/app/clean.go`。

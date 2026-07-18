@@ -12,7 +12,7 @@
 
 #### 场景：运行状态边界已拆分且核心行为不变
 
-- **测试文件**：`docs/changes/26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-14-26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh`
 - **真实数据来源**：仓库当前 `internal/app` 源码、现有 Go 单测构造的真实 `State`、临时 git repo 和 run state。
 - **入口路径**：从仓库根目录运行 shell 合同测试，测试内部执行 `go test ./internal/app` 的状态机和人工干预相关回归。
 - **关键断言**：

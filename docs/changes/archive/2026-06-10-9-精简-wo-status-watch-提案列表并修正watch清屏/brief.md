@@ -19,8 +19,8 @@
 
 验收入口：
 
-- `bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`
-- `bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh`
+- `bash docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`
+- `bash docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh`
 
 执行阶段默认上下文：
 

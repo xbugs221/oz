@@ -2,8 +2,8 @@
 
 ## 1. 先运行创建阶段合同测试
 
-- [x] 运行 `bash docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`，确认初始失败点来自 `cmd/wo` 仍存在、`oz flow` 未实现或发布面仍引用 `wo`。
-- [x] 运行 `bash docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`，确认初始失败点来自旧产品命名残留。
+- [x] 运行 `bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`，确认初始失败点来自 `cmd/wo` 仍存在、`oz flow` 未实现或发布面仍引用 `wo`。
+- [x] 运行 `bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`，确认初始失败点来自旧产品命名残留。
 
 ## 2. 合并命令入口
 
@@ -26,7 +26,7 @@
 
 ## 5. 验证
 
-- [x] 运行 `bash docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`。
-- [x] 运行 `bash docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`。
+- [x] 运行 `bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`。
+- [x] 运行 `bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`。
 - [x] 运行 `go test ./...`。
 - [x] 运行 `oz validate 30-彻底合并wo为oz-flow --json`。

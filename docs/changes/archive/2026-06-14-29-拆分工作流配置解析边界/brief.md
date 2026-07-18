@@ -16,7 +16,7 @@
 
 验收入口：
 
-- `bash docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh`
+- `bash docs/changes/archive/2026-06-14-29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh`
 - `go test ./internal/app -run 'Test.*Config|Test.*Profile|Test.*Parallel|Test.*Mada|Test.*Legacy' -count=1`
 
 执行阶段默认上下文：先读 `internal/app/config.go`、`profiles-template/*.yaml`、`tests/specs/codex-workflow-cli/test_tree_config_contract.sh` 和 legacy/profile 相关 specs，保持配置业务合同优先。

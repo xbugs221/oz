@@ -15,7 +15,7 @@
 
 #### 场景：多轮 run 不显示并行 summary/raw member status
 
-- **对应测试**：`docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库中创建真实 `State`、`StageTimings`、`DAGNodes`、`sessions`、`parallel-implementation-context.json`、`parallel-review-1/2/3.json` 和 member artifact 路径，复现一个 execution 完成、两轮 fix 完成、第三轮 review 失败的 run。
 - **入口路径**：`buildHumanStatusView`、`compactStatusLines`、`statusSubagentRows`、`statusStageMarker`。
 - **关键断言**：输出不包含 `- 并行`、`implementation_context`、`parallel-review`、`LGTM_WITH_MINOR_CONCERNS`、`completed - -`；仍保留短名 subagent 行。
@@ -27,7 +27,7 @@
 
 #### 场景：execution 起跑且 planning_context fan-in 成功时规划行显示完成且隐藏规划 subagent
 
-- **对应测试**：`docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
 - **真实数据来源**：同一 fixture 写入 `planning_context_1/2/3` 和 `planning_context_fanin` 成功 DAG node，并写入 `parallel-planning-context.json`。
 - **入口路径**：`statusStageMarker`、`statusSubagentRows`、`statusGroupsForStage` 或新增 planning 状态推断 helper。
 - **关键断言**：输出包含 `规划阶段 - ✓ -`；输出不包含 `需求分析`、`review1-target` 这类已过时 helper 明细。
@@ -39,7 +39,7 @@
 
 #### 场景：第三轮 review 失败时审核行显示 `✓✓x`
 
-- **对应测试**：`docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
 - **真实数据来源**：同一 fixture 设置 `review_1` 和 `review_2` completed，`review_3` failed，且 `fix_1`、`fix_2` completed。
 - **入口路径**：`matchingStatusStages`、`statusStageMarker`、`statusStageDuration`。
 - **关键断言**：审核阶段行包含 `审核阶段 reviewer-session ✓✓x`；修正阶段行仍包含 `修正阶段 fixer-session ✓✓`。
@@ -51,7 +51,7 @@
 
 #### 场景：review_3 失败时显示第三轮 review subagent session 且不把主阶段 node 误判为 subagent
 
-- **对应测试**：`docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
 - **真实数据来源**：同一 fixture 写入 `before_review_1_*`、`before_review_2_*`、`before_review_3_*` 三轮 helper DAG node；第三轮 helper 全部 success，但主阶段 `review_3` node failed。
 - **入口路径**：`statusSubagentRows`、`statusSubagentNode`、`statusSubagentSessionID`、`statusGroupIteration`。
 - **关键断言**：输出包含第三轮 session `review3-target`、`review3-quality`、`review3-test`、`review3-risk`、`review3-context`；输出不包含第一轮 session `review1-target`；`测试有效 review3-test ✓` 不能因为主阶段 `review_3` failed 被标成 `x`。

@@ -24,7 +24,7 @@
 ## 验收入口
 
 ```bash
-bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh
+bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh
 ```
 
 ## 执行上下文

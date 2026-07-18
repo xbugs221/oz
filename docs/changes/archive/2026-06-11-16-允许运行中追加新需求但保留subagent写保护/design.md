@@ -12,7 +12,7 @@
   docs/changes/<当前 change>/**
   internal/**
   cmd/**
-  tests/**
+  docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/**
   docs/specs/**
   profiles-template/**
   prompts-template/**

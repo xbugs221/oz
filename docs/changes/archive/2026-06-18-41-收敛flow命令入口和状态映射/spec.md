@@ -12,7 +12,7 @@
 
 #### 场景：命令、拓扑和状态视图边界收敛且 CLI 行为保持稳定
 
-- **测试文件**：`docs/changes/41-收敛flow命令入口和状态映射/tests/test_flow_boundary_convergence_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-18-41-收敛flow命令入口和状态映射/tests/test_flow_boundary_convergence_contract.sh`
 - **真实数据来源**：仓库当前 `internal/app`、`internal/ozcli`、`tests` 生产代码和 Go 回归测试。
 - **入口路径**：从仓库根目录运行 shell 契约测试，测试内部执行源码结构断言和 `go test ./internal/app ./internal/ozcli ./tests -count=1`。
 - **关键断言**：

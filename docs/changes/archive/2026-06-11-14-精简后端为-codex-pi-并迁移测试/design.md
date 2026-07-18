@@ -45,7 +45,7 @@ internal/
   app/
     *.go              # production source only
 
-tests/
+docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/
   app/                # Go 行为测试或 CLI 驱动测试
   specs/              # 长期规格测试
 ```

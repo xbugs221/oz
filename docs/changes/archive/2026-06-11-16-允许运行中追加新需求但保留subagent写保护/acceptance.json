@@ -24,8 +24,8 @@
     {
       "id": "contract-running-demand-insertion",
       "source": "change_contract",
-      "path": "docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh",
-      "command": "bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh",
       "purpose": "证明 detectManualIntervention 允许非当前 change 新增需求，但仍阻断源码和当前 change 修改。",
       "assertions": [
         "运行中新增 docs/changes/<非当前 change> 不会 abort 当前 run",
@@ -38,8 +38,8 @@
     {
       "id": "contract-manual-intervention-docs",
       "source": "change_contract",
-      "path": "docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh",
-      "command": "bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh",
       "purpose": "证明主规格明确新的路径感知保护边界。",
       "assertions": [
         "主规格声明允许运行中新增非当前 docs/changes 提案",

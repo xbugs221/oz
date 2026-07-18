@@ -12,7 +12,7 @@ standalone `oz` CLI 必须按命令职责拆分文件，避免 `ozcli.go` 继续
 
 #### 场景：入口、install、change、validate、archive 命令被分离
 
-- 测试文件：`docs/changes/34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh`
+- 测试文件：`docs/changes/archive/2026-06-15-34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh`
 - 真实数据来源：仓库当前 `internal/ozcli` 生产代码和现有 `internal/ozcli` Go 回归测试。
 - 入口路径：执行 shell 契约测试，内部检查目标 Go 文件和运行 `go test ./internal/ozcli`。
 - 关键断言：`Main/run`、`installCmd`、`list/create/status`、`validateChange`、`archiveCmd` 必须分别位于目标文件；原 `ozcli.go` 不得继续是 700 行以上混合职责文件；现有 ozcli 回归必须通过。

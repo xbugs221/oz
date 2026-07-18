@@ -16,7 +16,7 @@
 
 #### 场景：默认配置不再生成外置子代理配置
 
-- **测试文件**：`docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
 - **真实数据来源**：临时 git 仓库中运行真实 `oz flow config` 生成的 `oz-flow.yaml`。
 - **入口路径**：从仓库根目录运行 shell 契约测试，测试内部构建真实 `cmd/oz` 二进制并在临时仓库调用 `flow config`。
 - **关键断言**：
@@ -31,7 +31,7 @@
 
 #### 场景：默认 workflow graph 不再包含 subagent/fan-in 观测节点
 
-- **测试文件**：`docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
 - **真实数据来源**：同一个临时仓库中真实 `oz flow graph --change demo --format json` 输出。
 - **入口路径**：契约测试内部调用真实 `cmd/oz` 二进制的 graph 命令，并解析 JSON graph。
 - **关键断言**：
@@ -46,7 +46,7 @@
 
 #### 场景：主阶段 prompt 不再依赖 oz 子代理 artifact
 
-- **测试文件**：`docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
 - **真实数据来源**：仓库内真实 `prompts-template/oz-flow-start.md`、`oz-flow-review.md`、`oz-flow-qa.md`。
 - **入口路径**：契约测试直接检查内置 prompt 模板源码。
 - **关键断言**：
@@ -60,7 +60,7 @@
 
 #### 场景：旧外置子代理配置字段明确拒绝
 
-- **测试文件**：`docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
 - **真实数据来源**：契约测试创建的三个临时仓库配置，分别包含 `parallel`、`subagent_guard` 和 `stages.execution.before`。
 - **入口路径**：契约测试对这些临时仓库运行真实 `oz flow graph --change demo --format json`，触发配置加载。
 - **关键断言**：
@@ -75,7 +75,7 @@
 
 #### 场景：生产代码不再保留外置子代理 runner/fan-in 边界
 
-- **测试文件**：`docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh`
 - **真实数据来源**：仓库内真实 `internal/app` 生产源码和 Go 回归测试。
 - **入口路径**：契约测试使用 `rg` 做源码边界断言，并运行 `go test ./internal/app ./internal/ozcli ./tests -count=1`。
 - **关键断言**：

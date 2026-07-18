@@ -12,7 +12,7 @@
 
 #### 场景：阶段和状态有单一解析入口
 
-- **测试**：`docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`
+- **测试**：`docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`
 - **真实数据来源**：当前仓库 `internal/app` 源码和 `go test ./internal/app`。
 - **入口路径**：shell 契约测试从仓库根目录执行。
 - **关键断言**：源码中存在阶段解析 helper、运行状态 helper，并且 `go test ./internal/app` 通过。
@@ -24,7 +24,7 @@
 
 #### 场景：loop 和 DAG 复用同一主阶段门禁
 
-- **测试**：`docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`
+- **测试**：`docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`
 - **真实数据来源**：`internal/app/engine_run.go`、`internal/app/node.go`、新增流水线文件和现有 Go 单测。
 - **入口路径**：shell 契约测试检查源码边界并运行 Go 测试。
 - **关键断言**：`runLoop` 与 `nodeRunStage` 都调用同一流水线；`nodeRunStage` 内不再直接串联 acceptance preflight、acceptance run、validation、mark completed、advance。
@@ -36,7 +36,7 @@
 
 #### 场景：status 和 runner JSON 保持原字符串输出
 
-- **测试**：`docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`
+- **测试**：`docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`
 - **真实数据来源**：现有 `internal/app` status 和 runner Go 测试。
 - **入口路径**：契约测试运行 `go test ./internal/app`。
 - **关键断言**：引入类型化 helper 后，现有 status、watch、runner JSON、DAG 和 validation 测试仍通过。

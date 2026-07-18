@@ -20,7 +20,7 @@
 
 ## 验收入口
 
-执行 `bash docs/changes/21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh`。
+执行 `bash docs/changes/archive/2026-06-14-21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh`。
 
 ## 执行阶段默认上下文
 

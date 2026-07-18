@@ -24,8 +24,8 @@
     {
       "id": "clean-plan-fixture-contract",
       "source": "change_contract",
-      "path": "docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh",
-      "command": "bash docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh | tee test-results/40-clean-plan-fixture/acceptance-command.log",
+      "path": "docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh",
+      "command": "bash docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh | tee test-results/40-clean-plan-fixture/acceptance-command.log",
       "purpose": "证明 oz flow clean 先生成计划再执行删除，并且核心 workflow 测试夹具已经收敛。",
       "assertions": [
         "clean plan fixture contract verifies oz flow clean --dry-run --json reports delete actions for failed runtime state without deleting the run directory",

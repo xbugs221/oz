@@ -56,8 +56,8 @@
     {
       "id": "contract-stage-artifact-gate-retry-all-roles",
       "source": "change_contract",
-      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh",
-      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh",
+      "path": "docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh",
+      "command": "bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh",
       "purpose": "证明 execution、review、fix、QA、archive 任意阶段产物缺失或非法时，wo 会记录 artifact gate failure 并 resume 同一角色会话修正。",
       "assertions": [
         "execution task 首次未完成后不会直接 failed，第二次使用原 executor session 完成 task",
@@ -69,8 +69,8 @@
     {
       "id": "contract-batch-continues-after-stage-artifact-repair",
       "source": "change_contract",
-      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh",
-      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh",
+      "path": "docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh",
+      "command": "bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh",
       "purpose": "证明 batch 中首个 change 的 execution 产物可修复时，batch 不进入 failed，而是在修复后继续执行后续 change。",
       "assertions": [
         "batch state 最终为 done",
@@ -82,8 +82,8 @@
     {
       "id": "contract-parallel-subagent-info-severity",
       "source": "change_contract",
-      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh",
-      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh",
       "purpose": "证明 parallel subagent member artifact 中的 severity info 会被归一化为 minor，不会让 workflow 或 batch 被低级字段口径中断。",
       "assertions": [
         "wo run 成功完成",
@@ -96,8 +96,8 @@
     {
       "id": "contract-stage-prompt-completeness",
       "source": "change_contract",
-      "path": "docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh",
-      "command": "bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh",
+      "path": "docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh",
+      "command": "bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh",
       "purpose": "证明 wo-discuss、wo-start、wo-review、wo-qa、wo-fix、wo-done 的渲染后首轮提示词保留完整阶段合同，review/QA/fix 续轮只省略示例或方法论。",
       "assertions": [
         "execution 首轮提示词包含 proposal/design/spec/task/acceptance/tests、required_tests、禁止改弱合同和 oz status task 完成标准",

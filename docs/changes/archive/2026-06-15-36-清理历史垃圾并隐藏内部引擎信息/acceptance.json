@@ -24,11 +24,11 @@
     {
       "id": "no-internal-engine-user-surface-contract",
       "source": "change_contract",
-      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh",
-      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh",
+      "path": "docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_internal_engine_user_surface_contract.sh",
       "purpose": "证明 go-dag 是内部实现细节，不再出现在用户文档、默认配置、graph/status/help 或错误输出中。",
       "assertions": [
-        "README、当前规格、模板和 tests/specs 不包含 go-dag 或 Dagu 用户叙述",
+        "README、当前规格、模板和 docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs 不包含 go-dag 或 Dagu 用户叙述",
         "oz flow config 生成的 oz-flow.yaml 不包含 engine 字段或 go-dag",
         "oz flow help、graph、status 和 unknown engine 错误不输出 go-dag"
       ],
@@ -37,21 +37,21 @@
     {
       "id": "no-legacy-root-tests-contract",
       "source": "change_contract",
-      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh",
-      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh",
+      "path": "docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_no_legacy_root_tests_contract.sh",
       "purpose": "证明根目录 dated 历史 shell 测试已经删除或迁移，不再把 wo 旧产品面作为活跃测试入口。",
       "assertions": [
-        "tests/ 根目录下不存在 2026-* 历史 shell 测试",
+        "docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/ 根目录下不存在 2026-* 历史 shell 测试",
         "根测试层不引用 cmd/wo、wo.yaml、.wo、/wo/repos 或旧 wo 命令",
-        "tests/specs 仍存在作为当前业务合同入口"
+        "docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs 仍存在作为当前业务合同入口"
       ],
-      "expected_initial_failure": "当前实现应失败于 tests/2026-* 仍存在且大量引用旧 wo 产品面"
+      "expected_initial_failure": "当前实现应失败于 docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/2026-* 仍存在且大量引用旧 wo 产品面"
     },
     {
       "id": "current-surface-cleanup-contract",
       "source": "change_contract",
-      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh",
-      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh",
+      "path": "docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_current_surface_cleanup_contract.sh",
       "purpose": "证明活跃源码、文档、测试、模板和发布面不再保留旧 wo、Dagu、legacy-agent/opencode 产品合同。",
       "assertions": [
         "活跃维护面不存在 cmd/wo、wo.yaml、.wo、/wo/repos、旧 wo 命令提示或 WO_* 产品变量",
@@ -63,8 +63,8 @@
     {
       "id": "go-test-all",
       "source": "change_contract",
-      "path": "docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh",
-      "command": "bash docs/changes/36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh",
+      "path": "docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/test_go_test_all_contract.sh",
       "purpose": "证明清理历史垃圾没有破坏当前 Go 包和 CLI 回归测试。",
       "assertions": [
         "所有当前 Go 包测试通过"

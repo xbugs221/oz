@@ -4,4 +4,4 @@
 
 本次交付目标是按运行职责拆分 `Engine` 相关代码，保持当前 workflow 行为、状态 JSON 字段和已有测试合同不变。非目标是不改状态机决策、不改 Go DAG 调度、不改外部 CLI 命令。
 
-执行阶段默认先运行 `bash docs/changes/32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh`，确认当前实现失败于结构边界缺失，再完成拆分并让测试通过。验收证据写入 `test-results/32-engine-boundary/contract.log`。
+执行阶段默认先运行 `bash docs/changes/archive/2026-06-14-32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh`，确认当前实现失败于结构边界缺失，再完成拆分并让测试通过。验收证据写入 `test-results/32-engine-boundary/contract.log`。

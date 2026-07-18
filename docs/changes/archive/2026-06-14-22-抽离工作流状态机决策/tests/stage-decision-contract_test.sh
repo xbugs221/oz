@@ -7,7 +7,7 @@ mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
 echo "evidence id: stage-decision-contract-log" | tee -a "$LOG"
 echo "evidence path: $LOG" | tee -a "$LOG"
-echo "test path: docs/changes/22-抽离工作流状态机决策/tests/stage-decision-contract_test.sh" | tee -a "$LOG"
+echo "test path: docs/changes/archive/2026-06-14-22-抽离工作流状态机决策/tests/stage-decision-contract_test.sh" | tee -a "$LOG"
 
 decision_files="$(find internal/app -type f \( -name '*stage*decision*.go' -o -name '*decision*stage*.go' \))"
 printf '%s\n' "$decision_files" | tee -a "$LOG"

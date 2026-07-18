@@ -17,8 +17,8 @@
 
 验收入口：
 
-- `bash docs/changes/30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`
-- `bash docs/changes/30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`
+- `bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_single_oz_flow_binary_contract.sh`
+- `bash docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/test_no_wo_legacy_surface_contract.sh`
 - `go test ./...`
 
 执行阶段默认上下文：先读 `cmd/oz/main.go`、`cmd/wo/main.go`、`internal/ozcli/ozcli.go`、`internal/app/app.go`、`internal/app/command_dispatch.go`、`internal/app/state_store.go`、`.github/workflows/`、`README.md` 和 `docs/specs/`。实现时优先做命名和入口收敛，不重写工作流业务逻辑。

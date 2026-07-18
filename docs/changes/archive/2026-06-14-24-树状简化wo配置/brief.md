@@ -19,8 +19,8 @@
 
 验收入口：
 
-- `bash docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh`
-- `bash docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh`
-- `bash docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`
+- `bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_tree_config_contract.sh`
+- `bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh`
+- `bash docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`
 
-执行阶段默认先读本简报、`acceptance.json` 和 `tests/`。`proposal.md`、`design.md` 和 `spec.md` 用于理解完整设计边界。
+执行阶段默认先读本简报、`acceptance.json` 和 `docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/`。`proposal.md`、`design.md` 和 `spec.md` 用于理解完整设计边界。

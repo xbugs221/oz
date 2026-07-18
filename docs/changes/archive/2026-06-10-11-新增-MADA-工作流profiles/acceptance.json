@@ -36,8 +36,8 @@
     {
       "id": "profile-templates-externalized",
       "source": "change_contract",
-      "path": "docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh",
-      "command": "bash docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh",
       "purpose": "证明默认 wo.yaml 和 MADA profile 的 subagent 描述、角色 purpose 与 profile prompt 配置维护在内置 YAML 模板文件中，而不是 Go 源码字符串拼接中。",
       "assertions": [
         "仓库包含 profiles-template/default.yaml、mada-code.yaml、mada-decision.yaml、mada-research.yaml",
@@ -51,8 +51,8 @@
     {
       "id": "mada-profiles-config",
       "source": "change_contract",
-      "path": "docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh",
-      "command": "bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh",
       "purpose": "证明三个 MADA profile 能通过真实 wo config 生成标准 wo.yaml，并被 wo graph 正常加载。",
       "assertions": [
         "mada-code、mada-decision、mada-research 都能在临时 git 仓库中生成 wo.yaml",
@@ -67,8 +67,8 @@
     {
       "id": "mada-profile-discovery",
       "source": "change_contract",
-      "path": "docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh",
-      "command": "bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh",
       "purpose": "证明用户能发现可用 profile，并且未知 profile 错误明确且无写文件副作用。",
       "assertions": [
         "wo config --list-profiles 输出 default、mada-code、mada-decision、mada-research",

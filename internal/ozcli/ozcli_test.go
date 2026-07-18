@@ -65,7 +65,7 @@ func writeValidChange(t *testing.T, project, change string) {
 		"brief.md":    "# 归档测试\n\n用户简报说明归档测试随提案保留。\n",
 		"proposal.md": "## 背景\n需要可追溯变更。\n\n## 变更内容\n- 实现 oz。\n",
 		"design.md":   "## 背景\n固定工作流。\n\n## 决策\nCLI 先归档，智能体再合并主规格。\n",
-		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留\n",
+		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留，测试文件见 `tests/archive_test.go`\n",
 		"task.md":     "## 1. 实现\n\n- [x] 1.1 完成实现\n",
 		"acceptance.json": `{
 	  "summary": "验证归档测试随提案保留",
@@ -103,7 +103,7 @@ func writeValidChange(t *testing.T, project, change string) {
 			t.Fatal(err)
 		}
 	}
-	testBody := "package tests\n\nimport \"testing\"\n\nfunc TestArchivedBehavior(t *testing.T) {}\n"
+	testBody := "package tests\n\nimport \"testing\"\n\n// source: docs/changes/" + change + "/fixtures/input.json\nfunc TestArchivedBehavior(t *testing.T) {}\n"
 	if err := os.WriteFile(filepath.Join(dir, "tests", "archive_test.go"), []byte(testBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -773,8 +773,26 @@ func TestArchiveKeepsProposalTestsWithoutEditingMainSpec(t *testing.T) {
 	if strings.Contains(string(data), "Source proposal:") {
 		t.Fatalf("CLI should not rewrite proposal tests:\n%s", string(data))
 	}
+	if strings.Contains(string(data), "docs/changes/2-登录能力/") || !strings.Contains(string(data), "docs/changes/archive/2026-05-08-2-登录能力/") {
+		t.Fatalf("archived test references were not migrated:\n%s", string(data))
+	}
+	specData, err := os.ReadFile(filepath.Join(project, "docs", "changes", "archive", "2026-05-08-2-登录能力", "spec.md"))
+	if err != nil {
+		t.Fatalf("archived spec missing: %v", err)
+	}
+	if strings.Contains(string(specData), "`tests/archive_test.go`") || !strings.Contains(string(specData), "`docs/changes/archive/2026-05-08-2-登录能力/tests/archive_test.go`") {
+		t.Fatalf("archived document test references were not migrated:\n%s", string(specData))
+	}
 	if _, err := os.Stat(filepath.Join(project, "tests", "specs", "2-登录能力", "archive_test.go")); !os.IsNotExist(err) {
 		t.Fatalf("CLI should not mechanically create tests/specs change directory: %v", err)
+	}
+	acceptanceData, err := os.ReadFile(filepath.Join(project, "docs", "changes", "archive", "2026-05-08-2-登录能力", "acceptance.json"))
+	if err != nil {
+		t.Fatalf("archived acceptance contract missing: %v", err)
+	}
+	acceptanceText := string(acceptanceData)
+	if strings.Contains(acceptanceText, "docs/changes/2-登录能力/") || !strings.Contains(acceptanceText, "docs/changes/archive/2026-05-08-2-登录能力/") {
+		t.Fatalf("archived acceptance paths were not migrated:\n%s", acceptanceText)
 	}
 	data, err = os.ReadFile(mainSpec)
 	if err != nil {

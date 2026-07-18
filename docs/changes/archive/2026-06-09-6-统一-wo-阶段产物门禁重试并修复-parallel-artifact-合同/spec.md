@@ -16,7 +16,7 @@
 
 #### 场景：所有主阶段产物缺失或非法都会同会话重试
 
-- **测试文件**：`docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh`
 - **真实数据来源**：测试构造临时 git 仓库和真实 oz change，使用源码构建出的真实 `wo` 二进制运行默认 `go-dag`，fake `codex` 首次故意漏写或写坏 execution、review、fix、QA、archive 产物，第二次在同角色 session 中修正。
 - **入口路径**：`wo run --change 1-stage-artifact-retry --json`
 - **关键断言**：
@@ -34,7 +34,7 @@
 
 #### 场景：batch 中 execution 产物修复后继续后续 change
 
-- **测试文件**：`docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh`
 - **真实数据来源**：测试手工创建一个包含两个 active changes 的 batch state，真实 `wo batch --batch-id ... --json` 执行队列；fake `codex` 让第一个 change 的 execution 首次不完成 task，第二次修复，第二个 change 正常通过。
 - **入口路径**：`wo batch --batch-id batch-artifact-retry --json`
 - **关键断言**：
@@ -50,7 +50,7 @@
 
 #### 场景：parallel subagent 的 info severity 不会中断 workflow
 
-- **测试文件**：`docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh`
 - **真实数据来源**：测试在临时仓库启用 `planning_context` parallel group，fake `pi` 为真实 `SUBAGENT_OUTPUT` 写入 `findings[].severity: "info"`，真实 `wo` 二进制执行 `go-dag` fan-out/fan-in。
 - **入口路径**：`wo run --change 1-parallel-info-severity --json`
 - **关键断言**：
@@ -66,11 +66,11 @@
 
 #### 场景：渲染后的内置阶段提示词满足首轮完整和续轮精简边界
 
-- **测试文件**：`docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`
 - **真实数据来源**：测试向 `internal/app` 注入临时 Go 测试，使用真实 `prompts-template/*.md`、真实 `DefaultWorkflowConfig()` 和真实 `promptContext` 渲染 `wo-discuss`、`wo-start`、`wo-review`、`wo-qa`、`wo-fix`、`wo-done`。
-- **入口路径**：`bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`
+- **入口路径**：`bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`
 - **关键断言**：
-  - `wo-start` 首轮必须包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`tests/`、`required_tests`、不得删除/弱化契约测试、`oz status` 和 `tasks.done` 完成标准。
+  - `wo-start` 首轮必须包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/`、`required_tests`、不得删除/弱化契约测试、`oz status` 和 `tasks.done` 完成标准。
   - review 首轮必须包含 baseline diff、change 文档、task/验收边界、`review-N.json`、严格 JSON 和示例；review 续轮必须保留 `review-N.json`、上一轮 review/fix 引用和 JSON 输出要求，但不重复 schema 示例。
   - QA 首轮必须包含 `review-N.json`、`acceptance.json`、`required_tests`、`required_evidence`、`acceptance_matrix`、`qa-N.json` 和不得修改源码/acceptance；QA 续轮必须保留 `qa-N.json` 和 acceptance matrix，但不重复示例。
   - fix 首轮必须包含当前 review/QA、只修当前 findings、根因分析、不得弱化 acceptance、验证要求和 `fix-N-summary.md`；fix 续轮必须保留当前 review/QA 和 summary 路径，但不重复方法论长文。

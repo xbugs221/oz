@@ -12,7 +12,7 @@
 
 #### 场景：状态模型、恢复、运行循环、阶段执行和进度持久化被分离
 
-- 测试文件：`docs/changes/32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh`
+- 测试文件：`docs/changes/archive/2026-06-14-32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh`
 - 真实数据来源：仓库当前 `internal/app` 生产代码、现有 workflow Go 回归测试。
 - 入口路径：执行 shell 契约测试，内部检查目标 Go 文件和运行 `go test ./internal/app` 的 workflow 相关测试。
 - 关键断言：`State` 模型、`resumeRun`、`runLoop`、`runStage`、`stageProgressWriter` 必须分别落在对应文件；`state.go` 不得继续承载 1000 行级别的混合职责；现有 workflow 回归必须通过。

@@ -16,7 +16,7 @@
 
 验收入口：
 
-- `bash docs/changes/28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh`
+- `bash docs/changes/archive/2026-06-14-28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh`
 - `go test ./internal/app ./cmd/oz -count=1`
 
 执行阶段默认上下文：先读 `internal/app/app.go`、`internal/app/restart.go`、`internal/app/batch.go`、`internal/app/status_render.go` 和 `cmd/oz/main_test.go`，优先保持命令面稳定。

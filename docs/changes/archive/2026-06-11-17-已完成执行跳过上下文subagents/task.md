@@ -2,8 +2,8 @@
 
 ## 1. 契约测试
 
-- [x] 1.1 先运行 `bash docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh`，确认当前实现会因为已完成 task 仍启动 subagent 而失败。
-- [x] 1.2 先运行 `bash docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh`，确认未完成 task 的既有路径有明确保护。
+- [x] 1.1 先运行 `bash docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh`，确认当前实现会因为已完成 task 仍启动 subagent 而失败。
+- [x] 1.2 先运行 `bash docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh`，确认未完成 task 的既有路径有明确保护。
 
 ## 2. 实现
 
@@ -14,7 +14,7 @@
 
 ## 3. 验证
 
-- [x] 3.1 重新运行本提案 `tests/` 下两个契约测试。
+- [x] 3.1 重新运行本提案 `docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/` 下两个契约测试。
 - [x] 3.2 运行相关根目录回归测试，至少覆盖 go-dag、parallel context、status 显示和 stage artifact gate。
 - [x] 3.3 记录 `test-results/17-skip-execution-context/` 下的 runtime log 和 state snapshot，供 QA 复核。
 

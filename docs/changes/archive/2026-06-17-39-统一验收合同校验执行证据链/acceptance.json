@@ -24,8 +24,8 @@
     {
       "id": "acceptance-lifecycle-contract",
       "source": "change_contract",
-      "path": "docs/changes/39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh",
-      "command": "bash docs/changes/39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh | tee test-results/39-acceptance-lifecycle/acceptance-command.log",
+      "path": "docs/changes/archive/2026-06-17-39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh",
+      "command": "bash docs/changes/archive/2026-06-17-39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh | tee test-results/39-acceptance-lifecycle/acceptance-command.log",
       "purpose": "证明 acceptance lifecycle 共享诊断边界覆盖 validate、run-acceptance 和证据 producer 追溯。",
       "assertions": [
         "acceptance lifecycle contract verifies oz validate and oz flow run-acceptance use a shared lifecycle diagnostics boundary for the same real change",

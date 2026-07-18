@@ -11,22 +11,22 @@
       "spec": "需求：后续重构拥有稳定测试基线 / 场景：真实测试包可单独证明核心 app 和 oz CLI 入口仍可用",
       "tests": ["migrated-tests-contract"],
       "evidence": ["migrated-tests-contract-log"],
-      "risk": "不覆盖根目录 shell 业务测试，CI 仍需额外运行 tests/*.sh"
+      "risk": "不覆盖根目录 shell 业务测试，CI 仍需额外运行 docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/*.sh"
     }
   ],
   "required_tests": [
     {
       "id": "migrated-tests-contract",
       "source": "change_contract",
-      "path": "docs/changes/20-收敛迁移测试合同/tests/migrated-tests-contract_test.sh",
-      "command": "bash docs/changes/20-收敛迁移测试合同/tests/migrated-tests-contract_test.sh",
+      "path": "docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/migrated-tests-contract_test.sh",
+      "command": "bash docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/migrated-tests-contract_test.sh",
       "purpose": "验证迁移测试合同已经收敛，生成 migrated-tests-contract-log 到 test-results/refactor-stability/migrated-tests-contract.log",
       "assertions": [
-        "tests/app 下不得继续存在 .gotest 迁移测试输入",
+        "docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/app 下不得继续存在 .gotest 迁移测试输入",
         "go test ./internal/app ./cmd/oz ./tests 必须通过，证明核心真实测试包可运行",
         "go test ./... 必须通过，证明根门禁已经恢复为稳定基线"
       ],
-      "expected_initial_failure": "当前仓库仍存在 tests/app/*.gotest 且 go test ./... 会因迁移合同失败"
+      "expected_initial_failure": "当前仓库仍存在 docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/app/*.gotest 且 go test ./... 会因迁移合同失败"
     }
   ],
   "required_evidence": [

@@ -20,7 +20,7 @@
 - **并且** 定向 app Go 合同测试必须通过
 - **并且** 收尾必须运行完整 `go test ./...`
 - **并且** GitHub 上新的 `CI` run 必须不再失败于同一 prompt 合同
-- **测试**：`docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh`
 - **真实数据来源**：GitHub run `27288329734` 的 job/step 摘要、当前仓库真实 `prompts-template/wo-discuss.md`、真实迁移 app Go 测试或旧 `internal/app` Go 测试
 - **入口路径**：`go test ./tests/app` 或 `go test ./internal/app`
 - **关键断言**：prompt 包含 `oz-plan`；prompt 包含 `讨论规划阶段`；相关 Go 合同测试通过且不是 no-op
@@ -34,12 +34,12 @@
 
 - **给定** 仓库存在 `.github/workflows/ci.yml` 和 `.github/workflows/release.yml`
 - **当** 执行阶段更新仓库文档
-- **则** README 必须说明 GitHub Actions、CI、Release、`go test ./...` 和根目录 `tests/*.sh`
+- **则** README 必须说明 GitHub Actions、CI、Release、`go test ./...` 和根目录 `docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/*.sh`
 - **并且** README 必须给出本地复现 GitHub CI 失败的入口
 - **并且** 长期规格必须继续说明 CI/Release 使用本地 `oz`、`wo` 构建和同一套测试门禁
-- **并且** workflow 文件仍必须运行 `go test ./...` 和遍历根目录 `tests/*.sh`
-- **测试**：`docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh`
+- **并且** workflow 文件仍必须运行 `go test ./...` 和遍历根目录 `docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/*.sh`
+- **测试**：`docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh`
 - **真实数据来源**：真实 README、`docs/specs/release-automation/spec.md`、`.github/workflows/ci.yml`、`.github/workflows/release.yml`
-- **入口路径**：`bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh`
+- **入口路径**：`bash docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh`
 - **关键断言**：README 写明 CI/Release 命令；release automation 规格写明同一门禁；两个 workflow 文件保留真实测试命令
 - **剩余风险**：测试不验证 GitHub UI 文案，只验证仓库内可版本化的文档和 workflow

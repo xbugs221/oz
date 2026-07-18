@@ -29,9 +29,9 @@
 
 本提案通过以下真实测试和回归测试验收：
 
-- `docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`
-- `docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`
-- `docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh`
+- `docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`
+- `docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`
+- `docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh`
 - `go test ./...`
 
 这些测试使用真实 `wo` 二进制、真实配置读取和真实 prompt 渲染路径。执行阶段不得通过删除测试、放宽断言或恢复旧兼容路径来通过验收。

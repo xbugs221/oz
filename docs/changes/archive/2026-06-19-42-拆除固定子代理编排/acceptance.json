@@ -36,8 +36,8 @@
     {
       "id": "remove-fixed-subagents-contract",
       "source": "change_contract",
-      "path": "docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh",
-      "command": "bash docs/changes/42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh",
+      "path": "docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-19-42-拆除固定子代理编排/tests/test_remove_fixed_subagents_contract.sh",
       "purpose": "证明 oz flow 默认配置、workflow graph、prompt、旧配置拒绝和生产代码边界都不再保留固定外置子代理编排",
       "assertions": [
         "默认 oz-flow.yaml 不再生成 parallel、subagent_guard、before 或固定 helper 名称，但仍包含主阶段配置",

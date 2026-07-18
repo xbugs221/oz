@@ -18,8 +18,8 @@
     {
       "id": "shared-producer-contract",
       "source": "change_contract",
-      "path": "docs/changes/21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh",
-      "command": "bash docs/changes/21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh",
+      "path": "docs/changes/archive/2026-06-14-21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh",
+      "command": "bash docs/changes/archive/2026-06-14-21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh",
       "purpose": "验证 producer 追溯逻辑共享化并生成 shared-producer-contract-log 到 test-results/refactor-stability/shared-producer-contract.log",
       "assertions": [
         "internal/acceptance 必须拥有 producer 或 finding 追溯 API",

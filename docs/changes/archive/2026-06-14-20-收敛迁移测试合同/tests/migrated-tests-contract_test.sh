@@ -7,10 +7,10 @@ mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
 echo "evidence id: migrated-tests-contract-log" | tee -a "$LOG"
 echo "evidence path: $LOG" | tee -a "$LOG"
-echo "test path: docs/changes/20-收敛迁移测试合同/tests/migrated-tests-contract_test.sh" | tee -a "$LOG"
+echo "test path: docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/migrated-tests-contract_test.sh" | tee -a "$LOG"
 
-if find tests/app -type f -name '*.gotest' -print | tee -a "$LOG" | grep -q .; then
-  echo "tests/app 仍存在 .gotest 迁移测试输入，必须先迁入真实 Go 测试包或删除过期合同" | tee -a "$LOG"
+if find docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/app -type f -name '*.gotest' -print | tee -a "$LOG" | grep -q .; then
+  echo "docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/app 仍存在 .gotest 迁移测试输入，必须先迁入真实 Go 测试包或删除过期合同" | tee -a "$LOG"
   exit 1
 fi
 

@@ -12,8 +12,8 @@
     {
       "id": "subagent-boundary",
       "source": "change_contract",
-      "path": "docs/changes/33-拆分子智能体执行边界/tests/subagent_boundary_test.sh",
-      "command": "bash docs/changes/33-拆分子智能体执行边界/tests/subagent_boundary_test.sh",
+      "path": "docs/changes/archive/2026-06-15-33-拆分子智能体执行边界/tests/subagent_boundary_test.sh",
+      "command": "bash docs/changes/archive/2026-06-15-33-拆分子智能体执行边界/tests/subagent_boundary_test.sh",
       "purpose": "通过 subagent-boundary-log 证明 subagent 的 retry、只读边界、artifact 和 prompt 职责已拆分，并且 subagent Go 回归通过。",
       "assertions": [
         "subagent attempt、boundary、artifact、prompt 逻辑分别位于独立 Go 文件",

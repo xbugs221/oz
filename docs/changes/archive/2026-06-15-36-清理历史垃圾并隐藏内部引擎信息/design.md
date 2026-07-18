@@ -11,7 +11,7 @@
   约束：不得出现 go-dag、Dagu、wo 旧产品面
 
 活跃维护面
-  cmd / internal / tests/specs / .github/workflows
+  cmd / internal / docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs / .github/workflows
   约束：不得保留旧 cmd/wo、wo.yaml、.wo、/wo/repos、legacy-agent/opencode 合同
 
 历史归档面
@@ -23,9 +23,9 @@
 
 ## 测试层收敛
 
-根目录 `tests/2026-*` 是历史迁移层，不再代表当前业务合同。执行阶段应逐个判断：
+根目录 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/2026-*` 是历史迁移层，不再代表当前业务合同。执行阶段应逐个判断：
 
-- 已被 `tests/specs` 或 Go 测试覆盖的脚本直接删除。
+- 已被 `docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs` 或 Go 测试覆盖的脚本直接删除。
 - 仍有业务价值但尚未覆盖的场景，迁移为当前 `oz flow` specs 测试或 Go 测试。
 - 删除后更新 `test_root_test_layout_contract.sh`，避免未来重新引入 dated legacy shell 测试。
 

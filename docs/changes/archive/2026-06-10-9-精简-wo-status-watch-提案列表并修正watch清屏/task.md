@@ -2,8 +2,8 @@
 
 ## 1. 先跑创建阶段合同
 
-- [x] 1.1 运行 `bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`，确认当前失败点是 status/watch 仍输出 batch/workflow header，且 watch spinner 仍在 header 或 running 行未替换。
-- [x] 1.2 运行 `bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh`，确认当前失败点是窄终端长提案名刷新后仍有旧首行残留。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh`，确认当前失败点是 status/watch 仍输出 batch/workflow header，且 watch spinner 仍在 header 或 running 行未替换。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh`，确认当前失败点是窄终端长提案名刷新后仍有旧首行残留。
 
 ## 2. 调整 human 渲染结构
 

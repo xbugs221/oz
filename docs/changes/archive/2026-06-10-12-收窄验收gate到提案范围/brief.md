@@ -20,11 +20,11 @@
 
 验收入口：
 
-- `bash docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh`
-- `bash docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`
-- `bash docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh`
-- `bash docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh`
-- `bash docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh`
+- `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh`
+- `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`
+- `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh`
+- `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh`
+- `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh`
 
 执行阶段默认上下文：
 

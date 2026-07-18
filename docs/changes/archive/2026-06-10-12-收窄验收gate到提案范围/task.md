@@ -2,11 +2,11 @@
 
 ## 1. 契约测试
 
-- [x] 1.1 先运行 `bash docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh`，确认当前失败原因是 review artifact 不支持 `non_blocking_findings` 或 finding scope。
-- [x] 1.2 先运行 `bash docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`，确认当前失败原因是 parallel finding 无法按 scope 区分阻断范围。
-- [x] 1.3 先运行 `bash docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh`，确认当前失败原因是 QA artifact 不支持非阻断历史债务，且未知 acceptance id 仍被拒绝。
-- [x] 1.4 运行 `bash docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh`，确认旧格式 active change 兼容。
-- [x] 1.5 先运行 `bash docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh`，确认当前 prompt 缺少 scope 合同。
+- [x] 1.1 先运行 `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh`，确认当前失败原因是 review artifact 不支持 `non_blocking_findings` 或 finding scope。
+- [x] 1.2 先运行 `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`，确认当前失败原因是 parallel finding 无法按 scope 区分阻断范围。
+- [x] 1.3 先运行 `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh`，确认当前失败原因是 QA artifact 不支持非阻断历史债务，且未知 acceptance id 仍被拒绝。
+- [x] 1.4 运行 `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh`，确认旧格式 active change 兼容。
+- [x] 1.5 先运行 `bash docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh`，确认当前 prompt 缺少 scope 合同。
 
 ## 2. Artifact schema
 
@@ -29,7 +29,7 @@
 
 ## 5. 验证
 
-- [x] 5.1 运行本 change 的全部 `tests/` 契约测试并通过。
+- [x] 5.1 运行本 change 的全部 `docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/` 契约测试并通过。
 - [x] 5.2 运行相关 Go 单元测试：`go test ./internal/app -run 'Review|QA|Parallel' -count=1`。
 - [x] 5.3 运行 `go test ./internal/acceptance ./cmd/oz -count=1`。
 - [x] 5.4 运行 `go run ./cmd/oz validate 12-收窄验收gate到提案范围 --json` 并通过。

@@ -9,7 +9,7 @@
 - 后端 CLI 只支持 `codex` 和 `pi` 两个工具。
 - 启动 sealed run 前必须检查 `codex` 和 `pi` 都存在；任一缺失时直接提示用户先安装对应 CLI，不创建运行态。
 - 删除旧后端的代码、测试、文档、配置示例、状态 key 和历史兼容逻辑。
-- 将长期测试从 `internal/` 迁到仓库根目录 `tests/`，源码目录只保留生产源码。
+- 将长期测试从 `internal/` 迁到仓库根目录 `docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/`，源码目录只保留生产源码。
 - 更新规格文档和发布门禁，使后续贡献者只面对 Codex/Pi 和根目录测试布局。
 
 ## 非目标
@@ -21,8 +21,8 @@
 
 ## 验收入口
 
-执行阶段必须先运行本提案 `tests/` 下的契约测试，确认当前实现因旧后端残留、未强制检查两个 CLI、`internal/` 测试残留和文档门禁不一致而失败；实现后这些测试必须通过，并补充根目录长期回归测试。
+执行阶段必须先运行本提案 `docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/` 下的契约测试，确认当前实现因旧后端残留、未强制检查两个 CLI、`internal/` 测试残留和文档门禁不一致而失败；实现后这些测试必须通过，并补充根目录长期回归测试。
 
 ## 执行阶段默认上下文
 
-默认读取本文件、`acceptance.json` 和 `tests/`。只有在契约冲突或需要确认设计取舍时，再读取 `proposal.md`、`design.md`、`spec.md` 和 `task.md`。
+默认读取本文件、`acceptance.json` 和 `docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/`。只有在契约冲突或需要确认设计取舍时，再读取 `proposal.md`、`design.md`、`spec.md` 和 `task.md`。

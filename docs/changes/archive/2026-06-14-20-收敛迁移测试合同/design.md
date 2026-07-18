@@ -9,7 +9,7 @@
    - 当前业务仍需要：迁入真实测试包并修正生产代码。
    - 当前业务已经改变：按新规格改写测试或删除历史断言。
 3. 保留必要测试辅助函数，但移到真实测试文件或共享 test helper。
-4. 移除 `tests/app/migrated_app_suite_test.go` 的临时复制执行路径，或让它在没有 `.gotest` 时不再承担门禁。
+4. 移除 `docs/changes/archive/2026-06-14-20-收敛迁移测试合同/tests/app/migrated_app_suite_test.go` 的临时复制执行路径，或让它在没有 `.gotest` 时不再承担门禁。
 
 ## 取舍
 

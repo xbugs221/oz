@@ -7,7 +7,7 @@
 验收重点：
 
 - `oz validate` 拒绝缺少业务断言、使用弱断言或测试路径不受合同约束的提案。
-- execution prompt 默认聚焦 `brief.md`、`acceptance.json` 和 `tests/`。
+- execution prompt 默认聚焦 `brief.md`、`acceptance.json` 和 `docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/`。
 - `oz status --json` 暴露 `brief.md` 和验收合同摘要，避免只靠 task checkbox 判断就绪。
 
 非目标：本变更不删除现有 `proposal.md`、`design.md`、`spec.md`、`task.md`，只降低它们在执行阶段的默认注意力权重。

@@ -23,7 +23,7 @@
 - **当** workflow 读取并验证该 review artifact
 - **则** artifact 必须通过 review schema 校验
 - **并且**该历史债务不得触发 fix 轮次
-- **测试**：`docs/changes/12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_review_non_blocking_debt_contract.sh`
 - **真实数据来源**：脚本在 `internal/app` 包内临时写入 Go 测试，调用真实 `ReadReview`、`ValidateReview` 和 `NeedsFix`
 - **入口路径**：`internal/app/review.go`
 - **关键断言**：clean review 接受 `non_blocking_findings`；blocking `findings` 仍不允许出现在 clean review
@@ -39,7 +39,7 @@
 - **并且**某成员报告 `severity=major`、`scope=out_of_scope_existing` 的历史债务
 - **当**主 review artifact 为 clean
 - **则** `ValidateParallelReviewGate` 必须允许 workflow 继续
-- **测试**：`docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`
 - **真实数据来源**：脚本临时写入真实 parallel review artifact JSON，调用真实 `ValidateParallelReviewGate`
 - **入口路径**：`internal/app/parallel.go`
 - **关键断言**：out-of-scope major finding 不阻断；成员 status 全部 success
@@ -51,7 +51,7 @@
 - **当**主 review artifact 为 clean
 - **则** gate 必须拒绝 clean
 - **并且**缺少 `scope` 的旧格式 major finding 也必须继续拒绝 clean
-- **测试**：`docs/changes/12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_parallel_scope_gate_contract.sh`
 - **真实数据来源**：同一脚本构造 current-change artifact 和 legacy artifact
 - **入口路径**：`internal/app/parallel.go`
 - **关键断言**：当前变更 severe finding 阻断；legacy missing scope 保持旧阻断行为
@@ -69,7 +69,7 @@
 - **当** workflow 调用 `ValidateQAAgainstAcceptance`
 - **则** QA 必须通过
 - **并且**如果 `acceptance_matrix` 额外引用历史债务 id，必须继续失败
-- **测试**：`docs/changes/12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_qa_acceptance_scope_contract.sh`
 - **真实数据来源**：脚本临时写入 QA artifact JSON 并构造真实 acceptance contract
 - **入口路径**：`internal/app/qa.go`
 - **关键断言**：non-blocking finding 不影响 acceptance matrix；未知 acceptance id 仍失败
@@ -81,11 +81,11 @@
 
 #### 场景：未运行旧提案不增加新必填字段
 
-- **给定** 一个只包含既有 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/` 的 active change
+- **给定** 一个只包含既有 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/` 的 active change
 - **并且**其 `acceptance.json` 不包含任何 scope 或 non-blocking 字段
 - **当**用户运行 `oz validate <change> --json`
 - **则**校验必须成功
-- **测试**：`docs/changes/12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_legacy_active_change_compatibility_contract.sh`
 - **真实数据来源**：脚本创建临时 git 仓库和旧格式 active change，并运行真实编译后的 `oz validate`
 - **入口路径**：`cmd/oz validate`
 - **关键断言**：旧格式 active change 通过 validate；新 scope 字段不是 acceptance 必填项
@@ -102,7 +102,7 @@ review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 
 - **则** prompt 必须包含 `non_blocking_findings`
 - **并且**必须包含 `out_of_scope_existing`
 - **并且**必须说明当前变更、acceptance 合同和 introduced regression 仍是 hard block
-- **测试**：`docs/changes/12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/test_prompt_scope_contract.sh`
 - **真实数据来源**：脚本读取仓库内真实 `prompts-template/wo-review.md` 和 `prompts-template/wo-qa.md`
 - **入口路径**：默认 prompt 模板
 - **关键断言**：review/QA prompt 都包含 scope 字段、非阻断 finding 字段和当前范围硬阻断说明

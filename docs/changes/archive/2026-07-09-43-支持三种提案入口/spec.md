@@ -17,7 +17,7 @@
 - **给定** 用户要判断一个改动是否需要提案
 - **当** 用户阅读 README 和内置 oz skill
 - **则** 文档必须说明 micro 使用 TDD 加 git commit
-- **并且** 文档必须说明 small 使用 `brief.md`、`acceptance.json` 和 `tests/`
+- **并且** 文档必须说明 small 使用 `brief.md`、`acceptance.json` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/`
 - **并且** 文档必须说明 standard 使用完整提案文档
 - **并且** 文档必须说明 small 仍保留真实测试和长期规格归档要求
 
@@ -36,9 +36,9 @@
 
 #### 场景：`oz validate` 接受 small 最小目录且保留测试硬合同
 
-- **给定** 一个 small active change 只有 `brief.md`、`acceptance.json` 和 `tests/`
+- **给定** 一个 small active change 只有 `brief.md`、`acceptance.json` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/`
 - **当** 用户运行 `oz validate <change> --json`
 - **则** 校验必须通过
 - **并且** `acceptance.json.required_tests` 必须引用真实存在的测试文件
-- **并且** 空 `tests/` 或只有说明文档的 `tests/` 仍必须失败
+- **并且** 空 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` 或只有说明文档的 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` 仍必须失败
 - **并且** standard 提案的完整文档校验不得被移除

@@ -82,7 +82,7 @@ standard 继续使用现有 `需求：... / 场景：...` 引用方式。
 | 条件 | 类型 |
 | --- | --- |
 | 有完整长文档 | standard |
-| 只有 `brief.md`、`acceptance.json`、`tests/` | small |
+| 只有 `brief.md`、`acceptance.json`、`docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` | small |
 | 无 change 目录 | micro，不进入 validate |
 
 small 必须校验：
@@ -90,7 +90,7 @@ small 必须校验：
 - 目录名仍符合 `<编号>-<中文需求>`。
 - `brief.md` 存在。
 - `acceptance.json` 存在且结构合法。
-- `tests/` 存在且至少包含一个真实测试文件。
+- `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` 存在且至少包含一个真实测试文件。
 - `acceptance.json.required_tests` 引用真实存在的测试路径。
 - `required_tests[].assertions` 至少包含业务级断言。
 
@@ -104,7 +104,7 @@ small 不校验：
 
 ## 归档策略
 
-small 不是临时便签。归档时仍必须阅读 `brief.md` 和 `tests/`，把长期行为合并到 `docs/specs/`，把测试意图合并到 `tests/specs/`。
+small 不是临时便签。归档时仍必须阅读 `brief.md` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/`，把长期行为合并到 `docs/specs/`，把测试意图合并到 `tests/specs/`。
 
 ```text
 small brief

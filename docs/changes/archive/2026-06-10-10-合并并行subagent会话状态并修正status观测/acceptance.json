@@ -24,8 +24,8 @@
     {
       "id": "parallel-subagent-session-state",
       "source": "change_contract",
-      "path": "docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh",
-      "command": "bash docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh",
       "purpose": "证明并发 subagent session 写入不会互相覆盖，status 能展示完成 member 的 session，并且 running session started 事件会提前持久化。",
       "assertions": [
         "多个 implementation_context subagent 使用旧 state 快照并发完成后，最终 state.json.sessions 包含全部 subagent session key",

@@ -79,7 +79,7 @@ func TestChangeSixExecutionPromptKeepsFullFirstTurnContract(t *testing.T) {
 		"spec.md",
 		"task.md",
 		"acceptance.json",
-		"tests/",
+		"docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/",
 		"required_tests",
 		"不得删除、弱化、跳过或改写",
 		"oz status",

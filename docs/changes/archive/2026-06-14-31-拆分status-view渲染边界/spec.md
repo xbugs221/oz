@@ -12,7 +12,7 @@
 
 #### 场景：视图、耗时、渲染和 stale 判断被分离
 
-- 测试文件：`docs/changes/31-拆分status-view渲染边界/tests/status_view_boundary_test.sh`
+- 测试文件：`docs/changes/archive/2026-06-14-31-拆分status-view渲染边界/tests/status_view_boundary_test.sh`
 - 真实数据来源：仓库当前 `internal/app` 生产代码和现有 `internal/app` Go 回归测试。
 - 入口路径：执行 shell 契约测试，内部检查目标 Go 文件和运行 `go test ./internal/app` 的 status/watch 相关测试。
 - 关键断言：`buildStatusView`、耗时计算、紧凑渲染、stale 判断必须分别落在对应文件；拆分后 `status_view.go` 不得继续是 1000 行级别职责集合；现有 status/watch 回归必须通过。

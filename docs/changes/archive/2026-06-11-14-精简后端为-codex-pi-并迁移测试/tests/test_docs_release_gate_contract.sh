@@ -42,7 +42,7 @@ note "主规格必须包含启动前检查 codex/pi 的要求"
 grep -Eiq '启动前.*codex.*pi|codex.*pi.*(存在|安装|PATH)' "$SPEC" || fail "主规格没有声明启动前检查两个 CLI"
 
 note "发布门禁必须以根目录 tests 为入口"
-grep -q 'tests/' "$RELEASE_TEST" || fail "发布门禁测试没有引用根目录 tests"
+grep -q 'docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/' "$RELEASE_TEST" || fail "发布门禁测试没有引用根目录 tests"
 if grep -n 'go test ./internal' "$RELEASE_TEST" | tee -a "$LOG"; then
   fail "发布门禁不应依赖 internal 同包测试入口"
 fi

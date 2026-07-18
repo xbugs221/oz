@@ -12,12 +12,12 @@
     {
       "id": "gotest-migration",
       "source": "change_contract",
-      "path": "docs/changes/35-迁移动态gotest合同/tests/gotest_migration_test.sh",
-      "command": "bash docs/changes/35-迁移动态gotest合同/tests/gotest_migration_test.sh",
+      "path": "docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/gotest_migration_test.sh",
+      "command": "bash docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/gotest_migration_test.sh",
       "purpose": "通过 gotest-migration-log 证明动态 .gotest runner 已删除，相关引用清零，并且 go test ./... 通过。",
       "assertions": [
-        "tests/specs 和 tests/app 中不再出现 .gotest 或 OZ_MIGRATED_APP_RUN",
-        "tests/app/migrated_app_suite_test.go 已删除，动态 runner 不再参与测试门禁",
+        "docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/specs 和 docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app 中不再出现 .gotest 或 OZ_MIGRATED_APP_RUN",
+        "docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app/migrated_app_suite_test.go 已删除，动态 runner 不再参与测试门禁",
         "go test ./... 通过并写入 test-results/35-gotest-migration/contract.log"
       ],
       "expected_initial_failure": "当前仓库仍有 shell 合同生成 .gotest 且保留 migrated_app_suite_test.go，应失败于动态机制扫描。"

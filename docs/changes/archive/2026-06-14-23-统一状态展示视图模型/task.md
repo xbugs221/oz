@@ -4,7 +4,7 @@
 
 ## 任务
 
-- [x] 先运行 `bash docs/changes/23-统一状态展示视图模型/tests/status-view-contract_test.sh`，确认当前展示 helper 仍散在 `app.go`。
+- [x] 先运行 `bash docs/changes/archive/2026-06-14-23-统一状态展示视图模型/tests/status-view-contract_test.sh`，确认当前展示 helper 仍散在 `app.go`。
 - [x] 新建 `internal/app/status_render.go` 或等价文件。
 - [x] 将 watch/run/batch 状态行渲染迁到 renderer。
 - [x] 让 `printHumanStatus`、`watchStatusLines` 和 runner JSON 复用同一视图模型。

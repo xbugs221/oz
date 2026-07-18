@@ -2,9 +2,9 @@
 
 ## 1. 契约测试先行
 
-- [x] 运行 `bash docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh`，确认当前实现因缺少 `profiles-template/*.yaml` 和默认配置仍硬编码在 Go 中失败，而不是测试语法或环境错误。
-- [x] 运行 `bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`，确认当前实现因缺少外置 profile 模板和 `--profile` 行为失败，而不是测试语法或环境错误。
-- [x] 运行 `bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`，确认当前实现因缺少 `--list-profiles` 和未知 profile 诊断失败。
+- [x] 运行 `bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh`，确认当前实现因缺少 `profiles-template/*.yaml` 和默认配置仍硬编码在 Go 中失败，而不是测试语法或环境错误。
+- [x] 运行 `bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`，确认当前实现因缺少外置 profile 模板和 `--profile` 行为失败，而不是测试语法或环境错误。
+- [x] 运行 `bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`，确认当前实现因缺少 `--list-profiles` 和未知 profile 诊断失败。
 
 ## 2. 默认配置模板抽离
 

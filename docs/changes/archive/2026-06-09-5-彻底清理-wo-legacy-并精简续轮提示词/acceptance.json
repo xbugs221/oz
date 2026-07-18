@@ -66,8 +66,8 @@
     {
       "id": "contract-no-dagu-runtime-residue",
       "source": "change_contract",
-      "path": "docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh",
-      "command": "bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh",
       "purpose": "证明 wo 当前运行时、当前规格和长期测试不再保留 Dagu executor、Dagu YAML、Dagu CLI 或隐藏 node 入口。",
       "assertions": [
         "真实 wo 二进制仍能输出 json 和 mermaid graph",
@@ -79,8 +79,8 @@
     {
       "id": "contract-prompt-legacy-removed",
       "source": "change_contract",
-      "path": "docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh",
-      "command": "bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh",
       "purpose": "证明 prompt/stage 配置不再接受 writing，sealed run 恢复不再读取 legacy prompt 文件或 writing 快照。",
       "assertions": [
         "wo.prompts.writing 被配置读取拒绝",
@@ -93,8 +93,8 @@
     {
       "id": "contract-review-fix-resumed-prompt-compact",
       "source": "change_contract",
-      "path": "docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh",
-      "command": "bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh",
       "purpose": "证明 review/fix 首轮保留完整提示，续轮不再重复首轮方法论、长 checklist 和示例。",
       "assertions": [
         "review_1 包含完整 schema、示例和审核方法论",

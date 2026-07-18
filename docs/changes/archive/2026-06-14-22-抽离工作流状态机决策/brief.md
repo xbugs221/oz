@@ -20,7 +20,7 @@
 
 ## 验收入口
 
-执行 `bash docs/changes/22-抽离工作流状态机决策/tests/stage-decision-contract_test.sh`。
+执行 `bash docs/changes/archive/2026-06-14-22-抽离工作流状态机决策/tests/stage-decision-contract_test.sh`。
 
 ## 执行阶段默认上下文
 

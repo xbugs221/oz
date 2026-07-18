@@ -68,7 +68,7 @@ func TestSubagentPromptRequiresArtifactFileAndValidationCommand(t *testing.T) {
 		ChangeName:     "25-限定子智能体artifact写入目录",
 		StatePath:      "/tmp/run/state.json",
 		ChangePath:     "docs/changes/25-限定子智能体artifact写入目录",
-		AcceptancePath: "docs/changes/25-限定子智能体artifact写入目录/acceptance.json",
+		AcceptancePath: "docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/acceptance.json",
 	}
 
 	prompt := subagentPrompt("qa", member, artifactPath, context)

@@ -2,8 +2,8 @@
 
 ## 1. 契约测试先行
 
-- [x] 1.1 运行 `bash docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh`，确认当前失败点是 human 输出合同未实现。
-- [x] 1.2 运行 `bash docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh`，确认当前失败点是 JSON observability 缺失。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh`，确认当前失败点是 human 输出合同未实现。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh`，确认当前失败点是 JSON observability 缺失。
 - [x] 1.3 运行 `go test ./internal/app`，记录旧 status/watch/JSON 回归中需要按新意图更新的断言。
 
 ## 2. 统一状态视图模型

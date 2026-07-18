@@ -12,8 +12,8 @@
     {
       "id": "wo-command-dispatch-boundary-contract",
       "source": "change_contract",
-      "path": "docs/changes/28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh",
-      "command": "bash docs/changes/28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh",
       "purpose": "证明 wo repo 命令分发、交互流程和规划入口已拆成独立边界，并通过真实命令回归",
       "assertions": [
         "检查 command_dispatch.go、interactive.go 和 planning.go 存在",

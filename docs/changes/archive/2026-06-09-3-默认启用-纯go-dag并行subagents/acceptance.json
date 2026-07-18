@@ -4,15 +4,15 @@
     {
       "id": "default-go-dag-run-contract",
       "source": "change_contract",
-      "path": "docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh",
-      "command": "bash docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh",
       "purpose": "证明默认 wo run 使用内嵌 go-dag engine，不依赖 Dagu CLI，默认 parallel 开启，人类 status 显示 engine 和并行成员，JSON status 保持兼容。"
     },
     {
       "id": "go-dag-graph-status-contract",
       "source": "change_contract",
-      "path": "docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh",
-      "command": "bash docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh",
       "purpose": "证明默认 wo config 和 wo graph 表达 go-dag engine、parallel 默认开启、并行 fan-out/fan-in 图，以及 status 可读输出的并行摘要。"
     }
   ],

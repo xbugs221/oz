@@ -2,7 +2,7 @@
 
 ## 契约测试先行
 
-- [x] 运行 `bash docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`，确认当前失败点来自目标边界缺失。
+- [x] 运行 `bash docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`，确认当前失败点来自目标边界缺失。
 - [x] 记录失败日志到 `test-results/38-stage-gate-pipeline/contract.log`。
 - [x] 运行 `go test ./internal/app`，确认基线测试状态。
 - [x] 阅读 `internal/app/engine_run.go` 的 `runLoop` 主阶段完成流程。
@@ -57,7 +57,7 @@
 - [x] 为流水线 validation failure 场景新增 Go 测试。
 - [x] 为流水线 archive clean 场景新增 Go 测试。
 - [x] 更新或保留历史测试，确保新意图与旧断言一致。
-- [x] 运行 `bash docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`。
+- [x] 运行 `bash docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh`。
 - [x] 运行 `go test ./internal/app`。
 - [x] 运行 `go test ./...`。
 - [x] 确认没有改变 `docs/changes/archive/**` 历史提案。

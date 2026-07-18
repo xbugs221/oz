@@ -24,8 +24,8 @@
     {
       "id": "status-watch-proposal-list",
       "source": "change_contract",
-      "path": "docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh",
-      "command": "bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_status_watch_proposal_list_contract.sh",
       "purpose": "证明 status/watch human 输出以提案列表为顶层，并且 watch spinner 位于 running 阶段行。",
       "assertions": [
         "默认 status 第一行是 - <change-name>，不是 batch header、workflow header 或默认提示",
@@ -38,8 +38,8 @@
     {
       "id": "watch-tty-clear-long-change",
       "source": "change_contract",
-      "path": "docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh",
-      "command": "bash docs/changes/9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh",
+      "path": "docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-10-9-精简-wo-status-watch-提案列表并修正watch清屏/tests/test_watch_tty_clear_long_change_contract.sh",
       "purpose": "证明真实 TTY 下长中文提案名连续刷新后不会残留旧首行。",
       "assertions": [
         "伪 TTY 捕获的最终屏幕第一条业务行是 - <long-change-name>",

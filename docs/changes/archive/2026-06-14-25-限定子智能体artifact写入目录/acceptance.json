@@ -30,8 +30,8 @@
     {
       "id": "contract-subagent-artifact-directory",
       "source": "change_contract",
-      "path": "docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh",
-      "command": "bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh",
       "purpose": "证明 subagent member artifact 交付改为独立目录 member.json、prompt 提供写文件与校验命令、CLI 能校验合法与非法 artifact；生成 subagent-artifact-directory-log 到 test-results/25-subagent-artifact-directory/subagent-artifact-directory.log",
       "assertions": [
         "memberArtifactPath 返回的 basename 是 member.json，父目录以 .artifact 结尾，不同 member 不共用目录",

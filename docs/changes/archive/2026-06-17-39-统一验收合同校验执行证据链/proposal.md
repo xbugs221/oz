@@ -32,7 +32,7 @@
 创建阶段契约测试必须通过：
 
 ```bash
-bash docs/changes/39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh
+bash docs/changes/archive/2026-06-17-39-统一验收合同校验执行证据链/tests/acceptance_lifecycle_contract_test.sh
 ```
 
 执行阶段还必须运行：

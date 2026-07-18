@@ -12,8 +12,8 @@
 
 #### 场景：仓库不再依赖临时 .gotest runner
 
-- 测试文件：`docs/changes/35-迁移动态gotest合同/tests/gotest_migration_test.sh`
-- 真实数据来源：仓库当前 `tests/specs`、`tests/app`、`internal/app` 测试代码和完整 Go 测试入口。
+- 测试文件：`docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/gotest_migration_test.sh`
+- 真实数据来源：仓库当前 `docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/specs`、`docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app`、`internal/app` 测试代码和完整 Go 测试入口。
 - 入口路径：执行 shell 契约测试，内部扫描动态 `.gotest` 机制并运行 `go test ./...`。
-- 关键断言：`tests/specs` 和 `tests/app` 不得再引用 `.gotest` 或 `OZ_MIGRATED_APP_RUN`；`tests/app/migrated_app_suite_test.go` 必须删除；完整 Go 测试必须通过。
+- 关键断言：`docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/specs` 和 `docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app` 不得再引用 `.gotest` 或 `OZ_MIGRATED_APP_RUN`；`docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app/migrated_app_suite_test.go` 必须删除；完整 Go 测试必须通过。
 - 剩余风险：该测试不能自动证明每个旧动态断言都一字不漏迁移，执行阶段需要在变更说明中列出迁移映射。

@@ -17,7 +17,7 @@
 
 验收入口：
 
-- `bash docs/changes/41-收敛flow命令入口和状态映射/tests/test_flow_boundary_convergence_contract.sh`
+- `bash docs/changes/archive/2026-06-18-41-收敛flow命令入口和状态映射/tests/test_flow_boundary_convergence_contract.sh`
 - `oz validate 41-收敛flow命令入口和状态映射 --json`
 
 执行阶段默认上下文：先读 `spec.md` 的验收矩阵和契约测试，再按 `task.md` 从测试失败开始实施。实现时优先移动/收敛边界，不做无关格式化和大规模命名 churn。

@@ -17,7 +17,7 @@
 
 ## 验收入口
 
-- `bash docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
+- `bash docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`
 - `go test ./internal/app`
 
 ## 执行阶段默认上下文

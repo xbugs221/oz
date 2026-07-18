@@ -2,7 +2,7 @@
 
 ## 1. 契约测试
 
-- [x] 1.1 运行 `bash docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`，确认当前实现失败于目标展示行为缺失，而不是测试语法、路径或环境错误。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`，确认当前实现失败于目标展示行为缺失，而不是测试语法、路径或环境错误。
 - [x] 1.2 保存失败输出到 `test-results/13-status-multiround-parallel-display/status-multiround-parallel-display.log`。
 
 ## 2. 修正 human status/watch 聚合
@@ -25,7 +25,7 @@
 
 ## 5. 回归验证
 
-- [x] 5.1 重新运行 `bash docs/changes/13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`，确认通过。
+- [x] 5.1 重新运行 `bash docs/changes/archive/2026-06-10-13-修正-wo-status-多轮并行状态展示/tests/test_status_multiround_parallel_display_contract.sh`，确认通过。
 - [x] 5.2 运行 `go test ./internal/app`，按新意图更新旧 status/watch 断言，不删除业务覆盖。
 - [x] 5.3 检查 `wo status` 和 `wo watch` 的现有 compact 输出合同仍保持四列结构、短名 subagent 和 batch 层级。
 

@@ -2,7 +2,7 @@
 
 ## 1. 契约测试
 
-- [x] 1.1 运行 `bash docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`，确认当前实现失败于并发 subagent session 丢失或 running session 未提前持久化，而不是测试语法错误
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`，确认当前实现失败于并发 subagent session 丢失或 running session 未提前持久化，而不是测试语法错误
 - [x] 1.2 保留测试输出到 `test-results/10-parallel-subagent-session-state/parallel-subagent-session-state.log`
 
 ## 2. 状态合并实现
@@ -20,6 +20,6 @@
 
 ## 4. 回归验证
 
-- [x] 4.1 重新运行 `bash docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
+- [x] 4.1 重新运行 `bash docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
 - [x] 4.2 运行与 status/watch 相关的现有回归测试，至少覆盖 `go test ./internal/app -run 'Status|Subagent|GoDAG' -count=1`
 - [x] 4.3 更新 `task.md` 勾选状态，并在执行总结中列出 final/running state snapshot 路径

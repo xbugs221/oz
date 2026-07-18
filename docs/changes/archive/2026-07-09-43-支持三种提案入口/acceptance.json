@@ -1,5 +1,5 @@
 {
-  "summary": "将 oz 变更入口升级为 micro、small、standard 三种类型；small 只需 brief.md、acceptance.json 和 tests/，但保留测试与长期规格归档硬合同。",
+  "summary": "将 oz 变更入口升级为 micro、small、standard 三种类型；small 只需 brief.md、acceptance.json 和 docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/，但保留测试与长期规格归档硬合同。",
   "coverage": [
     {
       "spec": "需求：三种提案入口 / 场景：文档和 skill 说明 micro、small、standard",
@@ -18,8 +18,8 @@
     {
       "id": "proposal-entry-types-docs-contract",
       "source": "change_contract",
-      "path": "docs/changes/43-支持三种提案入口/tests/test_proposal_entry_types_docs_contract.sh",
-      "command": "bash docs/changes/43-支持三种提案入口/tests/test_proposal_entry_types_docs_contract.sh",
+      "path": "docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/test_proposal_entry_types_docs_contract.sh",
+      "command": "bash docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/test_proposal_entry_types_docs_contract.sh",
       "purpose": "证明 README、长期规格和内置 oz skills 已经把 micro、small、standard 三种入口的适用场景、产物边界和归档责任说清楚。",
       "assertions": [
         "README 包含 micro、small、standard 三种入口及 small 的 brief.md、acceptance.json、tests 最小产物",
@@ -32,11 +32,11 @@
     {
       "id": "small-brief-only-validate-contract",
       "source": "change_contract",
-      "path": "docs/changes/43-支持三种提案入口/tests/test_small_brief_only_validate_contract.sh",
-      "command": "bash docs/changes/43-支持三种提案入口/tests/test_small_brief_only_validate_contract.sh",
+      "path": "docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/test_small_brief_only_validate_contract.sh",
+      "command": "bash docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/test_small_brief_only_validate_contract.sh",
       "purpose": "证明 oz validate 接受 small brief-only 最小目录，同时继续拒绝缺少真实测试代码的 small 提案。",
       "assertions": [
-        "只有 brief.md、acceptance.json 和 tests/ 的 small 提案可以通过 oz validate",
+        "只有 brief.md、acceptance.json 和 docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/ 的 small 提案可以通过 oz validate",
         "small 提案缺少真实测试代码时 oz validate 必须失败",
         "standard 提案仍保留完整文档校验，不因 small 入口而被弱化"
       ],

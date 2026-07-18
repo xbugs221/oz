@@ -12,8 +12,8 @@
     {
       "id": "state-runtime-boundary-contract",
       "source": "change_contract",
-      "path": "docs/changes/26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh",
-      "command": "bash docs/changes/26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-26-拆分运行状态持久化边界/tests/test_state_runtime_boundary_contract.sh",
       "purpose": "证明 state.go 的运行状态职责已拆到独立边界，并通过真实 internal/app 状态机回归",
       "assertions": [
         "检查 state store、run lock、prompt context 和 git guard 边界文件存在",

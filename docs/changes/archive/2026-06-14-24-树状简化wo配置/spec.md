@@ -22,7 +22,7 @@
 - **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:` 和 `mode:`
 - **且** 默认配置不写任何 `model:`，让 CLI 自身默认模型继续生效
 - **且** `stages.execution.before`、`stages.review.before` 和 `stages.qa.before` 包含默认子代理
-- **测试**：`docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_tree_config_contract.sh`
 - **真实数据来源**：测试创建临时 git 仓库，运行真实构建出的 `wo config` 和 `wo graph`
 - **入口路径**：`wo config`、`wo graph --change demo --format json`
 - **关键断言**：默认 YAML 没有旧字段；graph JSON 包含阶段前置子代理节点
@@ -35,7 +35,7 @@
 - **当** 用户导出 workflow graph
 - **则** graph 不包含任何子代理节点
 - **且** 主阶段仍保留
-- **测试**：`docs/changes/24-树状简化wo配置/tests/test_tree_config_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_tree_config_contract.sh`
 - **真实数据来源**：测试改写临时仓库中的真实 `wo.yaml`
 - **入口路径**：`wo graph --change demo --format json`
 - **关键断言**：`parallel:false` 时 graph 中没有默认子代理名称，但仍包含 execution/archive 主阶段
@@ -51,7 +51,7 @@
 - **则** 配置读取失败
 - **且** 错误信息包含对应旧字段名
 - **且** 不创建新的运行态
-- **测试**：`docs/changes/24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_legacy_config_rejection_contract.sh`
 - **真实数据来源**：测试为每个旧字段创建临时 git 仓库和真实 `wo.yaml`
 - **入口路径**：`wo graph --change demo --format json`
 - **关键断言**：每个旧字段样例都失败，stderr/stdout 中能定位被拒绝字段
@@ -72,7 +72,7 @@
 - **且** 浏览器路径测试员调用 Pi 时包含 `--model pi-browser-model`
 - **且** 未配置模型的子代理调用不包含 `--model`
 - **且** 配置读取接受 `validation.limit`
-- **测试**：`docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`
 - **真实数据来源**：测试创建临时 active change、真实 `wo.yaml` 和 fake agent CLI，运行真实 `wo run`
 - **入口路径**：`wo run --change 1-纯CLI配置变更 --json`
 - **关键断言**：fake CLI argv 日志记录了显式模型参数，并证明未配置模型不会传参数
@@ -92,7 +92,7 @@
 - **且** 浏览器路径测试员不执行浏览器探索
 - **且** `required:true` 加 `relevant:false` 不阻断 QA 主阶段
 - **且** 最终 run 完成为 `done`
-- **测试**：`docs/changes/24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-14-24-树状简化wo配置/tests/test_subagent_relevance_contract.sh`
 - **真实数据来源**：测试创建临时 active change、fake Pi 子代理和 fake Codex 主阶段产物
 - **入口路径**：`wo run --change 1-纯CLI配置变更 --json`
 - **关键断言**：全部默认子代理调用被记录；浏览器 artifact 含 `relevant:false`；最终 `state.json.status == done`

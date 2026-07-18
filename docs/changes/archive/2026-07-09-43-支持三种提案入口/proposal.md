@@ -29,7 +29,7 @@ small 提案的最小目录：
 docs/changes/<N-中文需求>/
 ├── brief.md
 ├── acceptance.json
-└── tests/
+└── docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/
     └── <真实测试代码>
 ```
 
@@ -43,7 +43,7 @@ docs/changes/<N-中文需求>/
 ├── spec.md
 ├── task.md
 ├── acceptance.json
-└── tests/
+└── docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/
 ```
 
 数量规则只用于降低分类歧义，不用于凑数。不能规定 standard 必须不少于 3 个测试或 5 个任务；如果一个 standard 自然只有少量测试或任务，提案必须说明它命中哪类升级触发器。

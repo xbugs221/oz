@@ -45,7 +45,7 @@ active_paths=(
   profiles-template
   README.md
   docs/specs
-  tests/specs
+  docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs
   .github/workflows
   go.mod
   go.sum
@@ -55,7 +55,7 @@ note "扫描旧 wo 命令、配置、状态目录和产品变量"
 scan_forbidden "旧 wo 二进制或模块路径" 'cmd/wo|\.\/cmd/wo|go install .*cmd/wo|github\.com/xbugs221/wo' "${active_paths[@]}"
 scan_forbidden "旧 wo 配置或状态目录" 'wo\.yaml|(^|/)\.wo(/|$)|XDG_STATE_HOME[^[:space:]]*/wo|state_home[^[:space:]]*/wo|/wo/repos|\bwo/repos\b' "${active_paths[@]}"
 scan_forbidden "旧 wo 用户命令提示" '\bwo (status|watch|run|clean|config|restart|resume|batch|abort|update|graph|contract|list-changes)\b|`wo`|独立 `wo`|wo 命令|wo 二进制|wo CLI|wo 工作流|wo 执行器' "${active_paths[@]}"
-scan_forbidden "旧 WO_* 产品变量" '\bWO_[A-Z0-9_]*|\bwo_bin\b|\bWO_BIN\b' internal tests/specs docs/specs README.md
+scan_forbidden "旧 WO_* 产品变量" '\bWO_[A-Z0-9_]*|\bwo_bin\b|\bWO_BIN\b' internal docs/changes/archive/2026-06-15-36-清理历史垃圾并隐藏内部引擎信息/tests/specs docs/specs README.md
 
 note "扫描 Dagu 运行时和用户合同残留"
 scan_forbidden "Dagu 运行时或合同残留" '\bDagu\b|\bdagu\b|StartDagu|ExportWorkflowDagu|runDagu|writeRunDagu' "${active_paths[@]}"

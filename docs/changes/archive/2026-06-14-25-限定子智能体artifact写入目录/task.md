@@ -2,7 +2,7 @@
 
 ## 1. 先运行创建阶段契约测试
 
-- [x] 1.1 运行 `bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`。
 - [x] 1.2 确认初始失败点是目标行为缺失：member artifact 仍是单 JSON 路径、prompt 仍要求最终裸 JSON、或 CLI 缺少 `validate-member-artifact`。
 - [x] 1.3 保存运行日志到 `test-results/25-subagent-artifact-directory/subagent-artifact-directory.log`。
 
@@ -34,7 +34,7 @@
 
 ## 6. 验证
 
-- [x] 6.1 重新运行 `bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`。
+- [x] 6.1 重新运行 `bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`。
 - [x] 6.2 运行 `go test ./internal/app -run 'Subagent|Parallel|Validate' -count=1`。
 - [x] 6.3 运行 `oz validate 25-限定子智能体artifact写入目录 --json`。
 

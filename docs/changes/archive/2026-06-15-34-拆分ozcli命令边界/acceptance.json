@@ -12,8 +12,8 @@
     {
       "id": "ozcli-boundary",
       "source": "change_contract",
-      "path": "docs/changes/34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh",
-      "command": "bash docs/changes/34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh",
+      "path": "docs/changes/archive/2026-06-15-34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh",
+      "command": "bash docs/changes/archive/2026-06-15-34-拆分ozcli命令边界/tests/ozcli_boundary_test.sh",
       "purpose": "通过 ozcli-boundary-log 证明 ozcli 入口、install、change、validate、archive 命令已拆分，并且 ozcli Go 回归通过。",
       "assertions": [
         "ozcli 的入口、install、change、validate 和 archive 命令分别位于独立 Go 文件",

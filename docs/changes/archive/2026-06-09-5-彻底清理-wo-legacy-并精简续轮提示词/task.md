@@ -2,9 +2,9 @@
 
 ## 1. 先运行创建阶段契约测试
 
-- [x] 1.1 运行 `bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`，确认当前实现因 Dagu 运行时/规格/长期测试残留而失败
-- [x] 1.2 运行 `bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`，确认当前实现仍接受 `writing` 和历史 prompt 快照回退而失败
-- [x] 1.3 运行 `bash docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh`，确认当前 review/fix 续轮提示词仍重复首轮要求而失败
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`，确认当前实现因 Dagu 运行时/规格/长期测试残留而失败
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`，确认当前实现仍接受 `writing` 和历史 prompt 快照回退而失败
+- [x] 1.3 运行 `bash docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh`，确认当前 review/fix 续轮提示词仍重复首轮要求而失败
 
 ## 2. 删除 Dagu 运行时和当前维护面残留
 
@@ -32,7 +32,7 @@
 
 ## 5. 验证与归档准备
 
-- [x] 5.1 运行本提案 `tests/` 下三个契约测试并确认通过
+- [x] 5.1 运行本提案 `docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/` 下三个契约测试并确认通过
 - [x] 5.2 运行 `go test ./...`
 - [x] 5.3 按业务逻辑把本提案测试合并进 `tests/specs/codex-workflow-cli/`
 - [x] 5.4 更新 `docs/specs/codex-workflow-cli/spec.md`，记录唯一 `go-dag` 运行时、无 legacy prompt fallback、review/fix 续轮精简合同

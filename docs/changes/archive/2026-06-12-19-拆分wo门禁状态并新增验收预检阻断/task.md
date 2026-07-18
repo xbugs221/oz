@@ -4,7 +4,7 @@
 
 ## 0. 先运行创建阶段契约测试
 
-- [x] 运行 `bash docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh`
+- [x] 运行 `bash docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh`
 - [x] 确认初始失败来自目标行为缺失：`State.ArtifactGates`、`State.AcceptancePreflight`、`blocked_acceptance_contract` 或 `runAcceptancePreflight` 尚未实现，而不是测试语法、路径或环境错误
 
 ## 1. 拆分门禁状态

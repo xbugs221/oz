@@ -18,7 +18,7 @@
 - **当** 这些 member 使用各自的旧 state 快照并发完成，并分别写出 member artifact 和 session ID
 - **则** 最终 `state.json.sessions` 必须包含每个 member 的 session key
 - **并且** 不得丢失主阶段已有 session
-- **测试**：`docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库中创建真实 run state，调用 `nodeRunSubagent` 写真实 `parallel-members/implementation_context/*.json`
 - **入口路径**：`nodeRunSubagent`、`saveState/loadState` 或新增状态合并 helper
 - **关键断言**：全部 subagent session key 都存在；每个 member artifact 都存在；最终 state snapshot 写入 `test-results`
@@ -34,7 +34,7 @@
 - **当** 系统构建 compact status view
 - **则** 每个完成 member 行必须显示对应 session ID
 - **并且** marker 必须仍是完成态 `✓`
-- **测试**：`docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
 - **真实数据来源**：同一测试中由 fake runner 通过真实 subagent prompt 写出的 member artifact 和真实 `state.json`
 - **入口路径**：`buildStatusView`、`statusSubagentRows`、`statusSubagentSessionID`
 - **关键断言**：每个 member 的 row `SessionID` 等于对应 session；row `Marker` 为 `✓`
@@ -49,7 +49,7 @@
 - **给定** 一个 subagent runner 在写 artifact 前先输出 `agent session started`
 - **当** subagent 仍阻塞在运行中，member artifact 尚未完成
 - **则** `state.json.sessions` 必须已经包含该 subagent 的 session key
-- **测试**：`docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
 - **真实数据来源**：测试 runner 实现 progress writer，在 artifact 写入前发送 session started 事件并阻塞
 - **入口路径**：`nodeRunSubagent` 与 agent runner progress writer 的连接点
 - **关键断言**：释放 runner 前读取 `state.json`，能看到对应 subagent session；释放后 goroutine 正常完成

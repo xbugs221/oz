@@ -12,8 +12,8 @@
     {
       "id": "workflow-config-boundary-contract",
       "source": "change_contract",
-      "path": "docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh",
-      "command": "bash docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh",
       "purpose": "证明配置解析职责已拆到 schema/profile/parallel/validation 边界，并通过真实配置业务合同",
       "assertions": [
         "检查 config_schema.go、config_profiles.go、config_parallel.go 和 config_validation.go 存在",

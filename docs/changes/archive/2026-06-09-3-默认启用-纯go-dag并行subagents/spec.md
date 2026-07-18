@@ -16,8 +16,8 @@
 
 #### 场景：默认 run 不依赖 Dagu CLI
 
-- **对应测试**：`docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh`
-- **真实数据来源**：测试在临时 git 仓库中创建真实 active change，包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`。
+- **对应测试**：`docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh`
+- **真实数据来源**：测试在临时 git 仓库中创建真实 active change，包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/`。
 - **入口路径**：构建当前 checkout 的 `cmd/wo` 和 `cmd/oz`，运行 `wo run --change 1-默认go-dag --json`。
 - **关键断言**：PATH 中放置会失败的 fake `dagu`，默认运行仍成功且没有调用 `dagu`；最终 run state 包含 `engine: go-dag`；`workflow_config.parallel.enabled` 为 `true`；人类 `wo status -w1` 显示 `引擎 go-dag` 和并行摘要。
 - **剩余风险**：fake agent 只覆盖最小 execution/archive 路径，不验证真实 LLM 输出质量。
@@ -28,7 +28,7 @@
 
 #### 场景：默认配置启用 parallel 并产出并行节点
 
-- **对应测试**：`docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库中调用真实 `wo config` 生成默认 `wo.yaml`，并调用真实 `wo graph --change demo --format mermaid`。
 - **入口路径**：`wo config`、`wo graph --change demo --format mermaid`。
 - **关键断言**：生成的 `wo.yaml` 包含 `engine: go-dag` 和 `parallel.enabled: true`；Mermaid 图包含 `planning_context`、`implementation_context`、`review`、`qa` 的 fan-out/fan-in 节点；图中不要求 Dagu CLI。
@@ -40,7 +40,7 @@
 
 #### 场景：status 展示 engine、主阶段和并行成员
 
-- **对应测试**：`docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh` 和 `docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh` 和 `docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`
 - **真实数据来源**：测试使用真实 run state、真实 `parallel-*.json` artifact 和真实 `wo status -w1` 输出。
 - **入口路径**：`wo status -w1`。
 - **关键断言**：status 输出包含 `引擎 go-dag`、当前 workflow 别名、主阶段行、并行 group 摘要、成员名称和成员状态；缺失或非法 parallel artifact 不得显示 success。
@@ -52,7 +52,7 @@
 
 #### 场景：Mermaid 图展示 fan-out/fan-in
 
-- **对应测试**：`docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`
 - **真实数据来源**：真实 `wo graph --change demo --format mermaid` 输出。
 - **入口路径**：`wo graph`。
 - **关键断言**：Mermaid 输出包含 subagent 节点、fan-in 节点、主阶段节点以及 review/QA/archive gate；同一份 graph spec 应能用于 DAG 构建。
@@ -64,7 +64,7 @@
 
 #### 场景：runner JSON 不新增 parallel 结构字段
 
-- **对应测试**：`docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh`
 - **真实数据来源**：默认 run 完成后读取真实 `wo status --run-id <run-id> --json` 输出。
 - **入口路径**：`wo status --run-id <run-id> --json`。
 - **关键断言**：JSON 仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions`、`error`；不得包含 `parallel`、`parallel_status`、`parallel_summary` 或 `members`。

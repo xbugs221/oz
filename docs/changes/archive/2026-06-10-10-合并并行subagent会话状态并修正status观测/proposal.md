@@ -50,5 +50,5 @@ B 完成后用旧快照保存 sessions={B}
 本提案包含一个合同测试脚本，使用真实 `internal/app` 包级测试入口创建临时 git 仓库、真实 run state、真实 member artifact 和真实 status view。执行阶段必须让该测试通过：
 
 ```bash
-bash docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh
+bash docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh
 ```

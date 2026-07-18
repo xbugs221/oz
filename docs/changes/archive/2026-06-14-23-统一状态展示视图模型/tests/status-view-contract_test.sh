@@ -7,7 +7,7 @@ mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
 echo "evidence id: status-view-contract-log" | tee -a "$LOG"
 echo "evidence path: $LOG" | tee -a "$LOG"
-echo "test path: docs/changes/23-统一状态展示视图模型/tests/status-view-contract_test.sh" | tee -a "$LOG"
+echo "test path: docs/changes/archive/2026-06-14-23-统一状态展示视图模型/tests/status-view-contract_test.sh" | tee -a "$LOG"
 
 if ! fd 'status.*render.*\.go|render.*status.*\.go' internal/app | tee -a "$LOG" | grep -q .; then
   echo "internal/app 缺少 status render 源文件" | tee -a "$LOG"

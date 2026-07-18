@@ -4,10 +4,10 @@
 
 ## 任务
 
-- [x] 1. 先运行 `bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh`，确认当前失败于 `run-acceptance` 命令面缺失。
-- [x] 2. 先运行 `bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh`，确认当前失败于目标命令缺失而不是测试语法错误。
-- [x] 3. 先运行 `bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh`，确认当前失败于目标命令缺失而不是临时项目构造错误。
-- [x] 4. 先运行 `bash docs/changes/37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh`，确认当前缺少独立 acceptance run 边界和 gate 回归。
+- [x] 1. 先运行 `bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_contract_surface.sh`，确认当前失败于 `run-acceptance` 命令面缺失。
+- [x] 2. 先运行 `bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_success_contract.sh`，确认当前失败于目标命令缺失而不是测试语法错误。
+- [x] 3. 先运行 `bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_failure_contract.sh`，确认当前失败于目标命令缺失而不是临时项目构造错误。
+- [x] 4. 先运行 `bash docs/changes/archive/2026-06-16-37-执行验收合同测试并汇总结果/tests/test_acceptance_run_stage_gate_contract.sh`，确认当前缺少独立 acceptance run 边界和 gate 回归。
 - [x] 5. 阅读 `internal/acceptance/acceptance.go`，确认现有合同字段、弱断言校验和 evidence producer 追溯规则。
 - [x] 6. 阅读 `internal/app/acceptance.go`、`qa.go`、`qa_validate_command.go`，确认 QA artifact 和 acceptance matrix 现有边界。
 - [x] 7. 阅读 `internal/app/validation.go` 和 `engine_stage.go`，确认现有 stage validation gate 写入和重试方式。

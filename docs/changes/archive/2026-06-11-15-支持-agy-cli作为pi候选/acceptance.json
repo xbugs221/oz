@@ -24,8 +24,8 @@
     {
       "id": "contract-agy-config-preflight",
       "source": "change_contract",
-      "path": "docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh",
-      "command": "bash docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh",
       "purpose": "证明 agy 可作为配置候选后端，且 sealed run 启动前会检查 agy CLI。",
       "assertions": [
         "配置 tool: agy 或 cli: agy 不再报未知 agent tool",
@@ -38,8 +38,8 @@
     {
       "id": "contract-agy-cli-args",
       "source": "change_contract",
-      "path": "docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh",
-      "command": "bash docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh",
       "purpose": "证明 agy sealed runner 和 planning command 使用真实 agy CLI 参数。",
       "assertions": [
         "sealed run 调用包含 --print、--model、--conversation 和权限参数",

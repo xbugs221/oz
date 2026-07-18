@@ -4,7 +4,7 @@
 
 ## 任务
 
-- [x] 先运行 `bash docs/changes/21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh`，确认当前重复实现会触发结构断言失败。
+- [x] 先运行 `bash docs/changes/archive/2026-06-14-21-共享验收证据追溯逻辑/tests/shared-producer-contract_test.sh`，确认当前重复实现会触发结构断言失败。
 - [x] 在 `internal/acceptance` 抽取 producer 追溯纯函数和 findings API。
 - [x] 给 `internal/acceptance` 增加真实文件和 wrapper 场景测试。
 - [x] 修改 `cmd/oz` 的 `validateAcceptanceFiles` 调用共享 API。

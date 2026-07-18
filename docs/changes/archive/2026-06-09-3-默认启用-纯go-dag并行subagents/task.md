@@ -2,8 +2,8 @@
 
 ## 1. 契约测试基线
 
-- [x] 1.1 运行 `bash docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh`，确认当前实现因默认 engine/state/status 仍未改为 `go-dag` 而失败。
-- [x] 1.2 运行 `bash docs/changes/3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`，确认当前实现因默认配置未启用 parallel 且 graph/status 缺少新语义而失败。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_default_go_dag_run_contract.sh`，确认当前实现因默认 engine/state/status 仍未改为 `go-dag` 而失败。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/test_go_dag_graph_status_contract.sh`，确认当前实现因默认配置未启用 parallel 且 graph/status 缺少新语义而失败。
 
 ## 2. 引入纯 Go DAG engine
 

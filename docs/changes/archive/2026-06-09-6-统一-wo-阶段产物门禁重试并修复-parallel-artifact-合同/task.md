@@ -2,10 +2,10 @@
 
 ## 1. 先运行创建阶段契约测试，确认当前失败点
 
-- [x] 1.1 运行 `bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh`，确认当前实现会在 execution/fix/archive 等缺失产物场景直接 failed，而不是同会话 retry
-- [x] 1.2 运行 `bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh`，确认当前 batch 会被可修复 execution artifact 问题中断
-- [x] 1.3 运行 `bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh`，确认当前 parallel member `severity: info` 会导致 workflow failed
-- [x] 1.4 运行 `bash docs/changes/6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`，确认内置阶段提示词不会把首轮 execution/write 压缩成只读 `state.json` 和调用技能
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_artifact_gate_retry_all_roles.sh`，确认当前实现会在 execution/fix/archive 等缺失产物场景直接 failed，而不是同会话 retry
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_batch_continues_after_stage_artifact_repair.sh`，确认当前 batch 会被可修复 execution artifact 问题中断
+- [x] 1.3 运行 `bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_parallel_subagent_info_severity_contract.sh`，确认当前 parallel member `severity: info` 会导致 workflow failed
+- [x] 1.4 运行 `bash docs/changes/archive/2026-06-09-6-统一-wo-阶段产物门禁重试并修复-parallel-artifact-合同/tests/test_stage_prompt_contract_completeness.sh`，确认内置阶段提示词不会把首轮 execution/write 压缩成只读 `state.json` 和调用技能
 
 ## 2. 统一主阶段 artifact gate
 

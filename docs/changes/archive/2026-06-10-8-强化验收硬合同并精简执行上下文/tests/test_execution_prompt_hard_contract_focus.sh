@@ -67,12 +67,12 @@ func TestChangeEightExecutionPromptDefaultsToHardContract(t *testing.T) {
 	requireContains(t, prompt,
 		"brief.md",
 		"acceptance.json",
-		"tests/",
+		"docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/",
 		"required_tests[].command",
 	)
 	requireOmits(t, prompt,
-		"读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`",
-		"读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/` 中创建阶段写好的契约测试",
+		"读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/`",
+		"读取 `proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/` 中创建阶段写好的契约测试",
 	)
 }
 
@@ -86,7 +86,7 @@ func TestChangeEightOzExecSkillMatchesPromptContract(t *testing.T) {
 	requireContains(t, skill,
 		"brief.md",
 		"acceptance.json",
-		"tests/",
+		"docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/",
 		"按需读取",
 	)
 	requireOmits(t, skill,

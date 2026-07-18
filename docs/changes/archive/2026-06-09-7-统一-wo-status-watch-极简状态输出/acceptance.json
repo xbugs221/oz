@@ -30,8 +30,8 @@
     {
       "id": "status-watch-compact-output-contract",
       "source": "change_contract",
-      "path": "docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh",
-      "command": "bash docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_watch_compact_output_contract.sh",
       "purpose": "证明 wo status/watch 使用统一极简固定列视图，subagent 缩进短名展示，batch 只组合多个 workflow 视图。",
       "assertions": [
         "status 第一行是静态 indicator 加 workflow 短编号，而不是旧的工作流标题或 engine 行",
@@ -43,8 +43,8 @@
     {
       "id": "status-json-observability-artifacts-contract",
       "source": "change_contract",
-      "path": "docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh",
-      "command": "bash docs/changes/7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh",
+      "path": "docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-09-7-统一-wo-status-watch-极简状态输出/tests/test_status_json_observability_artifacts_contract.sh",
       "purpose": "证明 wo status --run-id --json 在保留旧 runner 字段的同时，新增可供下游工具定位阶段和 subagent 产物的 observability 结构。",
       "assertions": [
         "JSON 保留 run_id、change_name、status、stage、stages、paths、sessions、error 顶层字段",

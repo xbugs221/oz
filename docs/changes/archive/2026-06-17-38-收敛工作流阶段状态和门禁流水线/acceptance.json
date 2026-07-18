@@ -24,8 +24,8 @@
     {
       "id": "stage-gate-pipeline-contract",
       "source": "change_contract",
-      "path": "docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh",
-      "command": "bash docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh | tee test-results/38-stage-gate-pipeline/acceptance-command.log",
+      "path": "docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh",
+      "command": "bash docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh | tee test-results/38-stage-gate-pipeline/acceptance-command.log",
       "purpose": "证明工作流阶段状态语义和主阶段门禁流水线已经形成单一可维护边界，并保留现有 Go 回归。",
       "assertions": [
         "stage gate pipeline contract verifies loop and DAG node stage completion call the same gate pipeline instead of duplicating acceptance and validation order",

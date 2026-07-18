@@ -2,10 +2,10 @@
 
 ## 1. 先运行契约测试
 
-- [x] 1.1 运行 `bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh`，确认当前实现因旧后端残留失败。
-- [x] 1.2 运行 `bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh`，确认当前实现因未强制检查两个 CLI 或仍接受旧配置失败。
-- [x] 1.3 运行 `bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh`，确认当前实现因 `internal/` 测试残留失败。
-- [x] 1.4 运行 `bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh`，确认当前文档和发布门禁尚未同步失败。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh`，确认当前实现因旧后端残留失败。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh`，确认当前实现因未强制检查两个 CLI 或仍接受旧配置失败。
+- [x] 1.3 运行 `bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh`，确认当前实现因 `internal/` 测试残留失败。
+- [x] 1.4 运行 `bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh`，确认当前文档和发布门禁尚未同步失败。
 
 ## 2. 删除旧后端
 
@@ -22,9 +22,9 @@
 
 ## 4. 迁移测试布局
 
-- [x] 4.1 将 `internal/**/_test.go` 迁移到根目录 `tests/`，按业务能力组织。
+- [x] 4.1 将 `internal/**/_test.go` 迁移到根目录 `docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/`，按业务能力组织。
 - [x] 4.2 将依赖未导出函数的测试改成 CLI 或业务行为测试，避免扩大导出面。
-- [x] 4.3 更新发布门禁和长期规格测试入口，只依赖根目录 `tests/`。
+- [x] 4.3 更新发布门禁和长期规格测试入口，只依赖根目录 `docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/`。
 
 ## 5. 验证和归档准备
 

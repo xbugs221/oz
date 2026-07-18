@@ -24,9 +24,9 @@
 
 验收入口：
 
-- `bash docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh`
-- `bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`
-- `bash docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`
+- `bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh`
+- `bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`
+- `bash docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`
 
 执行阶段默认上下文：
 

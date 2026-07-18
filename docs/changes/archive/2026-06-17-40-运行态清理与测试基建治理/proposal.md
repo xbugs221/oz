@@ -26,7 +26,7 @@
 创建阶段契约测试必须通过：
 
 ```bash
-bash docs/changes/40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh
+bash docs/changes/archive/2026-06-17-40-运行态清理与测试基建治理/tests/clean_plan_and_fixture_contract_test.sh
 ```
 
 执行阶段还必须运行：

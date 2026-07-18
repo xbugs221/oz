@@ -147,7 +147,7 @@ MD
 
 cat >"$project/docs/changes/1-默认go-dag/tests/test_contract.sh" <<'SH'
 #!/usr/bin/env bash
-# 临时 change 的测试入口，证明 tests/ 目录不是占位。
+# 临时 change 的测试入口，证明 docs/changes/archive/2026-06-09-3-默认启用-纯go-dag并行subagents/tests/ 目录不是占位。
 set -euo pipefail
 test -f docs/changes/1-默认go-dag/acceptance.json
 SH

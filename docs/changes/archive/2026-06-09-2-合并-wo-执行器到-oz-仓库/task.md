@@ -2,8 +2,8 @@
 
 ## 1. 契约测试基线
 
-- [x] 1.1 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`，确认当前实现因缺少 `cmd/wo`、`internal/app` 或 CI 本地构建约束而失败。
-- [x] 1.2 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh`，确认当前实现因 `oz validate` 未要求 `acceptance.json` 而失败。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`，确认当前实现因缺少 `cmd/wo`、`internal/app` 或 CI 本地构建约束而失败。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh`，确认当前实现因 `oz validate` 未要求 `acceptance.json` 而失败。
 
 ## 2. 合入 wo 源码和规格
 
@@ -41,9 +41,9 @@
 - [x] 6.2 明确旧 `wo` 运行态不会按仓库路径自动迁移。
 - [x] 6.3 运行 `go test ./...`。
 - [x] 6.4 运行根目录 shell 业务测试。
-- [x] 6.5 运行本提案 `tests/` 下两个契约测试。
+- [x] 6.5 运行本提案 `docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/` 下两个契约测试。
 - [x] 6.6 运行 `go run ./cmd/oz validate 2-合并-wo-执行器到-oz-仓库 --json`。
 
 ## 历史测试更新
 
-- `tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_release_workflow_runs_business_tests.sh` 原本要求 CI/Release 下载外部 latest `oz`；这与本提案“必须使用当前 checkout 构建本地 `oz`”冲突，已改为断言 workflow 本地构建 `./cmd/oz` 和 `./cmd/wo`，并拒绝外部 latest 下载。
+- `docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_release_workflow_runs_business_tests.sh` 原本要求 CI/Release 下载外部 latest `oz`；这与本提案“必须使用当前 checkout 构建本地 `oz`”冲突，已改为断言 workflow 本地构建 `./cmd/oz` 和 `./cmd/wo`，并拒绝外部 latest 下载。

@@ -26,8 +26,8 @@
     {
       "id": "gate-state-preflight-contract",
       "source": "change_contract",
-      "path": "docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
-      "command": "bash docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "path": "docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
       "purpose": "证明 artifact gate 状态与 command validation 状态分离，并证明 execution 后 acceptance preflight 会阻断 evidence 无 producer 的验收合同。",
       "assertions": [
         "artifact gate failure 写入 state.artifact_gates 而不是 state.validation",

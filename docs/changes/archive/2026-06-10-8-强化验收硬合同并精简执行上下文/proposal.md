@@ -7,14 +7,14 @@
 本变更要把提案拆成两层：
 
 - 面向用户的简短说明：`brief.md`，只解释关键信息、行为变化、非目标和风险。
-- 面向智能体和调度器的硬合同：`acceptance.json`、`tests/` 和运行证据，决定执行、review、QA 是否能通过。
+- 面向智能体和调度器的硬合同：`acceptance.json`、`docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/` 和运行证据，决定执行、review、QA 是否能通过。
 
 ## 变更内容
 
 - 新增 `brief.md` 作为 active change 的用户简报 artifact，并让 `oz status --json` 暴露它。
 - 强化 `acceptance.json` 校验：`required_tests[].assertions` 必须包含业务级断言，弱断言和缺断言不能通过。
 - 强化 `oz validate` 对测试路径和验收矩阵的交叉校验，避免合同声明和真实测试脱节。
-- 调整 execution 默认提示词：默认读取 `brief.md`、`acceptance.json` 和 `tests/`，只在冲突、歧义、历史测试不一致时按需读取 `proposal.md`、`design.md`、`spec.md`、`task.md`。
+- 调整 execution 默认提示词：默认读取 `brief.md`、`acceptance.json` 和 `docs/changes/archive/2026-06-10-8-强化验收硬合同并精简执行上下文/tests/`，只在冲突、歧义、历史测试不一致时按需读取 `proposal.md`、`design.md`、`spec.md`、`task.md`。
 - 让 `oz status --json` 暴露验收合同摘要，包括 required tests、required evidence 和 coverage 数量。
 
 ## 非目标

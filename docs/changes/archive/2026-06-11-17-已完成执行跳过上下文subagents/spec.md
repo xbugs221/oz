@@ -19,7 +19,7 @@
 - **则** workflow 不得调用这些 execution 前 subagents
 - **并且**不得生成 execution context member artifact 或 subagent session
 - **并且** workflow 仍可继续进入 archive 并完成
-- **测试**：`docs/changes/17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh`
+- **测试**：`docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_skip_execution_context_when_tasks_done.sh`
 - **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `wo.yaml` 并运行当前仓库构建出的 `wo` 和 `oz`
 - **入口路径**：`cmd/wo run --change <change> --json`
 - **关键断言**：fake subagent 一旦收到 `SUBAGENT_OUTPUT` 就让测试失败；最终 state 必须为 `done` 且无 subagent session/artifact
@@ -37,7 +37,7 @@
 - **则** workflow 必须先调用这些 execution 前 subagents 并生成 fan-in artifact
 - **并且** execution 主 agent 可以继续勾选 task
 - **并且** workflow 可进入 archive 并完成
-- **测试**：`docs/changes/17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh`
+- **测试**：`docs/changes/archive/2026-06-11-17-已完成执行跳过上下文subagents/tests/test_run_execution_context_when_tasks_pending.sh`
 - **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `wo.yaml`，fake subagents 写入真实 member artifact
 - **入口路径**：`cmd/wo run --change <change> --json`
 - **关键断言**：两个 configured subagents 都被调用；`parallel-implementation-context.json` 包含两个成员；最终 state 为 `done`

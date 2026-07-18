@@ -2,8 +2,8 @@
 
 ## 1. 先运行创建阶段契约测试
 
-- [x] 1.1 运行 `bash docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh`，确认当前实现因不认识 agy 或未预检 agy 失败。
-- [x] 1.2 运行 `bash docs/changes/15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh`，确认当前实现因缺少 agy runner 或参数映射失败。
+- [x] 1.1 运行 `bash docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_config_preflight_contract.sh`，确认当前实现因不认识 agy 或未预检 agy 失败。
+- [x] 1.2 运行 `bash docs/changes/archive/2026-06-11-15-支持-agy-cli作为pi候选/tests/test_agy_cli_args_contract.sh`，确认当前实现因缺少 agy runner 或参数映射失败。
 
 ## 2. 接入 agy tool
 

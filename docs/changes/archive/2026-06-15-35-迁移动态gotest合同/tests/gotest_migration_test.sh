@@ -21,18 +21,18 @@ fail() {
 
 note "gotest-migration-log: 检查动态 .gotest 机制是否已清除"
 
-if [[ -f tests/app/migrated_app_suite_test.go ]]; then
-  fail "tests/app/migrated_app_suite_test.go 仍存在，动态 runner 尚未删除"
+if [[ -f docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app/migrated_app_suite_test.go ]]; then
+  fail "docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app/migrated_app_suite_test.go 仍存在，动态 runner 尚未删除"
 fi
 
-if matches="$(rg -n '\\.gotest|OZ_MIGRATED_APP_RUN|migrated_app_suite' tests/specs tests/app 2>/dev/null || true)" && [[ -n "$matches" ]]; then
+if matches="$(rg -n '\\.gotest|OZ_MIGRATED_APP_RUN|migrated_app_suite' docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/specs docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app 2>/dev/null || true)" && [[ -n "$matches" ]]; then
   printf '%s\n' "$matches" >>"$EVIDENCE"
   fail "仍存在动态 .gotest 或 migrated runner 引用"
 fi
 
-if gotests="$(fd . tests/app -e gotest 2>/dev/null || true)" && [[ -n "$gotests" ]]; then
+if gotests="$(fd . docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app -e gotest 2>/dev/null || true)" && [[ -n "$gotests" ]]; then
   printf '%s\n' "$gotests" >>"$EVIDENCE"
-  fail "tests/app 仍存在 .gotest 文件"
+  fail "docs/changes/archive/2026-06-15-35-迁移动态gotest合同/tests/app 仍存在 .gotest 文件"
 fi
 
 note "运行完整 Go 测试入口，确认迁移后没有隐藏动态测试依赖"

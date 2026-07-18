@@ -30,7 +30,7 @@
 创建阶段契约测试必须通过：
 
 ```bash
-bash docs/changes/38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh
+bash docs/changes/archive/2026-06-17-38-收敛工作流阶段状态和门禁流水线/tests/stage_gate_pipeline_contract_test.sh
 ```
 
 执行阶段还必须运行：

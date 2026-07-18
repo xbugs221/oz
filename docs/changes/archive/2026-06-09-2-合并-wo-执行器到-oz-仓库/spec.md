@@ -17,7 +17,7 @@
 #### 场景：同一 checkout 构建 oz 和 wo
 
 - **给定** 开发者在合并后的仓库根目录
-- **当** 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`
+- **当** 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`
 - **则** 测试必须能从 `./cmd/oz` 构建 `oz`
 - **并且** 测试必须能从 `./cmd/wo` 构建 `wo`
 - **并且** `go list -m` 仍返回 `github.com/xbugs221/oz`
@@ -30,7 +30,7 @@
 #### 场景：CI 和 Release 使用本地 oz
 
 - **给定** 合并后的仓库包含 GitHub Actions workflow
-- **当** 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`
+- **当** 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`
 - **则** workflow 中不得继续下载 `github.com/xbugs221/oz/releases/latest`
 - **并且** workflow 必须包含从当前 checkout 构建 `./cmd/oz` 和 `./cmd/wo` 的步骤或命令
 - **并且** workflow 必须继续运行 `go test ./...`
@@ -45,8 +45,8 @@
 
 #### 场景：oz validate 接受当前 wo 格式
 
-- **给定** 一个 active change 包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `wo` 允许的 `acceptance.json`
-- **当** 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh`
+- **给定** 一个 active change 包含 `proposal.md`、`design.md`、`spec.md`、`task.md`、`docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/` 和当前 `wo` 允许的 `acceptance.json`
+- **当** 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh`
 - **则** `oz validate <change> --json` 必须成功
 - **并且** `acceptance.json` 只需要包含 `summary`、`required_tests`、`required_evidence` 及其当前 `wo` 已支持的子字段
 - **真实数据来源**：契约测试创建的临时 oz 项目和真实 `oz` 二进制
@@ -57,7 +57,7 @@
 #### 场景：oz validate 拒绝缺失或未知字段
 
 - **给定** 一个 active change 缺少 `acceptance.json`
-- **当** 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh`
+- **当** 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_oz_acceptance_validation_contract.sh`
 - **则** `oz validate <change> --json` 必须失败并指出 acceptance 合同问题
 - **给定** 一个 active change 的 `acceptance.json` 包含当前 `wo` schema 不允许的字段，例如 `coverage`
 - **当** 再次运行校验
@@ -74,7 +74,7 @@
 #### 场景：wo 继续通过 oz JSON 协议选择和校验 change
 
 - **给定** `wo` 代码已经合入当前仓库
-- **当** 运行 `bash docs/changes/2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`
+- **当** 运行 `bash docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/test_monorepo_cli_release_contract.sh`
 - **则** `wo` 必须仍保留对 `oz list/status/validate/archive` 命令协议的调用能力
 - **并且** 合并不得要求执行器测试改成直接 import `cmd/oz`
 - **真实数据来源**：合入后的 `internal/app/change.go` 和既有 `wo` 测试中的 fake oz 契约

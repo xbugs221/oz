@@ -47,7 +47,7 @@ review 和 QA prompt 必须要求：
 
 ## 6. 兼容性
 
-已创建但尚未运行的旧提案只依赖 `acceptance.json` 和 `tests/`，没有运行期 review/QA artifact。执行本变更后，旧提案不需要迁移。
+已创建但尚未运行的旧提案只依赖 `acceptance.json` 和 `docs/changes/archive/2026-06-10-12-收窄验收gate到提案范围/tests/`，没有运行期 review/QA artifact。执行本变更后，旧提案不需要迁移。
 
 对旧运行 artifact：
 

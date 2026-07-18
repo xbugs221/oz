@@ -24,7 +24,7 @@ scan_forbidden() {
   local pattern="$1"
   shift
   local output
-  output="$(rg -n --glob '!docs/changes/archive/**' --glob '!docs/changes/30-彻底合并wo为oz-flow/**' "$pattern" "$@" 2>/dev/null || true)"
+  output="$(rg -n --glob '!docs/changes/archive/**' --glob '!docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/**' "$pattern" "$@" 2>/dev/null || true)"
   if [[ -n "$output" ]]; then
     printf '%s\n' "$output" | tee -a "$log"
     fail "发现禁止残留：$pattern"
@@ -51,7 +51,7 @@ active_paths=(
   profiles-template
   README.md
   docs/specs
-  tests/specs
+  docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/specs
   .github/workflows
   go.mod
   go.sum
@@ -66,6 +66,6 @@ scan_forbidden '`wo`|独立 `wo`|wo 命令|wo 二进制|wo CLI|wo 工作流|wo �
 scan_forbidden '^wo:|wo\.workflow|wo\.prompts|wo\.exe|同一 checkout 构建 oz 和 wo|当前 wo' README.md docs/specs .github/workflows
 
 note "检查 oz flow 新命名已经出现在用户文档和规格中"
-rg -n 'oz flow' README.md docs/specs tests/specs .github/workflows | tee -a "$log" >/dev/null || fail "活跃文档或测试未体现 oz flow"
+rg -n 'oz flow' README.md docs/specs docs/changes/archive/2026-06-14-30-彻底合并wo为oz-flow/tests/specs .github/workflows | tee -a "$log" >/dev/null || fail "活跃文档或测试未体现 oz flow"
 
 note "PASS: no-wo-legacy-surface-contract"

@@ -1,6 +1,6 @@
 ## 1. 测试
 
-- [x] 1.1 在 ASCII `tests/` 包路径中新增真实 Go 测试，覆盖帮助输出区分 `list` / `install` 日常命令和 `status` / `validate` / `archive` 自动化接口；`docs/changes/1-简化-oz-命令组/tests/` 保留非 `.go` 测试来源说明，避免 `go test ./...` 被中文 import path 阻断。
+- [x] 1.1 在 ASCII `docs/changes/archive/2026-05-11-1-简化-oz-命令组/tests/` 包路径中新增真实 Go 测试，覆盖帮助输出区分 `list` / `install` 日常命令和 `status` / `validate` / `archive` 自动化接口；`docs/changes/archive/2026-05-11-1-简化-oz-命令组/tests/` 保留非 `.go` 测试来源说明，避免 `go test ./...` 被中文 import path 阻断。
 - [x] 1.2 新增真实 Go 测试，覆盖 `oz list --json` 与 `oz l --json` 输出一致且只包含活动提案。
 - [x] 1.3 新增真实 Go 测试，覆盖 `oz install` 本地安装、`oz install --global`、`oz i --global` 和 `oz i -g` 全局安装。
 - [x] 1.4 新增真实 Go 测试，覆盖 `oz status --json`、`oz validate --json` 和 `oz archive --yes` 继续满足下游自动化行为。

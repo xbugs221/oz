@@ -18,8 +18,8 @@
     {
       "id": "github-ci-prompt-contract",
       "source": "change_contract",
-      "path": "docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
-      "command": "bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
       "purpose": "证明 GitHub CI 失败的 planning prompt 合同已经在本地等价 Go 测试中恢复通过。",
       "assertions": [
         "定向运行 app prompt 合同测试时，不再失败于缺少“讨论规划阶段”",
@@ -31,11 +31,11 @@
     {
       "id": "ci-documentation-contract",
       "source": "change_contract",
-      "path": "docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh",
-      "command": "bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_ci_documentation_contract.sh",
       "purpose": "证明 README、长期规格和 GitHub Actions workflow 都说明并执行同一套 CI/Release 测试门禁。",
       "assertions": [
-        "README 明确提到 GitHub Actions、CI、Release、go test ./... 和 tests/*.sh",
+        "README 明确提到 GitHub Actions、CI、Release、go test ./... 和 docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/*.sh",
         "release automation 长期规格继续约束 CI/Release 使用本地 oz/wo 构建和同一套测试门禁",
         "CI 与 Release workflow 文件都保留 go test ./... 和根目录 shell 业务测试循环"
       ],
@@ -44,20 +44,20 @@
     {
       "id": "root-go-test-gate",
       "source": "root_e2e",
-      "path": "docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
-      "command": "bash docs/changes/18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh && go test ./...",
+      "path": "docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/test_github_ci_prompt_contract.sh && go test ./...",
       "purpose": "证明 GitHub CI 的 Run Go tests step 在本地等价门禁中通过。",
       "assertions": [
         "所有 Go package 测试通过",
-        "prompt 合同不再导致 internal/app 或迁移后的 tests/app 失败"
+        "prompt 合同不再导致 internal/app 或迁移后的 docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/app 失败"
       ],
       "expected_initial_failure": "GitHub run 27288329734 已证明当前失败发生在 Run Go tests。"
     },
     {
       "id": "root-shell-business-gate",
       "source": "existing_regression",
-      "path": "tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_all_root_business_tests_pass.sh",
-      "command": "bash tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_all_root_business_tests_pass.sh",
+      "path": "docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_all_root_business_tests_pass.sh",
+      "command": "bash docs/changes/archive/2026-06-11-18-修复GitHub-CI并更新仓库文档/tests/2026-05-15-20-修复-cicd-并强化测试门禁-test_all_root_business_tests_pass.sh",
       "purpose": "证明 CI 和 Release 后续 shell 业务测试门禁没有因本次文档或 prompt 修复被破坏。",
       "assertions": [
         "根目录 shell 业务测试均返回零退出码",

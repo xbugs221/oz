@@ -12,7 +12,7 @@
 
 #### 场景：wo 命令分发从 app.go 拆出且命令面稳定
 
-- **测试文件**：`docs/changes/28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-14-28-拆分wo命令分发边界/tests/test_wo_command_dispatch_boundary_contract.sh`
 - **真实数据来源**：仓库当前 Go CLI 源码、`internal/app` Go 单测和 `cmd/oz` 命令测试构造的真实临时项目。
 - **入口路径**：从仓库根目录运行 shell 合同测试，测试内部执行 `go test ./internal/app ./cmd/oz -count=1`。
 - **关键断言**：

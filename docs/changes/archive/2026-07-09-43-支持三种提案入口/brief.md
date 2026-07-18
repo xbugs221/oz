@@ -11,8 +11,8 @@
 | 类型 | 适用场景 | 产物 |
 | --- | --- | --- |
 | micro | 不改变用户可感知行为、命令契约、状态语义或长期规格的纯实现修复 | TDD + git commit，不建 change 目录 |
-| small | 单一业务意图、最多 2 个验收场景、最多 2 个 required tests，且无复杂设计分歧 | `brief.md` + `acceptance.json` + `tests/` |
-| standard | 中大型、高风险、跨模块或多场景变更 | 现有完整提案六件套 + `acceptance.json` + `tests/` |
+| small | 单一业务意图、最多 2 个验收场景、最多 2 个 required tests，且无复杂设计分歧 | `brief.md` + `acceptance.json` + `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` |
+| standard | 中大型、高风险、跨模块或多场景变更 | 现有完整提案六件套 + `acceptance.json` + `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` |
 
 ```text
 是否改变行为/规格？
@@ -29,8 +29,8 @@
 ## 范围
 
 - 更新 `README.md`、内置 skill 和长期规格，说明 micro/small/standard 三种入口。
-- 更新 `oz validate`，允许 small 提案只包含 `brief.md`、`acceptance.json` 和 `tests/`。
-- 保持 small 的测试硬合同：`acceptance.json` 和 `tests/` 仍然必填，测试必须是真实测试代码。
+- 更新 `oz validate`，允许 small 提案只包含 `brief.md`、`acceptance.json` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/`。
+- 保持 small 的测试硬合同：`acceptance.json` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/` 仍然必填，测试必须是真实测试代码。
 - 保持 standard 的完整文档要求，避免复杂变更降级成 brief-only。
 - 明确 small 上限和 standard 升级触发器，避免用硬性测试数量或任务数量诱导凑数。
 - 归档时 small 也必须把长期行为合并进 `docs/specs/`，测试意图合并进 `tests/specs/`。
@@ -44,11 +44,11 @@
 
 ## 验收入口
 
-- `bash docs/changes/43-支持三种提案入口/tests/test_proposal_entry_types_docs_contract.sh`
-- `bash docs/changes/43-支持三种提案入口/tests/test_small_brief_only_validate_contract.sh`
+- `bash docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/test_proposal_entry_types_docs_contract.sh`
+- `bash docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/test_small_brief_only_validate_contract.sh`
 
 执行阶段先运行以上测试。当前代码下第二个测试应因 `oz validate` 仍要求完整六件套而失败；实现完成后必须通过。
 
 ## 执行阶段默认上下文
 
-优先读取本文件、`acceptance.json` 和 `tests/`。只有需要理解完整设计取舍时再读取 `proposal.md`、`design.md`、`spec.md` 和 `task.md`。
+优先读取本文件、`acceptance.json` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/`。只有需要理解完整设计取舍时再读取 `proposal.md`、`design.md`、`spec.md` 和 `task.md`。

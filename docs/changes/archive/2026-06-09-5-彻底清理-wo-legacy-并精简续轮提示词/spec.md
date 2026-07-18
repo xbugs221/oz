@@ -17,7 +17,7 @@
 
 #### 场景：wo 运行时代码不再保留 Dagu 残留
 
-- **测试文件**：`docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`
 - **真实数据来源**：测试从源码构建真实 `wo` 二进制，并扫描当前运行时代码、prompt 模板、README、当前规格和长期测试文件。
 - **入口路径**：`go build ./cmd/wo`、`wo graph --change demo --format json`、`wo graph --change demo --format mermaid`、源码扫描。
 - **关键断言**：
@@ -29,7 +29,7 @@
 
 #### 场景：wo node 入口随 Dagu 执行器移除
 
-- **测试文件**：`docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_no_dagu_runtime_residue_contract.sh`
 - **真实数据来源**：真实 `wo` 二进制在临时 git 仓库中执行隐藏 node 命令。
 - **入口路径**：`wo node run-stage --run-id missing --stage execution --json`
 - **关键断言**：
@@ -44,7 +44,7 @@
 
 #### 场景：prompt 配置拒绝 writing 兼容键
 
-- **测试文件**：`docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`
 - **真实数据来源**：注入到 `internal/app` 包内的 Go 契约测试使用真实 `LoadWorkflowConfig` 读取临时仓库 `wo.yaml`。
 - **入口路径**：`LoadWorkflowConfig(repo)`。
 - **关键断言**：
@@ -55,7 +55,7 @@
 
 #### 场景：sealed run 不再读取 legacy prompt 快照
 
-- **测试文件**：`docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_prompt_legacy_removed_contract.sh`
 - **真实数据来源**：注入 Go 契约测试在真实 run state 目录下写入历史 `prompts/wo-start.md` 和只含 `prompts.writing` 的 `prompt-snapshot.yaml`。
 - **入口路径**：`promptForStage(repo, State{Sealed: true})`。
 - **关键断言**：
@@ -70,7 +70,7 @@
 
 #### 场景：review/fix 续轮提示词只保留增量上下文
 
-- **测试文件**：`docs/changes/5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-09-5-彻底清理-wo-legacy-并精简续轮提示词/tests/test_review_fix_resumed_prompt_compact_contract.sh`
 - **真实数据来源**：注入到 `internal/app` 包内的 Go 契约测试读取真实 `prompts-template/wo-review.md` 和 `prompts-template/wo-fix.md` 并通过真实 `renderPromptTemplate` 渲染。
 - **入口路径**：`renderPromptTemplate("wo-review", ...)`、`renderPromptTemplate("wo-fix", ...)`。
 - **关键断言**：

@@ -12,8 +12,8 @@
     {
       "id": "status-view-unification-contract",
       "source": "change_contract",
-      "path": "docs/changes/27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh",
-      "command": "bash docs/changes/27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh",
+      "path": "docs/changes/archive/2026-06-14-27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-14-27-统一状态展示视图入口/tests/test_status_view_unification_contract.sh",
       "purpose": "证明状态展示 helper 已从 app.go 收敛到 status_view/status_render，并通过真实 status 回归",
       "assertions": [
         "检查 app.go 不再定义 checklist、session 和 duration 展示 helper",

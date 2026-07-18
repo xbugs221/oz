@@ -31,10 +31,10 @@ root_test_count="$(cd "$ROOT" && find tests -type f \( -name '*_test.go' -o -nam
 
 note "检查迁移后的 app Go 测试可由 go test 执行"
 if find "$ROOT/tests/app" -type f -name '*.gotest' -print -quit | grep -q .; then
-  (cd "$ROOT" && go test ./tests/app/...) 2>&1 | tee -a "$LOG" || fail "tests/app 迁移测试不能由 go test 执行"
+  (cd "$ROOT" && go test ./tests/app/...) 2>&1 | tee -a "$LOG" || fail "docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/app 迁移测试不能由 go test 执行"
 fi
 
-note "检查 tests/app 或 tests/specs 至少存在一个分组"
+note "检查 docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/app 或 docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/specs 至少存在一个分组"
 if [[ ! -d "$ROOT/tests/app" && ! -d "$ROOT/tests/specs" ]]; then
   fail "根目录 tests 缺少 app 或 specs 分组"
 fi

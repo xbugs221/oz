@@ -23,7 +23,7 @@
 - **并且** `profiles-template/mada-code.yaml`、`profiles-template/mada-decision.yaml`、`profiles-template/mada-research.yaml` 必须使用同一模板机制维护
 - **并且** Go 源码不得继续硬编码默认 subagent 角色名和 purpose 文本，例如 `需求分析员`、`代码库侦察员`、`外部资料研究员`
 - **并且** 默认 `wo config` 不带 `--profile` 时仍生成与现有默认 profile 等价的标准 `wo.yaml`
-- **测试**：`docs/changes/11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_profile_templates_externalized_contract.sh`
 - **真实数据来源**：测试检查真实源码文件，构建真实 `wo` 二进制，并在临时 git 仓库中运行默认 `wo config`
 - **入口路径**：新的 profile 模板目录及 embed 包、`internal/app/config.go` 的默认配置生成、`LoadWorkflowConfig`
 - **关键断言**：模板文件存在且包含业务角色；Go 源码不再承载默认角色文本；默认 `wo config` 仍可生成和加载标准配置
@@ -43,7 +43,7 @@
 - **并且** 必须包含 `planning_context`、`implementation_context`、`review`、`qa` 四个并行组
 - **并且** `review` 和 `qa` 必须是 `gate_input`，`planning_context` 和 `implementation_context` 必须是 `advisory`
 - **并且** `wo graph --change 11-演示 --format json` 必须能成功读取该配置并输出含 subagent/fanin 节点的图
-- **测试**：`docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`
 - **真实数据来源**：测试构建真实 `wo` 二进制，在临时 git 仓库中运行真实 CLI 写入和读取 `wo.yaml`
 - **入口路径**：`internal/app/app.go` 的 `wo config` 解析，`internal/app/config.go` 的 profile YAML 生成和加载，`internal/app/graph.go` 的并行组展开
 - **关键断言**：三类 profile 都生成标准配置；四类并行组模式正确；graph JSON 能加载并包含 MADA 角色节点
@@ -55,7 +55,7 @@
 - **当** 用户运行 `wo config --profile mada-decision`
 - **则** 生成的 `wo.yaml` 必须包含面向技术选型的角色：`需求澄清员`、`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
 - **并且** `wo graph --change 11-决策演示 --format json` 必须展示这些 review 子代理节点
-- **测试**：`docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profiles_config_contract.sh`
 - **真实数据来源**：同一份由真实 CLI 生成的 `wo.yaml`
 - **入口路径**：profile 模板、`LoadWorkflowConfig` 和 `BuildWorkflowSpec`
 - **关键断言**：decision profile 不退化为默认代码审查角色；角色名称能在配置和图中被审计
@@ -72,7 +72,7 @@
 - **则** 输出必须包含 `default`、`mada-code`、`mada-decision`、`mada-research`
 - **并且** 每个 MADA profile 必须带有中文用途说明
 - **并且** 该命令不得写入 `wo.yaml`
-- **测试**：`docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`
 - **真实数据来源**：测试在临时 git 仓库中运行真实 `wo` 二进制
 - **入口路径**：`internal/app/app.go` 的 `wo config --list-profiles` 分支和 profile registry
 - **关键断言**：profile 可发现；list 命令无写文件副作用
@@ -86,7 +86,7 @@
 - **并且** stderr 必须包含未知 profile 名称
 - **并且** stderr 必须提示 `mada-code`、`mada-decision`、`mada-research` 中至少一个可用名称
 - **并且** 不得写入 `wo.yaml`
-- **测试**：`docs/changes/11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`
+- **测试**：`docs/changes/archive/2026-06-10-11-新增-MADA-工作流profiles/tests/test_mada_profile_discovery_contract.sh`
 - **真实数据来源**：测试运行真实 CLI 的错误路径
 - **入口路径**：`wo config` 参数解析和 profile registry 错误处理
 - **关键断言**：错误明确且无配置文件副作用

@@ -9,7 +9,7 @@
 - `internal/app`：从 `../wo` 合入的执行器业务逻辑。
 - `prompts-template`：从 `../wo` 合入的内置提示词模板。
 - `skills`：当前 `oz` 内置 skill。
-- `docs/specs` 和 `tests/specs`：按业务能力合并 `oz` 与 `wo` 的长期规格和测试。
+- `docs/specs` 和 `docs/changes/archive/2026-06-09-2-合并-wo-执行器到-oz-仓库/tests/specs`：按业务能力合并 `oz` 与 `wo` 的长期规格和测试。
 
 这样 `oz` 与 `wo` 仍是两个 CLI，但它们来自同一个 commit、同一个 Go module、同一个 release 批次。
 

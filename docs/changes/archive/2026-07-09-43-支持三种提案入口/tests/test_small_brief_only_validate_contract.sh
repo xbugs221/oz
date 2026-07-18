@@ -50,7 +50,7 @@ write_small_change() {
 ## 范围
 
 - `oz validate` 必须拒绝缺少真实测试代码的 small 提案。
-- 合法 small 提案只需要 `brief.md`、`acceptance.json` 和 `tests/`。
+- 合法 small 提案只需要 `brief.md`、`acceptance.json` 和 `docs/changes/archive/2026-07-09-43-支持三种提案入口/tests/`。
 
 ## 非目标
 

@@ -36,8 +36,8 @@
     {
       "id": "contract-backend-removal",
       "source": "change_contract",
-      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh",
-      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_backend_removal_contract.sh",
       "purpose": "证明旧后端实现、测试、文档和状态兼容已经从仓库移除。",
       "assertions": [
         "仓库扫描不到旧后端名称残留",
@@ -49,8 +49,8 @@
     {
       "id": "contract-cli-preflight",
       "source": "change_contract",
-      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh",
-      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_cli_preflight_contract.sh",
       "purpose": "证明 sealed run 启动前强制检查 codex/pi，并拒绝第三后端配置。",
       "assertions": [
         "PATH 中缺少 pi 时 run 失败并提示安装",
@@ -62,8 +62,8 @@
     {
       "id": "contract-root-test-layout",
       "source": "change_contract",
-      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh",
-      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_root_test_layout_contract.sh",
       "purpose": "证明生产源码和长期测试已经物理分离。",
       "assertions": [
         "internal 目录下不存在 *_test.go",
@@ -75,8 +75,8 @@
     {
       "id": "contract-docs-release-gate",
       "source": "change_contract",
-      "path": "docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh",
-      "command": "bash docs/changes/14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh",
+      "path": "docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-11-14-精简后端为-codex-pi-并迁移测试/tests/test_docs_release_gate_contract.sh",
       "purpose": "证明主规格和发布门禁与 Codex/Pi 以及根目录测试布局一致。",
       "assertions": [
         "主规格声明后端 CLI 只支持 codex 和 pi",

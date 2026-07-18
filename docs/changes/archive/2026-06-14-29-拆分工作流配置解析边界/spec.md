@@ -12,7 +12,7 @@
 
 #### 场景：配置解析边界拆分且用户配置行为不变
 
-- **测试文件**：`docs/changes/29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh`
+- **测试文件**：`docs/changes/archive/2026-06-14-29-拆分工作流配置解析边界/tests/test_workflow_config_boundary_contract.sh`
 - **真实数据来源**：仓库内置 `profiles-template`、真实 `wo config` 生成的 `wo.yaml`、临时 git 项目和既有 `tests/specs/codex-workflow-cli` 配置合同。
 - **入口路径**：从仓库根目录运行 shell 合同测试，测试内部执行默认配置、legacy 拒绝、profile 发现、MADA profile 和 parallel config 业务脚本。
 - **关键断言**：

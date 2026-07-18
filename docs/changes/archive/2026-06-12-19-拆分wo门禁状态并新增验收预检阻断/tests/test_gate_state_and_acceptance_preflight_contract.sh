@@ -163,8 +163,8 @@ func acceptanceWithoutEvidenceProducer() string {
     {
       "id": "contract-only",
       "source": "change_contract",
-      "path": "docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
-      "command": "bash docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "path": "docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
       "purpose": "prove gate state behavior only",
       "assertions": ["artifact gate failure writes artifact_gates instead of command validation"]
     }
@@ -196,8 +196,8 @@ func acceptanceWithEvidenceProducer() string {
     {
       "id": "contract-produces-log",
       "source": "change_contract",
-      "path": "docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
-      "command": "bash docs/changes/19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "path": "docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
+      "command": "bash docs/changes/archive/2026-06-12-19-拆分wo门禁状态并新增验收预检阻断/tests/test_gate_state_and_acceptance_preflight_contract.sh",
       "purpose": "generate gate-state-preflight-log at test-results/19-gate-state-preflight/contract.log",
       "assertions": [
         "command writes runtime evidence gate-state-preflight-log to test-results/19-gate-state-preflight/contract.log"

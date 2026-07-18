@@ -20,7 +20,7 @@
 - **且** 阶段边界执行 git snapshot 检查
 - **则** 当前 run 不得写为 `aborted_manual_intervention`
 - **且** 检查必须更新 baseline，后续阶段不会反复报告同一新增需求
-- **对应测试**：`docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh`
 - **真实数据来源**：临时 git 仓库、真实 `State`、真实 `detectManualIntervention`
 - **入口路径**：`go test ./tests/app`
 - **关键断言**：新增非当前 change 后不报错、不 abort、baseline 包含新 diff
@@ -37,7 +37,7 @@
 - **则** 检查必须失败
 - **且** run 状态必须写为 `aborted_manual_intervention`
 - **且** 错误信息必须指出阻断原因是当前 run 相关路径或源码变化
-- **对应测试**：`docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_running_demand_insertion_contract.sh`
 - **真实数据来源**：临时 git 仓库、真实 `State`、真实 `detectManualIntervention`
 - **入口路径**：`go test ./tests/app`
 - **关键断言**：源码和当前 change 修改仍失败；错误不是静默继续
@@ -52,8 +52,8 @@
 - **当** 执行文档门禁测试
 - **则** `docs/specs/codex-workflow-cli/spec.md` 必须说明非当前 `docs/changes/<change>/` 可在运行中新增
 - **且** 必须说明当前 change、源码和配置变化仍会中止
-- **对应测试**：`docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh`
 - **真实数据来源**：主规格文档
-- **入口路径**：`bash docs/changes/16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh`
+- **入口路径**：`bash docs/changes/archive/2026-06-11-16-允许运行中追加新需求但保留subagent写保护/tests/test_manual_intervention_docs_contract.sh`
 - **关键断言**：规格包含允许新增非当前需求和保留 subagent 写保护的描述
 - **剩余风险**：文档测试不证明实现，只防止规格回退

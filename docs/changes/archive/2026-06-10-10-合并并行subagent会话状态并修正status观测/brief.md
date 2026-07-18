@@ -18,7 +18,7 @@
 
 验收入口：
 
-- `bash docs/changes/10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
+- `bash docs/changes/archive/2026-06-10-10-合并并行subagent会话状态并修正status观测/tests/test_parallel_subagent_session_state_contract.sh`
 
 执行阶段默认上下文：
 

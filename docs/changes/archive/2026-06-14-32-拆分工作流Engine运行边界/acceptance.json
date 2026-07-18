@@ -12,8 +12,8 @@
     {
       "id": "engine-boundary",
       "source": "change_contract",
-      "path": "docs/changes/32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh",
-      "command": "bash docs/changes/32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh",
+      "path": "docs/changes/archive/2026-06-14-32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh",
+      "command": "bash docs/changes/archive/2026-06-14-32-拆分工作流Engine运行边界/tests/engine_boundary_test.sh",
       "purpose": "通过 engine-boundary-log 证明 Engine 模型、恢复、运行、阶段执行和进度持久化已拆分，并且 workflow Go 回归通过。",
       "assertions": [
         "State 模型、resumeRun、runLoop、runStage 和 stageProgressWriter 分别位于目标文件",

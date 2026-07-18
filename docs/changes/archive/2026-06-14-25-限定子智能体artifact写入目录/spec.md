@@ -15,9 +15,9 @@
 
 #### 场景：member artifact 路径固定到专属目录的 `member.json`
 
-- **对应测试**：`docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
 - **真实数据来源**：测试直接调用 `internal/app` 的真实 `memberArtifactPath` 和真实 member slug 逻辑。
-- **入口路径**：`bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
+- **入口路径**：`bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
 - **关键断言**：路径 basename 必须是 `member.json`；父目录必须以 `.artifact` 结尾；同一 group/iteration 下不同 member 不得共用目录。
 - **剩余风险**：该测试不验证真实 agent 进程是否使用 OS sandbox，只验证 `wo` 对外分配的写入目标。
 
@@ -27,9 +27,9 @@
 
 #### 场景：subagent prompt 要求写文件并运行校验命令
 
-- **对应测试**：`docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
 - **真实数据来源**：测试调用真实 `subagentPrompt`，使用 QA group 的真实 member 配置样例。
-- **入口路径**：`bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
+- **入口路径**：`bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
 - **关键断言**：prompt 必须包含 `ARTIFACT_DIR`、`ARTIFACT_PATH`、目标路径、`wo validate-member-artifact` 命令，并不得继续要求“最终只输出一个 JSON object”作为主要交付方式。
 - **剩余风险**：prompt 合同不能强制 agent 遵守；执行阶段仍需保留文件存在性和 schema gate。
 
@@ -39,9 +39,9 @@
 
 #### 场景：合法 artifact 可由 CLI 校验通过，非法字段给出可修正错误
 
-- **对应测试**：`docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
+- **对应测试**：`docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
 - **真实数据来源**：测试创建真实 JSON artifact 文件，并通过 `app.Run` 调用真实 CLI 分发入口。
-- **入口路径**：`bash docs/changes/25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
+- **入口路径**：`bash docs/changes/archive/2026-06-14-25-限定子智能体artifact写入目录/tests/test_subagent_artifact_directory_contract.sh`
 - **关键断言**：合法 artifact 返回成功并输出“member artifact 合法”；`evidence` 写成对象时返回错误，错误文本必须包含 `field=evidence`、`expected=array<string>` 和修复建议。
 - **剩余风险**：测试覆盖 CLI 入口和错误信息，不覆盖所有 schema 字段排列组合。
 
