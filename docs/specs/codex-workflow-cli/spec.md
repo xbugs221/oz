@@ -332,7 +332,7 @@
 - **且** 默认配置写入空的 `validation.commands: []`
 - **且** 默认配置写入 `subagent_guard: advisory`
 - **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
-- **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:`、`mode:` 或默认 `model:`
+- **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:` 或 `mode:`，并为所有 Codex 阶段写入 `model: gpt-5.6-sol`
 - **且** `stages.execution.before`、`stages.review.before` 和 `stages.qa.before` 包含默认子代理
 - **且** 不创建 legacy repo dir
 - **且** 后续规划、graph 或 sealed run 能读取其中的根节点配置

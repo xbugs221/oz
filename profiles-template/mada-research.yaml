@@ -2,21 +2,27 @@ max_review_iterations: 5
 stages:
   planning:
     agent: codex
+    model: gpt-5.6-sol
     reasoning: xhigh
   execution:
     agent: codex
+    model: gpt-5.6-sol
     reasoning: low
   fix:
     agent: codex
+    model: gpt-5.6-sol
     reasoning: low
   review:
     agent: codex
+    model: gpt-5.6-sol
     reasoning: high
   qa:
     agent: codex
+    model: gpt-5.6-sol
     reasoning: high
   archive:
     agent: codex
+    model: gpt-5.6-sol
     reasoning: low
 validation:
   limit: 3
