@@ -231,6 +231,89 @@ func TestLoopArchivesFailedBatchAndStartsContinuation(t *testing.T) {
 	}
 }
 
+// TestLoopStopsOnAcceptanceContractBlock verifies hard acceptance gates are not retried automatically.
+func TestLoopStopsOnAcceptanceContractBlock(t *testing.T) {
+	repo := gitRepo(t)
+	installFlowControlFakeOz(t)
+	const changeName = "2-b"
+	const runID = "acceptance-blocked-run"
+	const batchID = "acceptance-blocked-batch"
+	writeFlowControlChange(t, repo, changeName)
+	if err := saveState(repo, State{
+		RunID: runID, ChangeName: changeName, Status: statusAcceptanceContractBlocked,
+		Stage: statusAcceptanceContractBlocked, Sessions: map[string]string{}, Stages: map[string]string{}, Paths: map[string]string{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveBatchState(repo, BatchState{
+		BatchID: batchID, Status: batchStatusFailed, Changes: []string{changeName}, RunIDs: map[string]string{changeName: runID},
+		FailedChange: changeName, FailedRunID: runID, Error: "run " + runID + " 已停止：blocked_acceptance_contract/blocked_acceptance_contract",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	previousStart := startDetachedBatchCommand
+	startDetachedBatchCommand = func(string, string) error {
+		t.Fatal("acceptance contract block must not start a continuation batch")
+		return nil
+	}
+	t.Cleanup(func() { startDetachedBatchCommand = previousStart })
+
+	var stdout bytes.Buffer
+	done, err := runBatchLoopTick(context.Background(), &stdout, repo, NewEngine(repo, NewAgentRegistry()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !done || !strings.Contains(stdout.String(), "人工处理门禁") {
+		t.Fatalf("loop block result = done:%t output:%s", done, stdout.String())
+	}
+}
+
+// TestLoopStopsAfterRepeatedFailure verifies one automatic retry is the limit for a stable failure.
+func TestLoopStopsAfterRepeatedFailure(t *testing.T) {
+	repo := gitRepo(t)
+	installFlowControlFakeOz(t)
+	const changeName = "2-b"
+	const previousBatchID = "20260617T034000.000000000Z"
+	const currentBatchID = "20260617T034100.000000000Z"
+	const currentRunID = "repeated-failure-run"
+	writeFlowControlChange(t, repo, changeName)
+	if err := saveBatchState(repo, BatchState{
+		BatchID: previousBatchID, Status: batchStatusArchived, Changes: []string{changeName},
+		FailedChange: changeName, Error: "backend failed",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveState(repo, State{
+		RunID: currentRunID, ChangeName: changeName, Status: statusFailed, Stage: "execution", Error: "backend failed",
+		Sessions: map[string]string{}, Stages: map[string]string{}, Paths: map[string]string{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveBatchState(repo, BatchState{
+		BatchID: currentBatchID, Status: batchStatusFailed, Changes: []string{changeName}, RunIDs: map[string]string{changeName: currentRunID},
+		FailedChange: changeName, FailedRunID: currentRunID, Error: "backend failed",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	previousStart := startDetachedBatchCommand
+	startDetachedBatchCommand = func(string, string) error {
+		t.Fatal("repeated failure must not start a continuation batch")
+		return nil
+	}
+	t.Cleanup(func() { startDetachedBatchCommand = previousStart })
+
+	var stdout bytes.Buffer
+	done, err := runBatchLoopTick(context.Background(), &stdout, repo, NewEngine(repo, NewAgentRegistry()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !done || !strings.Contains(stdout.String(), "相同失败已连续出现 2 次") {
+		t.Fatalf("loop repeated result = done:%t output:%s", done, stdout.String())
+	}
+}
+
 // TestLoopKeepsRunningBatchOwnedRunWithFreshBatchHeartbeat verifies loop does
 // not fail a batch-owned run while the batch worker is still heartbeating.
 func TestLoopKeepsRunningBatchOwnedRunWithFreshBatchHeartbeat(t *testing.T) {

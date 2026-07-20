@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-const loopPendingStartGrace = 2 * time.Minute
+const (
+	loopPendingStartGrace    = 2 * time.Minute
+	loopRepeatedFailureLimit = 2
+)
 
 // dispatchStopCommand stops the current running batch workflow.
 func dispatchStopCommand(args []string, stdout io.Writer, repo string) error {
@@ -265,6 +268,8 @@ func archiveAndSubmitContinuation(ctx context.Context, stdout io.Writer, repo st
 		}
 		batch = latest
 	}
+	blocked := batchFailureBlocksRetry(repo, batch)
+	fingerprint := loopFailureFingerprint(repo, batch)
 	if _, err := ArchiveFailedBatch(repo, batch.BatchID); err != nil {
 		return false, err
 	}
@@ -272,11 +277,82 @@ func archiveAndSubmitContinuation(ctx context.Context, stdout io.Writer, repo st
 		reason = "失败"
 	}
 	fmt.Fprintf(stdout, "已归档失败批量工作流 %s：%s\n", batch.BatchID, reason)
+	if blocked {
+		fmt.Fprintln(stdout, "失败属于人工处理门禁，loop 停止续跑")
+		return true, nil
+	}
+	repeated, err := loopRepeatedFailureCount(repo, batch, fingerprint)
+	if err != nil {
+		return false, err
+	}
+	if repeated >= loopRepeatedFailureLimit {
+		fmt.Fprintf(stdout, "相同失败已连续出现 %d 次，loop 停止续跑\n", repeated)
+		return true, nil
+	}
 	if len(changes) == 0 {
 		fmt.Fprintln(stdout, "没有可继续的 active 变更提案，loop 退出")
 		return true, nil
 	}
 	return false, engine.SubmitBatch(ctx, changes)
+}
+
+// batchFailureBlocksRetry reports terminal workflow gates that require a human decision.
+func batchFailureBlocksRetry(repo string, batch BatchState) bool {
+	if fingerprint := normalizeLoopFailureReason(batch.Error); strings.Contains(fingerprint, statusBlocked) ||
+		strings.Contains(fingerprint, statusValidationBlocked) || strings.Contains(fingerprint, statusAcceptanceContractBlocked) {
+		return true
+	}
+	runID := failedRunIDForBatch(batch)
+	if runID == "" {
+		return false
+	}
+	state, err := loadState(repo, runID)
+	if err != nil {
+		return false
+	}
+	return state.Status == statusBlocked || state.Status == statusValidationBlocked ||
+		state.Status == statusAcceptanceContractBlocked || state.Stage == statusBlocked ||
+		state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked
+}
+
+// loopFailureFingerprint produces a stable retry key without volatile run identifiers.
+func loopFailureFingerprint(repo string, batch BatchState) string {
+	if reason := normalizeLoopFailureReason(batch.Error); reason != "" {
+		return reason
+	}
+	if state, err := loadState(repo, failedRunIDForBatch(batch)); err == nil {
+		return normalizeLoopFailureReason(state.Stage + "/" + state.Status)
+	}
+	return "unknown"
+}
+
+// normalizeLoopFailureReason removes the generated run-id prefix from terminal batch errors.
+func normalizeLoopFailureReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if _, suffix, found := strings.Cut(reason, " 已停止："); found {
+		return suffix
+	}
+	return reason
+}
+
+// loopRepeatedFailureCount counts consecutive archived failures for one change and fingerprint.
+func loopRepeatedFailureCount(repo string, current BatchState, fingerprint string) (int, error) {
+	refs, err := ListBatchRefs(repo)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, ref := range refs {
+		batch, err := loadBatchState(repo, ref.ID)
+		if err != nil || batch.FailedChange != current.FailedChange {
+			continue
+		}
+		if loopFailureFingerprint(repo, batch) != fingerprint {
+			break
+		}
+		count++
+	}
+	return count, nil
 }
 
 // submitActiveChangesForLoop starts a batch when loop is launched without an active one.

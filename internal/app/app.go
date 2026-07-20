@@ -526,6 +526,7 @@ func runWatch(stdout io.Writer, repo string, args ...string) error {
 		}
 		return err
 	}
+	explicitTarget := len(args) == 1
 	tty := supportsInPlaceProgress(stdout)
 	frameIdx := 0
 	ticker := time.NewTicker(1 * time.Second)
@@ -537,8 +538,17 @@ func runWatch(stdout io.Writer, repo string, args ...string) error {
 	defer signal.Stop(sigCh)
 
 	render := func() {
+		frameKind, frameRef, frameErr := resolveWatchFrameTarget(repo, explicitTarget, targetKind, targetRef)
+		if frameErr != nil {
+			if tty && frameIdx > 0 {
+				fmt.Fprint(stdout, "\x1b[H\x1b[2J")
+			}
+			fmt.Fprintln(stdout, "当前没有正在进行的批量任务或工作流")
+			frameIdx++
+			return
+		}
 		var lines []string
-		lines = append(lines, watchStatusLines(repo, targetKind, targetRef, spinnerFrames[frameIdx%len(spinnerFrames)])...)
+		lines = append(lines, watchStatusLines(repo, frameKind, frameRef, spinnerFrames[frameIdx%len(spinnerFrames)])...)
 		if tty && frameIdx > 0 {
 			fmt.Fprint(stdout, "\x1b[H\x1b[2J")
 		}
@@ -557,6 +567,14 @@ func runWatch(stdout io.Writer, repo string, args ...string) error {
 			return nil
 		}
 	}
+}
+
+// resolveWatchFrameTarget refreshes an implicit watch target while preserving an explicit alias.
+func resolveWatchFrameTarget(repo string, explicit bool, kind string, ref StatusRef) (string, StatusRef, error) {
+	if explicit {
+		return kind, ref, nil
+	}
+	return resolveWatchTarget(repo, nil)
 }
 
 // resolveWatchTarget picks the watch target: explicit -bN/-wN or default to running batch > single-run.
