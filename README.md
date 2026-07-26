@@ -134,6 +134,17 @@ flowchart LR
 
 因此，会话记忆只负责“延续思路”，`state.json`、`acceptance.json`、当前差异、`repair-N.json`、`qa-N.json` 和确定性测试才构成放行证据。`max_repair_iterations=0` 会禁用 repair，但仍保留独立 QA；QA 失败时直接阻塞。
 
+## 发布与本地验证
+
+版本变化见 [CHANGELOG.md](CHANGELOG.md)。GitHub Actions 的 CI 和 Release 都会运行 `go test ./...`；版本标签触发 Release 时，发布页会自动使用对应版本或“尚未发布”部分作为说明，并附带完整更新日志。
+
+本地复现 GitHub CI：
+
+```bash
+go test ./...
+bash scripts/extract-release-notes.sh CHANGELOG.md v0.0.0-local /tmp/oz-release-notes.md
+```
+
 ## 局限性
 
 如果只是一些轻量更改，比如前端样式的微调，没有必要硬套用这个工具。oz更适合中大规模的变更，据此什么样的变更算大规模，这个见仁见智，也和执行任务的具体agent的智能程度有关

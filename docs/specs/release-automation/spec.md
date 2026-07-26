@@ -15,6 +15,13 @@
 - **则** GitHub Actions 启动 release workflow
 - **且** workflow 使用该 tag 作为 Release 版本来源
 
+#### 场景：发布页自动携带版本更新说明
+- **给定** 仓库根目录维护面向用户的 `CHANGELOG.md`
+- **当** 发布 workflow 创建或更新 GitHub Release
+- **则** 优先使用与 tag 同名的版本章节作为 Release 正文
+- **且** 没有同名章节时使用“尚未发布”章节
+- **且** Release 资产包含完整 `CHANGELOG.md`
+
 ### 需求：发布前测试门禁
 
 系统必须在构建和上传 Release 资产前运行仓库完整测试门禁。

@@ -14,6 +14,8 @@ test -f "cmd/oz/main.go"
 test -d "internal/app"
 test -d "prompts-template"
 test -f "README.md"
+test -f "CHANGELOG.md"
+test -f "scripts/extract-release-notes.sh"
 test -f "docs/specs/release-automation/spec.md"
 
 module="$(go list -m)"
@@ -46,6 +48,9 @@ if grep -q 'github.com/xbugs221/oz/releases/latest/download' "$workflow_text"; t
 fi
 grep -q './cmd/oz' "$workflow_text"
 grep -q 'go test ./...' "$workflow_text"
+grep -q 'scripts/extract-release-notes.sh' "$workflow_text"
+grep -q -- '--notes-file release-notes.md' "$workflow_text"
+grep -q 'CHANGELOG.md --clobber' "$workflow_text"
 if grep -q 'for script in tests/\*\.sh' "$workflow_text"; then
   echo "workflow 仍盲目遍历历史根目录 shell 脚本" >&2
   exit 1
@@ -55,7 +60,15 @@ grep -q 'GitHub Actions' README.md
 grep -q 'CI' README.md
 grep -q 'Release' README.md
 grep -q 'go test ./...' README.md
+grep -q 'CHANGELOG.md' README.md
 grep -Eq '本地复现|失败排查|复现 GitHub' README.md
+
+bash scripts/extract-release-notes.sh CHANGELOG.md v1.1.9 "$tmp/release-notes-v1.1.9.md"
+grep -q '选择模型' "$tmp/release-notes-v1.1.9.md"
+bash scripts/extract-release-notes.sh CHANGELOG.md v1.2.0 "$tmp/release-notes-v1.2.0.md"
+grep -q '同一个修复会话' "$tmp/release-notes-v1.2.0.md"
+bash scripts/extract-release-notes.sh CHANGELOG.md v0.0.0-contract "$tmp/release-notes-unreleased.md"
+grep -q '暂无尚未发布' "$tmp/release-notes-unreleased.md"
 
 grep -q 'go test ./...' docs/specs/release-automation/spec.md
 grep -Eq 'CI 和 Release 使用本地 oz|本地 `oz`' docs/specs/release-automation/spec.md

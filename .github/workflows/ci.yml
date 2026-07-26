@@ -30,3 +30,6 @@ jobs:
 
       - name: Run Go tests
         run: go test ./...
+
+      - name: Validate release notes
+        run: bash scripts/extract-release-notes.sh CHANGELOG.md v0.0.0-ci "${RUNNER_TEMP}/release-notes.md"

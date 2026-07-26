@@ -36,6 +36,9 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+      - name: Validate release notes
+        run: bash scripts/extract-release-notes.sh CHANGELOG.md "${GITHUB_REF_NAME}" "${RUNNER_TEMP}/release-notes.md"
+
   build:
     name: Build oz ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -140,12 +143,17 @@ jobs:
           cd dist
           sha256sum *.tar.gz *.zip > sha256sums.txt
 
+      - name: Generate release notes
+        run: bash scripts/extract-release-notes.sh CHANGELOG.md "${GITHUB_REF_NAME}" release-notes.md
+
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes ""
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+          else
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
           fi
-          gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+          gh release upload "${GITHUB_REF_NAME}" dist/* CHANGELOG.md --clobber
