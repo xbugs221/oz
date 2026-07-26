@@ -147,9 +147,9 @@
 - **且** prompt 只保留 `state.json`、change 目录、`acceptance.json` 和并行上下文 artifact 读取入口
 - **且** prompt 不得重复 `oz-exec` 技能已定义的 required_tests、任务完成标准或长文档读取策略
 
-#### 场景：同会话自审自修后由独立 QA 放行
+#### 场景：同会话优化后由独立 QA 放行
 
-// Sources: 44-简化审核修正为自审自修循环
+// Sources: 44-简化审核修正为优化循环
 
 - **给定** `max_repair_iterations` 大于零
 - **当** execution 完成
@@ -161,7 +161,7 @@
 
 #### 场景：零轮 repair 与旧运行兼容
 
-// Sources: 44-简化审核修正为自审自修循环
+// Sources: 44-简化审核修正为优化循环
 
 - **给定**新运行配置 `max_repair_iterations=0`
 - **则**系统禁用 repair、不生成 repair artifact，仅由独立 QA clean 放行

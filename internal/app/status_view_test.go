@@ -360,7 +360,7 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 func TestStatusViewSelectsRepairGeneration(t *testing.T) {
 	state := statusViewImplementationContextState()
 	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "自审自修", "测试阶段", "归档阶段"})
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "优化", "测试阶段", "归档阶段"})
 }
 
 // TestStatusViewSelectsLegacyGeneration verifies an old sealed run never gains a synthetic repair row.
@@ -388,8 +388,8 @@ func TestBlockedWorkflowRoleLabels(t *testing.T) {
 			configure: func(state *State) {
 				state.Workflow.MaxRepairIterations = 2
 			},
-			wantRow:     "自审自修",
-			wantSummary: "自审自修阶段失败",
+			wantRow:     "优化",
+			wantSummary: "优化阶段失败",
 		},
 		{
 			name: "zero repair",

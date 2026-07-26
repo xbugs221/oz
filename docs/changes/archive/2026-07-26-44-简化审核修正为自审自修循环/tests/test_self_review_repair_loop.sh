@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 oz flow 已把 reviewer/fixer 往返简化为可恢复的同会话自审自修循环。
+# 文件功能目的：验证 oz flow 已把 reviewer/fixer 往返简化为可恢复的同会话优化循环。
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ REPAIR_LIMIT_STATE_EVIDENCE="$EVIDENCE_ROOT/repair-limit-state.json"
 REPAIR_LEGACY_STATE_EVIDENCE="$EVIDENCE_ROOT/legacy-resume-state.json"
 REPAIR_RUNTIME_EVIDENCE="$EVIDENCE_ROOT/runtime.log"
 
-# require_source_contract 核对真实运行源码已注册自审自修角色与新阶段，而不是只修改提案文档。
+# require_source_contract 核对真实运行源码已注册优化角色与新阶段，而不是只修改提案文档。
 require_source_contract() {
   rg -q 'Session: "repairer"' internal/app/stage_role.go
   rg -q 'repair_' internal/app/workflow_stage.go internal/app/stage_decision.go
@@ -22,10 +22,10 @@ require_source_contract() {
 
 # require_zero_round_contract 核对零轮 repair 的文档语义与独立 QA 门禁保持一致。
 require_zero_round_contract() {
-  rg -q '配置为 0 时禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/proposal.md
-  rg -q '0 时禁用 repair，不生成 repair artifact，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/spec.md
-  rg -q 'max_repair_iterations=0.*禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/design.md
-  rg -q '零轮模式禁用 repair，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/task.md
+  rg -q '配置为 0 时禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/proposal.md
+  rg -q '0 时禁用 repair，不生成 repair artifact，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/spec.md
+  rg -q 'max_repair_iterations=0.*禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/design.md
+  rg -q '零轮模式禁用 repair，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/task.md
 }
 
 # require_behavior_tests 核对实现层存在业务行为测试，避免用静态字符串满足状态机合同。

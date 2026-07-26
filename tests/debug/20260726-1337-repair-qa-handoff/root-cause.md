@@ -1,4 +1,4 @@
-# 自审自修 QA 交接与归档测试路径修复
+# 优化 QA 交接与归档测试路径修复
 
 ## 场景
 
@@ -23,7 +23,7 @@
 ## 回归测试
 
 - `go test ./internal/app -run TestRepairPromptCarriesLatestFailedQA -count=1`：通过。
-- `bash docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/tests/test_self_review_repair_loop.sh`：通过。
+- `bash docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/tests/test_self_review_repair_loop.sh`：通过。
 - `bash tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`：通过。
 - `go test ./...`：9 个包、190 项测试通过。
 

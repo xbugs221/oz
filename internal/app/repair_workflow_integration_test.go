@@ -90,9 +90,9 @@ func newRepairEvidenceFixture(t *testing.T) (string, string, string, string, str
 	}
 	files := map[string]string{
 		"task.md":     "- [x] fixture task\n",
-		"brief.md":    "# 自审自修 DAG 集成测试\n",
-		"design.md":   "# 自审自修 DAG 集成测试\n",
-		"proposal.md": "# 自审自修 DAG 集成测试\n",
+		"brief.md":    "# 优化 DAG 集成测试\n",
+		"design.md":   "# 优化 DAG 集成测试\n",
+		"proposal.md": "# 优化 DAG 集成测试\n",
 		"spec.md":     "### 需求：恢复质量门禁\n\n#### 场景：工作流从持久状态恢复\n\n- **给定** 已封存运行\n- **当** 引擎恢复\n- **则** 必须遵循持久状态\n",
 	}
 	for name, body := range files {
@@ -104,7 +104,7 @@ func newRepairEvidenceFixture(t *testing.T) (string, string, string, string, str
 	if err := os.MkdirAll(filepath.Dir(testPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为自审自修 DAG 集成测试生成真实运行证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'runtime verified\\n' > test-results/repair-dag/runtime.log\n"
+	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成真实运行证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'runtime verified\\n' > test-results/repair-dag/runtime.log\n"
 	if err := os.WriteFile(testPath, []byte(testBody), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"brief.md", "design.md", "proposal.md", "spec.md"} {
-		body := "# 自审自修 DAG 集成测试\n"
+		body := "# 优化 DAG 集成测试\n"
 		if name == "spec.md" {
 			body = "### 需求：恢复 QA 回环\n\n#### 场景：QA 失败进入下一 repair\n\n- **给定** 已封存运行\n- **当** QA 返回 needs_fix\n- **则** 必须执行下一 repair\n"
 		}
@@ -193,7 +193,7 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(testPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为自审自修 DAG 集成测试生成真实运行证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'runtime verified\\n' > test-results/repair-dag/runtime.log\n"
+	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成真实运行证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'runtime verified\\n' > test-results/repair-dag/runtime.log\n"
 	if err := os.WriteFile(testPath, []byte(testBody), 0o755); err != nil {
 		t.Fatal(err)
 	}

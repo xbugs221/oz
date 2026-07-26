@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证默认最大自审自修轮数为 5，且 oz flow graph 输出紧凑中文 Mermaid 图。
+# 文件功能目的：验证默认最大优化轮数为 5，且 oz flow graph 输出紧凑中文 Mermaid 图。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -68,7 +68,7 @@ if grep -Eq 'subagent:|fan-in|planning_context|implementation_context|before_rev
   fail "mermaid visible labels should not mix internal English subagent/group names"
 fi
 
-grep -q '自审自修' "$RESULT_DIR/graph.mmd" || fail "graph should show the repair loop in Chinese"
+grep -q '优化' "$RESULT_DIR/graph.mmd" || fail "graph should show the repair loop in Chinese"
 grep -Eq '独立(QA|测试)' "$RESULT_DIR/graph.mmd" || fail "graph should keep QA as an independent gate"
 grep -Eq '5|五' "$RESULT_DIR/graph.mmd" || fail "graph should communicate the 5-round repair budget"
 

@@ -40,7 +40,7 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 	case workflowStageRepair:
 		if RepairNeedsMore(review) {
 			if stage.Iteration >= state.Workflow.MaxRepairIterations {
-				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "自审自修达到上限，工作流已中断"}, nil
+				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "优化达到上限，工作流已中断"}, nil
 			}
 			return StageDecision{NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status}, nil
 		}
@@ -60,12 +60,12 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 		if QANeedsFix(qa) {
 			if state.Workflow.MaxRepairIterations > 0 {
 				if stage.Iteration >= state.Workflow.MaxRepairIterations {
-					return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且自审自修达到上限，工作流已中断"}, nil
+					return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且优化达到上限，工作流已中断"}, nil
 				}
 				return StageDecision{NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status}, nil
 			}
 			if usesRepairWorkflow(state.Workflow) {
-				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且未配置自审自修轮次，工作流已中断"}, nil
+				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且未配置优化轮次，工作流已中断"}, nil
 			}
 			return StageDecision{NextStage: "fix_" + n, NextStatus: state.Status}, nil
 		}

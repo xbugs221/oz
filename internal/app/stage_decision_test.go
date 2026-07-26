@@ -42,7 +42,7 @@ func TestZeroRepairStillRequiresQA(t *testing.T) {
 	qa := cleanQAForStageDecision()
 	qa.Decision = "needs_fix"
 	qa.Findings = []Finding{blockingFindingForStageDecision()}
-	assertStageDecision(t, state, Review{}, qa, statusBlocked, statusBlocked, "未配置自审自修轮次")
+	assertStageDecision(t, state, Review{}, qa, statusBlocked, statusBlocked, "未配置优化轮次")
 }
 
 // TestLegacyZeroReviewSnapshotResumesToArchive verifies an unversioned zero-round snapshot keeps its historical transition.
@@ -74,7 +74,7 @@ func TestRepairLimitBlocks(t *testing.T) {
 	repair := cleanReviewForStageDecision()
 	repair.Decision = "needs_more"
 	repair.Findings = []Finding{blockingFindingForStageDecision()}
-	assertStageDecision(t, state, repair, QA{}, statusBlocked, statusBlocked, "自审自修达到上限")
+	assertStageDecision(t, state, repair, QA{}, statusBlocked, statusBlocked, "优化达到上限")
 }
 
 // TestWorkflowFailureReviewFailsWorkflow verifies reviewer-declared workflow failure ends the run.

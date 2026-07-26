@@ -308,7 +308,7 @@ func humanBlockedStageRole(state State) string {
 	case "reviewer":
 		return "审核阶段"
 	default:
-		return "自审自修阶段"
+		return "优化阶段"
 	}
 }
 
@@ -318,7 +318,7 @@ func humanStageRole(stage string) string {
 	case stage == "execution":
 		return "写阶段"
 	case strings.HasPrefix(stage, "repair_"):
-		return "自审自修阶段"
+		return "优化阶段"
 	case strings.HasPrefix(stage, "review_"):
 		return "审核阶段"
 	case strings.HasPrefix(stage, "fix_"):
@@ -328,7 +328,7 @@ func humanStageRole(stage string) string {
 	case stage == "archive":
 		return "归档阶段"
 	case stage == statusBlocked:
-		return "自审自修阶段"
+		return "优化阶段"
 	case stage == statusValidationBlocked:
 		return "阶段验证"
 	case stage == statusAcceptanceContractBlocked:

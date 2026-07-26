@@ -110,13 +110,13 @@ validation:
     - go test ./...
 ```
 
-## 自审自修为什么这样设计
+## 优化为什么这样设计
 
 `oz flow` 的目标不是多生成一份审核报告，而是让提案被充分执行，并在无人介入时修掉可稳定发现的低级 BUG。
 
 ```mermaid
 flowchart LR
-    E["执行实现"] --> R["同会话自审自修"]
+    E["执行实现"] --> R["同会话优化"]
     R -->|"needs_more"| R
     R -->|"clean"| Q["独立 QA"]
     Q -->|"needs_fix：携带 qa-N.json"| R

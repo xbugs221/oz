@@ -200,7 +200,7 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 			out.WriteString("  qa -->|needs_fix，无修正轮次| blocked\n")
 			return out.String()
 		}
-		out.WriteString("  repair[自审自修]\n")
+		out.WriteString("  repair[优化]\n")
 		out.WriteString("  qa[独立测试]\n")
 		out.WriteString("  archive[归档]\n")
 		out.WriteString("  blocked[阻塞]\n")

@@ -42,7 +42,7 @@ type compactStageSpec struct {
 var compactStageSpecs = []compactStageSpec{
 	{role: "planner", stage: "planning", name: "规划阶段", prefix: "planning"},
 	{role: "executor", stage: "execution", name: "执行阶段", prefix: "execution"},
-	{role: "repairer", stage: "repair_1", name: "自审自修", prefix: "repair_"},
+	{role: "repairer", stage: "repair_1", name: "优化", prefix: "repair_"},
 	{role: "reviewer", stage: "review_1", name: "审核阶段", prefix: "review_"},
 	{role: "fixer", stage: "fix_1", name: "修正阶段", prefix: "fix_"},
 	{role: "qa", stage: "qa_1", name: "测试阶段", prefix: "qa_"},

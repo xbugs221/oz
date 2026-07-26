@@ -1,14 +1,14 @@
 {
-  "summary": "证明 oz flow 用同一 repairer 会话完成可恢复的自审自修循环，并由独立 QA 放行，且轮次与旧运行迁移边界明确。",
+  "summary": "证明 oz flow 用同一 repairer 会话完成可恢复的优化循环，并由独立 QA 放行，且轮次与旧运行迁移边界明确。",
   "coverage": [
     {
-      "spec": "需求：审核与修正使用同一持续会话 / 场景：问题在多轮自审自修中收敛",
+      "spec": "需求：审核与修正使用同一持续会话 / 场景：问题在多轮优化中收敛",
       "tests": ["self-review-repair-loop-contract"],
       "evidence": ["repair-loop-state", "repair-loop-runtime"],
       "risk": "远端 agent 后端的实际会话质量仍由 live 环境决定。"
     },
     {
-      "spec": "需求：独立 QA 保留最终放行权 / 场景：QA 失败返回同一自审自修循环",
+      "spec": "需求：独立 QA 保留最终放行权 / 场景：QA 失败返回同一优化循环",
       "tests": ["self-review-repair-loop-contract", "root-go-regression"],
       "evidence": ["repair-loop-state"],
       "risk": "QA 的语义判断质量不能仅由确定性测试完全证明。"
@@ -24,8 +24,8 @@
     {
       "id": "self-review-repair-loop-contract",
       "source": "change_contract",
-      "path": "docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/tests/test_self_review_repair_loop.sh",
-      "command": "bash docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/tests/test_self_review_repair_loop.sh",
+      "path": "docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/tests/test_self_review_repair_loop.sh",
+      "command": "bash docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/tests/test_self_review_repair_loop.sh",
       "purpose": "从真实 internal/app 源码与测试入口证明 repair 会话、状态机、QA gate、配置上限和旧运行兼容，并产出 test-results/44-self-review-repair-loop/state.json 与 runtime.log。",
       "assertions": [
         "工作流注册 repairer 角色，并让 repair_N 轮次复用同一 session key",
