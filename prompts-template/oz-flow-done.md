@@ -2,9 +2,8 @@
 
 - `{{.StatePath}}`
 - `{{.AcceptancePath}}`
-- `{{.PreviousReviewPaths}}`
+- `{{.PreviousRepairPaths}}`
 - `{{.PreviousQAPaths}}`（如存在）
-- `{{.PreviousFixSummaryPaths}}`（如存在）
 
 执行：
 

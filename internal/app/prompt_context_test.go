@@ -141,6 +141,46 @@ func TestPromptForStageReturnsBasePromptWithoutFailure(t *testing.T) {
 	}
 }
 
+// TestRepairPromptCarriesLatestFailedQA verifies an isolated repairer receives the QA finding that triggered its round.
+func TestRepairPromptCarriesLatestFailedQA(t *testing.T) {
+	repo := t.TempDir()
+	state := State{
+		RunID:      "repair-qa-handoff",
+		ChangeName: "1-修复",
+		Stage:      "repair_2",
+		Workflow:   DefaultWorkflowConfig(),
+		Stages: map[string]string{
+			"repair_1": "completed",
+			"qa_1":     "completed",
+		},
+	}
+	context, err := promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt, err := renderPromptTemplate("oz-flow-repair", state.Workflow.Prompts["repair"], context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousQAPath := filepath.Join(runDir(repo, state.RunID), "qa-1.json")
+	if !strings.Contains(prompt, previousQAPath) {
+		t.Fatalf("repair prompt must carry triggering QA artifact %q:\n%s", previousQAPath, prompt)
+	}
+
+	state.Stages = map[string]string{"repair_1": "completed"}
+	context, err = promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt, err = renderPromptTemplate("oz-flow-repair", state.Workflow.Prompts["repair"], context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(prompt, previousQAPath) {
+		t.Fatalf("direct repair needs_more must not reference a missing QA artifact:\n%s", prompt)
+	}
+}
+
 func mustMarshalValidationAttemptJSON(t *testing.T, attempt ValidationAttempt) []byte {
 	t.Helper()
 	data, err := json.MarshalIndent(attempt, "", "  ")

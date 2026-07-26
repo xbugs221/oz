@@ -12,7 +12,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const defaultMaxReviewIterations = 5
+const (
+	defaultMaxReviewIterations = 5
+	defaultMaxRepairIterations = 5
+	repairWorkflowGeneration   = "repair-v1"
+)
 
 var (
 	validReasoning   = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true}
@@ -32,12 +36,15 @@ type StageOptions struct {
 // WorkflowConfig is the effective sealed-run workflow snapshot stored in state.json.
 type WorkflowConfig struct {
 	Engine              string                  `json:"engine,omitempty" yaml:"-"`
-	MaxReviewIterations int                     `json:"max_review_iterations" yaml:"max_review_iterations"`
+	Generation          string                  `json:"generation,omitempty" yaml:"-"`
+	MaxRepairIterations int                     `json:"max_repair_iterations,omitempty" yaml:"max_repair_iterations"`
+	MaxReviewIterations int                     `json:"max_review_iterations,omitempty" yaml:"max_review_iterations,omitempty"`
 	SubagentGuard       string                  `json:"subagent_guard,omitempty" yaml:"subagent_guard,omitempty"`
 	Stages              map[string]StageOptions `json:"stages" yaml:"stages"`
 	Parallel            ParallelConfig          `json:"parallel,omitempty" yaml:"parallel"`
 	Validation          ValidationConfig        `json:"validation,omitempty" yaml:"validation"`
 	Prompts             map[string]string       `json:"-" yaml:"prompts,omitempty"`
+	Warnings            []string                `json:"warnings,omitempty" yaml:"-"`
 }
 
 // ParallelConfig describes optional read-only fan-out helpers around the sealed workflow.
@@ -105,6 +112,7 @@ func LoadWorkflowConfig(repo string) (WorkflowConfig, error) {
 		}
 	}
 	normalizeWorkflowConfig(&config)
+	emitWorkflowConfigWarnings(config)
 	return config, nil
 }
 
@@ -127,13 +135,33 @@ func (c WorkflowConfig) StageOption(stage string) (StageOptions, error) {
 	return option, nil
 }
 
-// workflowStagesForConfig expands execution, review/QA/fix rounds, and archive.
+// workflowStagesForConfig expands either the new repair loop or a legacy review/fix snapshot.
 func workflowStagesForConfig(config WorkflowConfig) []string {
 	stages := []string{"execution"}
+	if usesRepairWorkflow(config) {
+		if config.MaxRepairIterations == 0 {
+			return append(stages, "qa_1", "archive")
+		}
+		for i := 1; i <= config.MaxRepairIterations; i++ {
+			stages = append(stages, fmt.Sprintf("repair_%d", i), fmt.Sprintf("qa_%d", i))
+		}
+		return append(stages, "archive")
+	}
 	for i := 1; i <= config.MaxReviewIterations; i++ {
 		stages = append(stages, fmt.Sprintf("review_%d", i), fmt.Sprintf("qa_%d", i), fmt.Sprintf("fix_%d", i))
 	}
 	return append(stages, "archive")
+}
+
+// usesRepairWorkflow distinguishes new repair runs from legacy review/fix snapshots, including zero-round snapshots.
+func usesRepairWorkflow(config WorkflowConfig) bool {
+	if config.MaxReviewIterations > 0 {
+		return false
+	}
+	if config.MaxRepairIterations > 0 {
+		return true
+	}
+	return config.Generation == repairWorkflowGeneration
 }
 
 func globalWorkflowConfigPath() (string, error) {
@@ -241,15 +269,34 @@ func workflowConfigFromYAML(data []byte, source string, baseConfig *WorkflowConf
 		if next.Prompts == nil {
 			next.Prompts = map[string]string{}
 		}
+		if _, hasRepair := input.Prompts["repair"]; hasRepair && (input.Prompts["review"] != "" || input.Prompts["fix"] != "") {
+			return WorkflowConfig{}, fmt.Errorf("%s 无效：prompts.repair 不能与弃用的 review/fix prompt 同时出现", source)
+		}
 		for key, body := range input.Prompts {
 			if !slices.Contains(rolePromptKeys(), key) {
 				return WorkflowConfig{}, fmt.Errorf("%s 无效：未知 prompt %q", source, key)
 			}
 			next.Prompts[key] = body
 		}
+		if _, hasRepair := input.Prompts["repair"]; !hasRepair {
+			if body, hasFix := input.Prompts["fix"]; hasFix {
+				next.Prompts["repair"] = body
+				next.Warnings = append(next.Warnings, "prompts.fix 已弃用并迁移为 prompts.repair")
+			} else if body, hasReview := input.Prompts["review"]; hasReview {
+				next.Prompts["repair"] = body
+				next.Warnings = append(next.Warnings, "prompts.review 已弃用并迁移为 prompts.repair")
+			}
+		}
 	}
 	normalizePromptConfig(next.Prompts)
 	return next, nil
+}
+
+// emitWorkflowConfigWarnings makes compatibility migrations visible to CLI users.
+func emitWorkflowConfigWarnings(config WorkflowConfig) {
+	for _, warning := range config.Warnings {
+		fmt.Fprintf(os.Stderr, "oz flow warning: %s\n", warning)
+	}
 }
 
 // normalizeWorkflowConfig backfills fields missing in older state snapshots.
@@ -324,6 +371,7 @@ func defaultPromptSet() map[string]string {
 	names := map[string]string{
 		"planning":  "oz-flow-discuss.md",
 		"execution": "oz-flow-start.md",
+		"repair":    "oz-flow-repair.md",
 		"review":    "oz-flow-review.md",
 		"qa":        "oz-flow-qa.md",
 		"fix":       "oz-flow-fix.md",

@@ -1,4 +1,4 @@
-max_review_iterations: 5
+max_repair_iterations: 5
 stages:
   planning:
     agent: codex
@@ -8,14 +8,10 @@ stages:
     agent: codex
     model: gpt-5.6-sol
     reasoning: low
-  fix:
+  repair:
     agent: codex
     model: gpt-5.6-sol
     reasoning: low
-  review:
-    agent: codex
-    model: gpt-5.6-sol
-    reasoning: high
   qa:
     agent: codex
     model: gpt-5.6-sol
@@ -32,11 +28,9 @@ prompts:
 {{ prompt "planning" }}
   execution: |
 {{ prompt "execution" }}
-  review: |
-{{ prompt "review" }}
+  repair: |
+{{ prompt "repair" }}
   qa: |
 {{ prompt "qa" }}
-  fix: |
-{{ prompt "fix" }}
   archive: |
 {{ prompt "archive" }}

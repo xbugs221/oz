@@ -42,6 +42,7 @@ type compactStageSpec struct {
 var compactStageSpecs = []compactStageSpec{
 	{role: "planner", stage: "planning", name: "规划阶段", prefix: "planning"},
 	{role: "executor", stage: "execution", name: "执行阶段", prefix: "execution"},
+	{role: "repairer", stage: "repair_1", name: "自审自修", prefix: "repair_"},
 	{role: "reviewer", stage: "review_1", name: "审核阶段", prefix: "review_"},
 	{role: "fixer", stage: "fix_1", name: "修正阶段", prefix: "fix_"},
 	{role: "qa", stage: "qa_1", name: "测试阶段", prefix: "qa_"},
@@ -63,7 +64,7 @@ func buildStatusView(repo string, state State, displayID, runningMarker string) 
 		Artifacts:      statusRootArtifacts(repo, state),
 		WallMinutes:    statusWorkflowWallDuration(state, now),
 	}
-	for _, spec := range compactStageSpecs {
+	for _, spec := range statusStageSpecs(state) {
 		row := statusStageRow(repo, state, spec, now)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
@@ -89,7 +90,7 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 		Artifacts:      statusRootArtifacts(repo, state),
 		WallMinutes:    statusWorkflowWallDuration(state, now),
 	}
-	for _, spec := range compactStageSpecs {
+	for _, spec := range statusStageSpecs(state) {
 		row := statusStageRow(repo, state, spec, now)
 		if runningMarker != "" && row.Marker == "→" {
 			row.Marker = runningMarker
@@ -98,6 +99,20 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 	}
 	applyStatusRunningMarker(&view, runningMarker)
 	return view
+}
+
+// statusStageSpecs selects only the stage generation sealed into the run snapshot.
+func statusStageSpecs(state State) []compactStageSpec {
+	specs := append([]compactStageSpec(nil), compactStageSpecs[:2]...)
+	if usesRepairWorkflow(state.Workflow) {
+		if state.Workflow.MaxRepairIterations > 0 {
+			specs = append(specs, compactStageSpecs[2])
+		}
+		specs = append(specs, compactStageSpecs[5])
+	} else if state.Workflow.MaxReviewIterations > 0 {
+		specs = append(specs, compactStageSpecs[3], compactStageSpecs[4], compactStageSpecs[5])
+	}
+	return append(specs, compactStageSpecs[6])
 }
 
 // statusViewEngine keeps the internal engine out of public JSON observability.
@@ -117,7 +132,7 @@ func statusStageRow(repo string, state State, spec compactStageSpec, now time.Ti
 		Marker:    statusStageMarker(state, stages),
 		Artifacts: map[string]string{"stage_artifact": statusStageArtifact(repo, state, statusStageArtifactStage(state, spec, stages))},
 	}
-	if state.Status == statusBlocked && spec.role == "reviewer" {
+	if state.Status == statusBlocked && spec.role == blockedWorkflowRole(state) {
 		row.Marker = "x"
 	}
 	if state.Status == statusValidationBlocked && spec.role == "qa" {
@@ -330,6 +345,9 @@ func statusStageArtifact(repo string, state State, stage string) string {
 	}
 	if strings.HasPrefix(stage, "review_") {
 		return filepath.Join(base, "review-"+strings.TrimPrefix(stage, "review_")+".json")
+	}
+	if strings.HasPrefix(stage, "repair_") {
+		return filepath.Join(base, "repair-"+strings.TrimPrefix(stage, "repair_")+".json")
 	}
 	if strings.HasPrefix(stage, "fix_") {
 		return filepath.Join(base, "fix-"+strings.TrimPrefix(stage, "fix_")+"-summary.md")

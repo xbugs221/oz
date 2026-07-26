@@ -61,12 +61,12 @@ func shouldValidateStage(state State) bool {
 	if shouldRunChangeValidation(stage) {
 		return true
 	}
-	return len(state.Workflow.Validation.Commands) > 0 && stage.isKind(workflowStageFix)
+	return len(state.Workflow.Validation.Commands) > 0 && (stage.isKind(workflowStageRepair) || stage.isKind(workflowStageFix))
 }
 
 // shouldRunChangeValidation forces oz validate after stages that may rewrite the active change.
 func shouldRunChangeValidation(stage workflowStage) bool {
-	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix)
+	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageRepair) || stage.isKind(workflowStageFix)
 }
 
 // shouldForceStageRerun reports whether a failed validation gate must re-enter the same stage.

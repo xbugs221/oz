@@ -82,10 +82,10 @@ init_repo "$PROJECT"
 DEFAULT_CONFIG="$PROJECT/oz-flow.yaml"
 assert_file_has "$DEFAULT_CONFIG" '^stages:$'
 assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+execution:$'
-assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+review:$'
+assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+repair:$'
 assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+qa:$'
-assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+fix:$'
 assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+archive:$'
+assert_file_lacks "$DEFAULT_CONFIG" '^[[:space:]]+(review|fix):$'
 assert_file_has "$DEFAULT_CONFIG" '^[[:space:]]+model: gpt-5\.6-sol$'
 assert_file_lacks "$DEFAULT_CONFIG" '(^|[[:space:]])parallel:'
 assert_file_lacks "$DEFAULT_CONFIG" '(^|[[:space:]])subagent_guard:'
@@ -113,7 +113,7 @@ if bad_artifacts:
     raise SystemExit(f"graph must not contain parallel artifacts: {bad_artifacts}")
 
 node_ids = {node.get("id") for node in nodes}
-required = {"execution", "review_1", "qa_1", "fix_1", "archive", "gate_review_1", "gate_qa_1", "gate_archive"}
+required = {"execution", "repair_1", "qa_1", "archive", "gate_repair_1", "gate_qa_1", "gate_archive"}
 missing = sorted(required - node_ids)
 if missing:
     raise SystemExit(f"graph missing main workflow nodes: {missing}")
@@ -123,11 +123,17 @@ PY
 
 note "验证内置主阶段 prompt 不再读取 oz 子代理 artifact"
 assert_file_lacks "prompts-template/oz-flow-start.md" 'subagent artifact|parallel-|ParallelContext|ParallelReview|ParallelQA|helper'
-assert_file_lacks "prompts-template/oz-flow-review.md" 'subagent artifact|parallel-|ParallelContext|ParallelReview|ParallelQA|review helper|QA helper'
+assert_file_lacks "prompts-template/oz-flow-repair.md" 'subagent artifact|parallel-|ParallelContext|ParallelReview|ParallelQA|review helper|QA helper'
 assert_file_lacks "prompts-template/oz-flow-qa.md" 'subagent artifact|parallel-|ParallelContext|ParallelReview|ParallelQA|review helper|QA helper'
-assert_file_has "prompts-template/oz-flow-start.md" 'StatePath|AcceptancePath|ChangePath'
-assert_file_has "prompts-template/oz-flow-review.md" 'StatePath|AcceptancePath|ChangePath|ReviewPath'
-assert_file_has "prompts-template/oz-flow-qa.md" 'StatePath|AcceptancePath|ChangePath|ReviewPath|QAPath'
+for field in StatePath AcceptancePath ChangePath; do
+  assert_file_has "prompts-template/oz-flow-start.md" "$field"
+done
+for field in StatePath AcceptancePath ChangePath RepairPath; do
+  assert_file_has "prompts-template/oz-flow-repair.md" "$field"
+done
+for field in StatePath AcceptancePath ChangePath RepairPath QAPath; do
+  assert_file_has "prompts-template/oz-flow-qa.md" "$field"
+done
 
 note "验证旧外置子代理配置字段明确拒绝"
 expect_config_rejected "parallel" 'parallel.*(已删除|不再支持|removed|unsupported)' <<'YAML'

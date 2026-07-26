@@ -26,6 +26,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		if args[0] == "validate-review" {
 			return runValidateReviewArtifact(args[1:], stdout)
 		}
+		if args[0] == "validate-repair" {
+			return runValidateRepairArtifact(args[1:], stdout)
+		}
 		if args[0] == "validate-qa" {
 			return runValidateQAArtifact(args[1:], stdout)
 		}
@@ -259,6 +262,9 @@ func humanRunFailureSummary(state State, changeName string) string {
 		prefix = changeName + " 的"
 	}
 	stageRole := humanStageRole(state.Stage)
+	if state.Status == statusBlocked || state.Stage == statusBlocked {
+		stageRole = humanBlockedStageRole(state)
+	}
 
 	switch {
 	case state.Status == statusBlocked || state.Stage == statusBlocked:
@@ -294,19 +300,35 @@ func humanRunFailureSummary(state State, changeName string) string {
 	}
 }
 
+// humanBlockedStageRole maps the sealed workflow's blocking role to a Chinese stage label.
+func humanBlockedStageRole(state State) string {
+	switch blockedWorkflowRole(state) {
+	case "qa":
+		return "独立测试阶段"
+	case "reviewer":
+		return "审核阶段"
+	default:
+		return "自审自修阶段"
+	}
+}
+
 // humanStageRole maps stage names to short Chinese role labels.
 func humanStageRole(stage string) string {
 	switch {
 	case stage == "execution":
 		return "写阶段"
+	case strings.HasPrefix(stage, "repair_"):
+		return "自审自修阶段"
 	case strings.HasPrefix(stage, "review_"):
 		return "审核阶段"
 	case strings.HasPrefix(stage, "fix_"):
 		return "修正阶段"
+	case strings.HasPrefix(stage, "qa_"):
+		return "独立测试阶段"
 	case stage == "archive":
 		return "归档阶段"
 	case stage == statusBlocked:
-		return "审核阶段"
+		return "自审自修阶段"
 	case stage == statusValidationBlocked:
 		return "阶段验证"
 	case stage == statusAcceptanceContractBlocked:
@@ -413,6 +435,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  oz flow --run <change-name>")
 	fmt.Fprintln(stdout, "  oz flow --resume")
 	fmt.Fprintln(stdout, "  oz flow validate-review --artifact <artifact-path> [--json]")
+	fmt.Fprintln(stdout, "  oz flow validate-repair --artifact <artifact-path> [--json]")
 	fmt.Fprintln(stdout, "  oz flow validate-qa --artifact <artifact-path> --acceptance <acceptance-path> [--json]")
 	fmt.Fprintln(stdout, "  oz flow --version")
 	fmt.Fprintln(stdout)
@@ -435,6 +458,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Runner JSON 命令：")
 	fmt.Fprintln(stdout, "  oz flow validate-review --artifact <artifact-path> [--json]")
+	fmt.Fprintln(stdout, "  oz flow validate-repair --artifact <artifact-path> [--json]")
 	fmt.Fprintln(stdout, "  oz flow validate-qa --artifact <artifact-path> --acceptance <acceptance-path> [--json]")
 	fmt.Fprintln(stdout, "  oz flow contract --json")
 	fmt.Fprintln(stdout, "  oz flow list-changes --json")

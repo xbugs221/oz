@@ -15,6 +15,7 @@ func TestParseWorkflowStageCoversPublicStageStrings(t *testing.T) {
 	}{
 		{name: "planning", stage: "planning", kind: workflowStagePlanning},
 		{name: "execution", stage: "execution", kind: workflowStageExecution},
+		{name: "repair", stage: "repair_3", kind: workflowStageRepair, iteration: 3, iterable: true},
 		{name: "review", stage: "review_2", kind: workflowStageReview, iteration: 2, iterable: true},
 		{name: "qa", stage: "qa_3", kind: workflowStageQA, iteration: 3, iterable: true},
 		{name: "fix", stage: "fix_4", kind: workflowStageFix, iteration: 4, iterable: true},

@@ -123,10 +123,8 @@ role = {
     "execution": "executor",
     "archive": "archiver",
 }.get(stage)
-if role is None and stage.startswith("review_"):
-    role = "reviewer"
-elif role is None and stage.startswith("fix_"):
-    role = "fixer"
+if role is None and stage.startswith("repair_"):
+    role = "repairer"
 elif role is None and stage.startswith("qa_"):
     role = "qa"
 if role is None:
@@ -155,33 +153,35 @@ def mark_task_done():
     text = task_path.read_text(encoding="utf-8")
     task_path.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
 
-def review_needs_fix(path):
+def repair_needs_more(path):
     path.write_text(json.dumps({
-        "summary": "需要修复运行时证据",
-        "decision": "needs_fix",
+        "summary": "已修复运行时证据，下一轮继续确认",
+        "decision": "needs_more",
         "findings": [{
-            "title": "缺少运行时证据",
+            "title": "需要复核运行时证据",
             "severity": "major",
-            "evidence": "fake runtime trace is missing before fix",
-            "recommendation": "补齐运行时证据后重新审核"
+            "scope": "current_change",
+            "evidence": "fake runtime trace was repaired and requires a fresh verification",
+            "recommendation": "下一轮重新运行验证"
         }],
-        "evidence": [],
-        "workflow_failure": None,
+        "non_blocking_findings": [],
+        "evidence": ["runtime evidence repaired in the same repairer session"],
         "checks": {
-            "oz_aligned": False,
+            "oz_aligned": True,
             "tasks_verified": True,
-            "tests_meaningful": False,
+            "tests_meaningful": True,
             "implementation_scoped": True,
-            "runtime_behavior_verified": False,
+            "runtime_behavior_verified": True,
             "previous_findings_resolved": False
         }
     }, ensure_ascii=False), encoding="utf-8")
 
-def review_clean(path):
+def repair_clean(path):
     path.write_text(json.dumps({
-        "summary": "修复后审核通过",
+        "summary": "同一会话完成修正与复核",
         "decision": "clean",
         "findings": [],
+        "non_blocking_findings": [],
         "checks": {
             "oz_aligned": True,
             "tasks_verified": True,
@@ -230,28 +230,27 @@ def archive_change(write_delivery):
 if stage == "execution":
     if attempt >= 2:
         mark_task_done()
-elif stage == "review_1":
+elif stage == "repair_1":
     if attempt >= 2:
-        review_needs_fix(run_dir / "review-1.json")
-elif stage == "fix_1":
-    if attempt >= 2:
-        (run_dir / "fix-1-summary.md").write_text("修复运行时证据缺口\n", encoding="utf-8")
-elif stage == "review_2":
+        repair_needs_more(run_dir / "repair-1.json")
+elif stage == "repair_2":
     if attempt == 1:
-        (run_dir / "review-2.json").write_text(json.dumps({
+        (run_dir / "repair-2.json").write_text(json.dumps({
             "summary": "非法 severity",
-            "decision": "needs_fix",
+            "decision": "needs_more",
             "findings": [{
                 "title": "非法 severity",
                 "severity": "urgent-info",
+                "scope": "current_change",
                 "evidence": "fake invalid severity",
                 "recommendation": "重写为合法 severity"
             }],
-            "evidence": [],
+            "non_blocking_findings": [],
+            "evidence": ["invalid repair artifact for gate retry"],
             "checks": {}
         }, ensure_ascii=False), encoding="utf-8")
     else:
-        review_clean(run_dir / "review-2.json")
+        repair_clean(run_dir / "repair-2.json")
 elif stage == "qa_2":
     if attempt == 1:
         (run_dir / "qa-2.json").write_text(json.dumps({
@@ -328,6 +327,8 @@ cat >"$PROJECT/docs/changes/1-stage-artifact-retry/tests/demo.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 test -f docs/changes/1-stage-artifact-retry/acceptance.json
+mkdir -p test-results
+printf 'runtime trace fixture\n' > test-results/demo.zip
 SH
 chmod +x "$PROJECT/docs/changes/1-stage-artifact-retry/tests/demo.sh"
 
@@ -364,19 +365,16 @@ cat >"$PROJECT/docs/changes/1-stage-artifact-retry/acceptance.json" <<'JSON'
 JSON
 
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
-max_review_iterations: 2
-parallel: false
+max_repair_iterations: 2
 validation:
   limit: 3
   commands: []
 stages:
   execution:
     agent: codex
-  review:
+  repair:
     agent: codex
   qa:
-    agent: codex
-  fix:
     agent: codex
   archive:
     agent: codex
@@ -424,9 +422,8 @@ for record in records:
 
 required_retry = {
     "execution": "thread-executor",
-    "review_1": "thread-reviewer",
-    "fix_1": "thread-fixer",
-    "review_2": "thread-reviewer",
+    "repair_1": "thread-repairer",
+    "repair_2": "thread-repairer",
     "qa_2": "thread-qa",
     "archive": "thread-archiver",
 }
@@ -439,6 +436,18 @@ for stage, session in required_retry.items():
         raise SystemExit(f"{stage} retry session = {retry.get('session')!r}, want {session!r}")
     if not retry.get("has_artifact_gate_prompt"):
         raise SystemExit(f"{stage} retry prompt did not include Stage artifact gate failed")
+
+repair_sessions = {
+    record.get("session")
+    for record in records
+    if record.get("stage") in {"repair_1", "repair_2"} and record.get("session")
+}
+if repair_sessions != {"thread-repairer"}:
+    raise SystemExit(f"repair stages did not reuse one repairer session: {repair_sessions}")
+if not (run_dir / "repair-1.json").is_file() or not (run_dir / "repair-2.json").is_file():
+    raise SystemExit("missing durable repair-N.json checkpoints")
+if any((run_dir / name).exists() for name in ("review-1.json", "review-2.json", "fix-1-summary.md")):
+    raise SystemExit("new repair run must not emit legacy review/fix artifacts")
 
 validation_files = sorted(run_dir.glob("validation-*.json"))
 if len(validation_files) < 5:

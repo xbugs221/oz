@@ -306,7 +306,7 @@ func safeAcceptanceLogName(id string) string {
 // shouldRunAcceptanceGate limits required_tests execution to implementation stages.
 func shouldRunAcceptanceGate(state State) bool {
 	stage, err := parseWorkflowStage(state.Stage)
-	return err == nil && (stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix))
+	return err == nil && (stage.isKind(workflowStageExecution) || stage.isKind(workflowStageRepair) || stage.isKind(workflowStageFix))
 }
 
 // runAcceptanceGate runs the same executor used by the public runner command.

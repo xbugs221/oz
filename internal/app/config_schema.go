@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var iterationStage = regexp.MustCompile(`^(review|qa|fix)_([1-9][0-9]*)$`)
+var iterationStage = regexp.MustCompile(`^(repair|review|qa|fix)_([1-9][0-9]*)$`)
 
 type woConfigFile struct {
 	MC woConfig `yaml:"wo"`
@@ -23,6 +23,7 @@ type woConfig struct {
 
 type workflowConfigInput struct {
 	Engine              string                       `yaml:"engine"`
+	MaxRepairIterations *int                         `yaml:"max_repair_iterations"`
 	MaxReviewIterations *int                         `yaml:"max_review_iterations"`
 	SubagentGuard       subagentGuardModeInput       `yaml:"subagent_guard"`
 	Defaults            stageOptionsInput            `yaml:"defaults"`
@@ -175,7 +176,7 @@ func (input stageOptionsInput) hasValues() bool {
 
 // hasValues reports whether the workflow input contains any user field.
 func (input workflowConfigInput) hasValues() bool {
-	return input.Engine != "" || input.MaxReviewIterations != nil || input.SubagentGuard.Set || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
+	return input.Engine != "" || input.MaxRepairIterations != nil || input.MaxReviewIterations != nil || input.SubagentGuard.Set || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
 }
 
 func hasLegacyWorkflowRoot(data []byte) (bool, error) {
@@ -224,14 +225,17 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if input.legacyParallelSet {
 		return WorkflowConfig{}, fmt.Errorf("parallel 是旧字段，已删除")
 	}
-	maxIterations := defaultMaxReviewIterations
+	maxIterations := defaultMaxRepairIterations
 	engine := "go-dag"
 	var basePrompts map[string]string
 	byKind := defaultStageOptionsByKind()
 	validation := ValidationConfig{MaxAttemptsPerStage: 3}
 	if baseConfig != nil {
 		engine = baseConfig.Engine
-		maxIterations = baseConfig.MaxReviewIterations
+		maxIterations = baseConfig.MaxRepairIterations
+		if maxIterations == 0 && baseConfig.MaxReviewIterations > 0 {
+			maxIterations = baseConfig.MaxReviewIterations
+		}
 		basePrompts = clonePrompts(baseConfig.Prompts)
 		validation = baseConfig.Validation
 		if option, ok := baseConfig.Stages["planning"]; ok {
@@ -243,6 +247,9 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		if option, ok := baseConfig.Stages["fix_1"]; ok {
 			byKind["fix"] = option
 		}
+		if option, ok := baseConfig.Stages["repair_1"]; ok {
+			byKind["repair"] = option
+		}
 		if option, ok := baseConfig.Stages["review_1"]; ok {
 			byKind["review"] = option
 		}
@@ -253,11 +260,34 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 			byKind["archive"] = option
 		}
 	}
-	if input.MaxReviewIterations != nil {
-		if *input.MaxReviewIterations < 0 {
-			return WorkflowConfig{}, fmt.Errorf("max_review_iterations 必须是非负数")
+	if input.MaxRepairIterations != nil && input.MaxReviewIterations != nil {
+		return WorkflowConfig{}, fmt.Errorf("max_repair_iterations 与弃用的 max_review_iterations 不能同时出现")
+	}
+	if input.MaxRepairIterations != nil {
+		if *input.MaxRepairIterations < 0 || *input.MaxRepairIterations > 10 {
+			return WorkflowConfig{}, fmt.Errorf("max_repair_iterations 必须在 0 到 10 之间")
+		}
+		maxIterations = *input.MaxRepairIterations
+	} else if input.MaxReviewIterations != nil {
+		if *input.MaxReviewIterations < 0 || *input.MaxReviewIterations > 10 {
+			return WorkflowConfig{}, fmt.Errorf("max_review_iterations 必须在 0 到 10 之间")
 		}
 		maxIterations = *input.MaxReviewIterations
+	}
+	if input.Stages != nil {
+		_, hasRepair := input.Stages["repair"]
+		_, hasReview := input.Stages["review"]
+		_, hasFix := input.Stages["fix"]
+		if hasRepair && (hasReview || hasFix) {
+			return WorkflowConfig{}, fmt.Errorf("stages.repair 不能与弃用的 stages.review/fix 同时出现")
+		}
+		if !hasRepair {
+			if legacy, ok := input.Stages["fix"]; ok {
+				input.Stages["repair"] = legacy
+			} else if legacy, ok := input.Stages["review"]; ok {
+				input.Stages["repair"] = legacy
+			}
+		}
 	}
 	if strings.TrimSpace(input.Engine) != "" {
 		return WorkflowConfig{}, fmt.Errorf("engine 是旧字段，已删除")
@@ -287,20 +317,25 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		byKind[kind] = base
 	}
-	config := WorkflowConfig{Engine: engine, MaxReviewIterations: maxIterations, Stages: map[string]StageOptions{
+	config := WorkflowConfig{Engine: engine, Generation: repairWorkflowGeneration, MaxRepairIterations: maxIterations, Stages: map[string]StageOptions{
 		"planning":  byKind["planning"],
 		"execution": byKind["execution"],
 		"archive":   byKind["archive"],
 	}, Prompts: basePrompts}
+	if input.MaxReviewIterations != nil || input.Stages["review"].hasValues() || input.Stages["fix"].hasValues() {
+		config.Warnings = append(config.Warnings, "max_review_iterations 与 review/fix 配置已弃用并迁移为 repair")
+	}
 	validation, err := validationConfigFromInput(input.Validation, validation)
 	if err != nil {
 		return WorkflowConfig{}, err
 	}
 	config.Validation = validation
 	for i := 1; i <= maxIterations; i++ {
-		config.Stages[fmt.Sprintf("review_%d", i)] = byKind["review"]
+		config.Stages[fmt.Sprintf("repair_%d", i)] = byKind["repair"]
 		config.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]
-		config.Stages[fmt.Sprintf("fix_%d", i)] = byKind["fix"]
+	}
+	if maxIterations == 0 {
+		config.Stages["qa_1"] = byKind["qa"]
 	}
 	for key, override := range input.Iterations {
 		if !iterationStage.MatchString(key) {
@@ -308,7 +343,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		base, ok := config.Stages[key]
 		if !ok {
-			return WorkflowConfig{}, fmt.Errorf("轮次阶段 %q 超出 max_review_iterations", key)
+			return WorkflowConfig{}, fmt.Errorf("轮次阶段 %q 超出 max_repair_iterations", key)
 		}
 		if err := mergeStageOptions(&base, override); err != nil {
 			return WorkflowConfig{}, fmt.Errorf("iterations.%s: %w", key, err)

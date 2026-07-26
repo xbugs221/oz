@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证默认最大审核迭代数为 5，且 oz flow graph 输出紧凑中文 Mermaid 图。
+# 文件功能目的：验证默认最大自审自修轮数为 5，且 oz flow graph 输出紧凑中文 Mermaid 图。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -45,9 +45,9 @@ note "generate default oz-flow.yaml and verify iteration budget"
   "$OZ_BIN" flow config
 ) >"$RESULT_DIR/config.out" 2>"$RESULT_DIR/config.err"
 cp "$PROJECT/oz-flow.yaml" "$RESULT_DIR/oz-flow.yaml"
-grep -q 'max_review_iterations: 5' "$PROJECT/oz-flow.yaml" || fail "default max_review_iterations should be 5"
-if grep -q 'max_review_iterations: 30' "$PROJECT/oz-flow.yaml"; then
-  fail "default max_review_iterations should no longer be 30"
+grep -q 'max_repair_iterations: 5' "$PROJECT/oz-flow.yaml" || fail "default max_repair_iterations should be 5"
+if grep -q 'max_review_iterations:' "$PROJECT/oz-flow.yaml"; then
+  fail "new config should not emit legacy max_review_iterations"
 fi
 if grep -q '^engine:' "$PROJECT/oz-flow.yaml"; then
   fail "default oz-flow.yaml should not expose an engine field"
@@ -60,16 +60,16 @@ note "render mermaid graph and verify it is compact"
 ) >"$RESULT_DIR/graph.mmd" 2>"$RESULT_DIR/graph.err"
 grep -q 'flowchart TD' "$RESULT_DIR/graph.mmd" || fail "mermaid graph should render a flowchart"
 
-if grep -Eq 'review_2|qa_2|fix_2|review_5|qa_5|fix_5' "$RESULT_DIR/graph.mmd"; then
-  fail "mermaid graph should not repeat review/qa/fix nodes per iteration"
+if grep -Eq 'repair_2|qa_2|repair_5|qa_5|review_[1-9]|fix_[1-9]' "$RESULT_DIR/graph.mmd"; then
+  fail "mermaid graph should not repeat repair/qa nodes or expose legacy review/fix nodes"
 fi
 
 if grep -Eq 'subagent:|fan-in|planning_context|implementation_context|before_review|before_qa|before_execution' "$RESULT_DIR/graph.mmd"; then
   fail "mermaid visible labels should not mix internal English subagent/group names"
 fi
 
-grep -q '代码库侦察员' "$RESULT_DIR/graph.mmd" || fail "graph should keep the Chinese code-exploration subagent label"
-grep -q '外部资料研究员' "$RESULT_DIR/graph.mmd" || fail "graph should keep the Chinese external-research subagent label"
-grep -Eq '5|五' "$RESULT_DIR/graph.mmd" || fail "graph should communicate the 5-iteration review budget"
+grep -q '自审自修' "$RESULT_DIR/graph.mmd" || fail "graph should show the repair loop in Chinese"
+grep -Eq '独立(QA|测试)' "$RESULT_DIR/graph.mmd" || fail "graph should keep QA as an independent gate"
+grep -Eq '5|五' "$RESULT_DIR/graph.mmd" || fail "graph should communicate the 5-round repair budget"
 
-note "contract passed: default iteration budget is 5 and graph is compact Chinese"
+note "contract passed: default repair budget is 5 and graph is compact Chinese"

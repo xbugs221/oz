@@ -127,18 +127,18 @@ func TestStageDurationUsesSessionStartOnlyOnce(t *testing.T) {
 	state.Status = statusDone
 	state.Stage = statusDone
 	state.Stages = map[string]string{
-		"review_1": "completed",
-		"review_2": "completed",
+		"repair_1": "completed",
+		"repair_2": "completed",
 	}
 	state.Sessions = map[string]string{
-		sessionStateKey("codex", "reviewer"): statusTestUUIDv7(sessionStartedAt),
+		sessionStateKey("codex", "repairer"): statusTestUUIDv7(sessionStartedAt),
 	}
 	state.StageTimings = map[string]StageTiming{
-		"review_1": {
+		"repair_1": {
 			StartedAt:  sessionStartedAt.Add(5 * time.Minute).Format(time.RFC3339Nano),
 			FinishedAt: sessionStartedAt.Add(15 * time.Minute).Format(time.RFC3339Nano),
 		},
-		"review_2": {
+		"repair_2": {
 			StartedAt:  sessionStartedAt.Add(20 * time.Minute).Format(time.RFC3339Nano),
 			FinishedAt: sessionStartedAt.Add(30 * time.Minute).Format(time.RFC3339Nano),
 		},
@@ -146,10 +146,10 @@ func TestStageDurationUsesSessionStartOnlyOnce(t *testing.T) {
 
 	row := statusStageRow(t.TempDir(), state, compactStageSpecs[2], sessionStartedAt.Add(30*time.Minute))
 	if row.DurationMinutes == nil {
-		t.Fatalf("review duration missing")
+		t.Fatalf("repair duration missing")
 	}
 	if got, want := *row.DurationMinutes, 25.0; got != want {
-		t.Fatalf("review duration = %.2f, want %.2f", got, want)
+		t.Fatalf("repair duration = %.2f, want %.2f", got, want)
 	}
 }
 
@@ -354,6 +354,102 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 		}
 	}
 	t.Fatalf("runner observability missing running execution row: %s", data)
+}
+
+// TestStatusViewSelectsRepairGeneration verifies a new run never exposes legacy review/fix rows.
+func TestStatusViewSelectsRepairGeneration(t *testing.T) {
+	state := statusViewImplementationContextState()
+	view := buildStatusView(t.TempDir(), state, state.RunID, "")
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "自审自修", "测试阶段", "归档阶段"})
+}
+
+// TestStatusViewSelectsLegacyGeneration verifies an old sealed run never gains a synthetic repair row.
+func TestStatusViewSelectsLegacyGeneration(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.Workflow.Generation = ""
+	state.Workflow.MaxRepairIterations = 0
+	state.Workflow.MaxReviewIterations = 2
+	state.Stage = "fix_1"
+	state.Stages = map[string]string{"execution": "completed", "review_1": "completed", "fix_1": statusRunning}
+	view := buildStatusView(t.TempDir(), state, state.RunID, "")
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "审核阶段", "修正阶段", "测试阶段", "归档阶段"})
+}
+
+// TestBlockedWorkflowRoleLabels verifies markers and summaries name the actual failing generation role.
+func TestBlockedWorkflowRoleLabels(t *testing.T) {
+	tests := []struct {
+		name        string
+		configure   func(*State)
+		wantRow     string
+		wantSummary string
+	}{
+		{
+			name: "positive repair",
+			configure: func(state *State) {
+				state.Workflow.MaxRepairIterations = 2
+			},
+			wantRow:     "自审自修",
+			wantSummary: "自审自修阶段失败",
+		},
+		{
+			name: "zero repair",
+			configure: func(state *State) {
+				state.Workflow.MaxRepairIterations = 0
+			},
+			wantRow:     "测试阶段",
+			wantSummary: "独立测试阶段失败",
+		},
+		{
+			name: "legacy review",
+			configure: func(state *State) {
+				state.Workflow.Generation = ""
+				state.Workflow.MaxRepairIterations = 0
+				state.Workflow.MaxReviewIterations = 2
+			},
+			wantRow:     "审核阶段",
+			wantSummary: "审核阶段失败",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := statusViewImplementationContextState()
+			test.configure(&state)
+			state.Status = statusBlocked
+			state.Stage = statusBlocked
+			state.Error = "达到上限"
+			view := buildStatusView(t.TempDir(), state, state.RunID, "")
+			assertOnlyBlockedStatusRow(t, view, test.wantRow)
+			if summary := humanRunFailureSummary(state, state.ChangeName); !strings.Contains(summary, test.wantSummary) {
+				t.Fatalf("failure summary = %q, want containing %q", summary, test.wantSummary)
+			}
+		})
+	}
+}
+
+// assertOnlyBlockedStatusRow verifies exactly one responsibility row carries the blocked marker.
+func assertOnlyBlockedStatusRow(t *testing.T, view statusView, wantName string) {
+	t.Helper()
+	var blocked []string
+	for _, row := range view.Rows {
+		if row.Marker == "x" {
+			blocked = append(blocked, row.Name)
+		}
+	}
+	if fmt.Sprint(blocked) != fmt.Sprint([]string{wantName}) {
+		t.Fatalf("blocked rows = %v, want [%s]", blocked, wantName)
+	}
+}
+
+// assertStatusStageNames checks the complete ordered stage-generation projection.
+func assertStatusStageNames(t *testing.T, view statusView, want []string) {
+	t.Helper()
+	got := make([]string, 0, len(view.Rows))
+	for _, row := range view.Rows {
+		got = append(got, row.Name)
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("status rows = %v, want %v", got, want)
+	}
 }
 
 // statusViewImplementationContextState returns a minimal execution state for compact status tests.

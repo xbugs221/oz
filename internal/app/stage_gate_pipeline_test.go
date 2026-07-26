@@ -36,6 +36,7 @@ func TestShouldAdvanceAfterMainStagePreservesDAGSchedulerGates(t *testing.T) {
 		expect bool
 	}{
 		{name: "loop advances review", state: State{Stage: "review_1"}, mode: stageGatePipelineLoop, expect: true},
+		{name: "node advances repair", state: State{Stage: "repair_1"}, mode: stageGatePipelineNode, expect: true},
 		{name: "node leaves review to nodeGate", state: State{Stage: "review_1"}, mode: stageGatePipelineNode, expect: false},
 		{name: "node leaves qa to nodeGate", state: State{Stage: "qa_1"}, mode: stageGatePipelineNode, expect: false},
 		{name: "node advances execution", state: State{Stage: "execution"}, mode: stageGatePipelineNode, expect: true},

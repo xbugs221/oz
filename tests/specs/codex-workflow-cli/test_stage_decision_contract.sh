@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件目的：验证 sealed run 的阶段跳转规则由独立 stage decision 层表达并可回归测试。
+# 文件目的：验证新 repair 状态机及旧 sealed run 兼容规则由独立 stage decision 层表达并可回归测试。
 # Sources: 22-抽离工作流状态机决策
 set -euo pipefail
 
@@ -42,4 +42,4 @@ if [[ "$state_lines" -gt 1900 ]]; then
   fail "state.go 仍超过 1900 行，状态机职责尚未实质迁出"
 fi
 
-go test ./internal/app -run 'TestEngineStartRunsCleanReviewsToDone|TestQAFailureReturnsToFix|TestGoDAG|TestValidationGate|TestRootArtifactGate|TestRootAcceptancePreflight|TestEngineBlocksAfterLastFix|TestWorkflowFailureReviewFailsWorkflow' -count=1 2>&1 | tee -a "$log"
+go test ./internal/app -run 'TestRepairSessionReuse|TestQARepairLoop|TestRepairLimitBlocks|TestLegacyRepairSnapshotResume|TestGoDAG|TestValidationGate|TestRootArtifactGate|TestRootAcceptancePreflight|TestWorkflowFailureReviewFailsWorkflow' -count=1 2>&1 | tee -a "$log"

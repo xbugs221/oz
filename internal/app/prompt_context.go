@@ -24,21 +24,30 @@ type promptTemplateContext struct {
 	StageKind                    string
 	Iteration                    int
 	MaxReviewIterations          int
+	MaxRepairIterations          int
 	StatePath                    string
 	ChangePath                   string
 	AcceptancePath               string
 	AcceptanceSummaryPath        string
 	ReviewPath                   string
+	RepairPath                   string
+	HasRepairCheckpoint          bool
 	QAPath                       string
 	FixSummaryPath               string
 	PreviousReviewPaths          []string
+	PreviousRepairPaths          []string
 	PreviousQAPaths              []string
 	PreviousFixSummaryPaths      []string
 	PreviousReviewCount          int
+	PreviousRepairCount          int
 	PreviousFixSummaryCount      int
 	LatestPreviousReviewPath     string
+	LatestPreviousRepairPath     string
+	LatestPreviousQAPath         string
 	LatestPreviousFixSummaryPath string
 	HasPreviousReview            bool
+	HasPreviousRepair            bool
+	HasPreviousQA                bool
 	HasPreviousFixSummary        bool
 	PlanningContextPath          string
 	ParallelContextPath          string
@@ -161,7 +170,7 @@ func snapshotRunPrompts(repo, runID string) error {
 		return err
 	}
 	snapshot := promptSnapshot{Prompts: map[string]string{}}
-	for _, key := range rolePromptKeys() {
+	for _, key := range promptKeysForWorkflow(config) {
 		body := config.Prompts[key]
 		if body == "" {
 			return fmt.Errorf("配置缺少 prompts.%s", key)
@@ -173,6 +182,14 @@ func snapshotRunPrompts(repo, runID string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(root, "prompt-snapshot.yaml"), data, 0o644)
+}
+
+// promptKeysForWorkflow returns only prompts used by the active state-machine generation.
+func promptKeysForWorkflow(config WorkflowConfig) []string {
+	if usesRepairWorkflow(config) {
+		return []string{"planning", "execution", "repair", "qa", "archive"}
+	}
+	return []string{"planning", "execution", "review", "qa", "fix", "archive"}
 }
 
 // renderPromptTemplate injects run metadata and fails on unknown template variables.
@@ -205,6 +222,7 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 		StageKind:               kind,
 		Iteration:               iteration,
 		MaxReviewIterations:     state.Workflow.MaxReviewIterations,
+		MaxRepairIterations:     state.Workflow.MaxRepairIterations,
 		StatePath:               filepath.Join(runPath, "state.json"),
 		ChangePath:              "docs/changes/" + state.ChangeName,
 		AcceptancePath:          acceptancePath(repo, state.ChangeName),
@@ -216,6 +234,7 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 		HasRoleSession:          roleSessionID != "",
 		IsFirstRoleTurn:         roleSessionID == "",
 		PreviousReviewPaths:     []string{},
+		PreviousRepairPaths:     []string{},
 		PreviousQAPaths:         []string{},
 		PreviousFixSummaryPaths: []string{},
 		RepeatedFindingTitles:   []string{},
@@ -231,26 +250,58 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 		context.RepeatedFindingTitles = escalation.RepeatedFindingTitles
 	}
 	if iteration > 0 {
+		if usesRepairWorkflow(state.Workflow) && state.Workflow.MaxRepairIterations > 0 {
+			context.RepairPath = filepath.Join(runPath, fmt.Sprintf("repair-%d.json", iteration))
+			context.HasRepairCheckpoint = true
+		}
 		context.ReviewPath = filepath.Join(runPath, fmt.Sprintf("review-%d.json", iteration))
 		context.QAPath = filepath.Join(runPath, fmt.Sprintf("qa-%d.json", iteration))
 		context.FixSummaryPath = filepath.Join(runPath, fmt.Sprintf("fix-%d-summary.md", iteration))
 		for i := 1; i < iteration; i++ {
+			context.PreviousRepairPaths = append(context.PreviousRepairPaths, filepath.Join(runPath, fmt.Sprintf("repair-%d.json", i)))
 			context.PreviousReviewPaths = append(context.PreviousReviewPaths, filepath.Join(runPath, fmt.Sprintf("review-%d.json", i)))
 			context.PreviousFixSummaryPaths = append(context.PreviousFixSummaryPaths, filepath.Join(runPath, fmt.Sprintf("fix-%d-summary.md", i)))
+			if state.Stages[fmt.Sprintf("qa_%d", i)] == "completed" {
+				context.PreviousQAPaths = append(context.PreviousQAPaths, filepath.Join(runPath, fmt.Sprintf("qa-%d.json", i)))
+			}
 		}
 		context.PreviousReviewCount = len(context.PreviousReviewPaths)
+		context.PreviousRepairCount = len(context.PreviousRepairPaths)
 		context.PreviousFixSummaryCount = len(context.PreviousFixSummaryPaths)
 		context.HasPreviousReview = context.PreviousReviewCount > 0
+		context.HasPreviousRepair = context.PreviousRepairCount > 0
 		context.HasPreviousFixSummary = context.PreviousFixSummaryCount > 0
 		if context.HasPreviousReview {
 			context.LatestPreviousReviewPath = context.PreviousReviewPaths[context.PreviousReviewCount-1]
+		}
+		if context.HasPreviousRepair {
+			context.LatestPreviousRepairPath = context.PreviousRepairPaths[context.PreviousRepairCount-1]
+		}
+		if len(context.PreviousQAPaths) > 0 {
+			context.HasPreviousQA = true
+			context.LatestPreviousQAPath = context.PreviousQAPaths[len(context.PreviousQAPaths)-1]
 		}
 		if context.HasPreviousFixSummary {
 			context.LatestPreviousFixSummaryPath = context.PreviousFixSummaryPaths[context.PreviousFixSummaryCount-1]
 		}
 	}
 	if kind == "archive" {
-		for i := 1; i <= state.Workflow.MaxReviewIterations; i++ {
+		iterationLimit := state.Workflow.MaxRepairIterations
+		if state.Workflow.MaxReviewIterations > iterationLimit {
+			iterationLimit = state.Workflow.MaxReviewIterations
+		}
+		if usesRepairWorkflow(state.Workflow) && iterationLimit == 0 {
+			iterationLimit = 1
+		}
+		for i := 1; i <= iterationLimit; i++ {
+			if state.Stages[fmt.Sprintf("repair_%d", i)] != "" {
+				context.PreviousRepairPaths = append(context.PreviousRepairPaths, filepath.Join(runPath, fmt.Sprintf("repair-%d.json", i)))
+			}
+			if state.Stages[fmt.Sprintf("qa_%d", i)] != "" {
+				context.PreviousQAPaths = append(context.PreviousQAPaths, filepath.Join(runPath, fmt.Sprintf("qa-%d.json", i)))
+			}
+		}
+		for i := 1; !usesRepairWorkflow(state.Workflow) && i <= state.Workflow.MaxReviewIterations; i++ {
 			reviewStage := fmt.Sprintf("review_%d", i)
 			if state.Stages[reviewStage] == "" {
 				continue

@@ -1,8 +1,9 @@
-读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、`{{.ReviewPath}}`、当前变更 `{{.ChangePath}}/`
+读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、{{if .HasRepairCheckpoint}}`{{.RepairPath}}`、{{else}}本轮未配置 repair 检查点、{{end}}当前完整 diff baseline `{{.BaselineHead}}`、当前变更 `{{.ChangePath}}/`
 
 任务：
 
 - 只验收当前提案范围，不修改源码或 `{{.AcceptancePath}}`。
+- 使用独立 QA 会话核对{{if .HasRepairCheckpoint}}最新 repair 检查点{{else}}执行结果（零轮 repair 模式无 repair 检查点）{{end}}；不得继承 repairer 的自我判断。
 - `acceptance_matrix[].id` 必须逐字来自 `{{.AcceptancePath}}` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
 - blocking scope 只允许 `current_change` 或 `introduced_regression`；required_evidence 只要求可复核，不要求运行产物进 git。

@@ -1,14 +1,26 @@
 // Package app tests the workflow stage decision layer extracted from Engine IO.
 package app
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
-// TestEngineStartRunsCleanReviewsToDone verifies the clean path reaches archive after execution, review, and QA.
-func TestEngineStartRunsCleanReviewsToDone(t *testing.T) {
+// TestRepairSessionReuse verifies the clean repair path and records the durable session boundary.
+func TestRepairSessionReuse(t *testing.T) {
 	state := stageDecisionState("execution", 2)
-	assertStageDecision(t, state, Review{}, QA{}, "review_1", statusRunning, "")
+	state.Sessions = map[string]string{
+		sessionStateKey("codex", "repairer"): "thread-repairer",
+		sessionStateKey("codex", "qa"):       "thread-qa",
+	}
+	state.Stages = map[string]string{
+		"execution": "completed",
+		"repair_1":  "completed",
+		"qa_1":      "completed",
+	}
+	assertStageDecision(t, state, Review{}, QA{}, "repair_1", statusRunning, "")
 
-	state.Stage = "review_1"
+	state.Stage = "repair_1"
 	assertStageDecision(t, state, cleanReviewForStageDecision(), QA{}, "qa_1", statusRunning, "")
 
 	state.Stage = "qa_1"
@@ -16,27 +28,58 @@ func TestEngineStartRunsCleanReviewsToDone(t *testing.T) {
 
 	state.Stage = "archive"
 	assertStageDecision(t, state, Review{}, QA{}, "done", statusDone, "")
+
 }
 
-// TestQAFailureReturnsToFix verifies a failed QA round routes back to the matching fix stage.
-func TestQAFailureReturnsToFix(t *testing.T) {
+// TestZeroRepairStillRequiresQA verifies that disabling repair never grants archive authority.
+func TestZeroRepairStillRequiresQA(t *testing.T) {
+	state := stageDecisionState("execution", 0)
+	assertStageDecision(t, state, Review{}, QA{}, "qa_1", statusRunning, "")
+
+	state.Stage = "qa_1"
+	assertStageDecision(t, state, Review{}, cleanQAForStageDecision(), "archive", statusRunning, "")
+
+	qa := cleanQAForStageDecision()
+	qa.Decision = "needs_fix"
+	qa.Findings = []Finding{blockingFindingForStageDecision()}
+	assertStageDecision(t, state, Review{}, qa, statusBlocked, statusBlocked, "未配置自审自修轮次")
+}
+
+// TestLegacyZeroReviewSnapshotResumesToArchive verifies an unversioned zero-round snapshot keeps its historical transition.
+func TestLegacyZeroReviewSnapshotResumesToArchive(t *testing.T) {
+	var state State
+	if err := json.Unmarshal([]byte(`{
+		"status":"running",
+		"stage":"execution",
+		"workflow_config":{"max_review_iterations":0,"stages":{"execution":{},"archive":{}}}
+	}`), &state); err != nil {
+		t.Fatal(err)
+	}
+	assertStageDecision(t, state, Review{}, QA{}, "archive", statusRunning, "")
+}
+
+// TestQARepairLoop verifies a failed independent QA enters the next repair round.
+func TestQARepairLoop(t *testing.T) {
 	state := stageDecisionState("qa_2", 3)
 	qa := cleanQAForStageDecision()
 	qa.Decision = "needs_fix"
 	qa.Findings = []Finding{blockingFindingForStageDecision()}
 
-	assertStageDecision(t, state, Review{}, qa, "fix_2", statusRunning, "")
+	assertStageDecision(t, state, Review{}, qa, "repair_3", statusRunning, "")
 }
 
-// TestEngineBlocksAfterLastFix verifies the review limit blocks instead of creating another review round.
-func TestEngineBlocksAfterLastFix(t *testing.T) {
-	state := stageDecisionState("fix_3", 3)
-	assertStageDecision(t, state, Review{}, QA{}, statusBlocked, statusBlocked, "审核修正达到上限")
+// TestRepairLimitBlocks verifies the repair limit blocks instead of creating another round.
+func TestRepairLimitBlocks(t *testing.T) {
+	state := stageDecisionState("repair_3", 3)
+	repair := cleanReviewForStageDecision()
+	repair.Decision = "needs_more"
+	repair.Findings = []Finding{blockingFindingForStageDecision()}
+	assertStageDecision(t, state, repair, QA{}, statusBlocked, statusBlocked, "自审自修达到上限")
 }
 
 // TestWorkflowFailureReviewFailsWorkflow verifies reviewer-declared workflow failure ends the run.
 func TestWorkflowFailureReviewFailsWorkflow(t *testing.T) {
-	state := stageDecisionState("review_1", 3)
+	state := legacyStageDecisionState("review_1", 3)
 	review := cleanReviewForStageDecision()
 	review.Decision = "needs_fix"
 	review.Findings = []Finding{blockingFindingForStageDecision()}
@@ -47,7 +90,7 @@ func TestWorkflowFailureReviewFailsWorkflow(t *testing.T) {
 
 // TestStageDecisionReviewNeedsFix verifies review findings route to the matching fix stage.
 func TestStageDecisionReviewNeedsFix(t *testing.T) {
-	state := stageDecisionState("review_2", 3)
+	state := legacyStageDecisionState("review_2", 3)
 	review := cleanReviewForStageDecision()
 	review.Decision = "needs_fix"
 	review.Findings = []Finding{blockingFindingForStageDecision()}
@@ -58,8 +101,25 @@ func TestStageDecisionReviewNeedsFix(t *testing.T) {
 // stageDecisionState returns the minimal durable state needed by the pure decision function.
 func stageDecisionState(stage string, maxReviewIterations int) State {
 	workflow := DefaultWorkflowConfig()
+	workflow.MaxRepairIterations = maxReviewIterations
+	workflow.MaxReviewIterations = 0
+	return State{Status: statusRunning, Stage: stage, Workflow: workflow}
+}
+
+// legacyStageDecisionState returns a sealed review/fix snapshot for migration regression coverage.
+func legacyStageDecisionState(stage string, maxReviewIterations int) State {
+	workflow := DefaultWorkflowConfig()
+	workflow.MaxRepairIterations = 0
 	workflow.MaxReviewIterations = maxReviewIterations
 	return State{Status: statusRunning, Stage: stage, Workflow: workflow}
+}
+
+// TestLegacyRepairSnapshotResume verifies old sealed review/fix stages keep their original transitions.
+func TestLegacyRepairSnapshotResume(t *testing.T) {
+	state := legacyStageDecisionState("execution", 2)
+	assertStageDecision(t, state, Review{}, QA{}, "review_1", statusRunning, "")
+	state.Stage = "fix_1"
+	assertStageDecision(t, state, Review{}, QA{}, "review_2", statusRunning, "")
 }
 
 // assertStageDecision checks the business-level next stage, status, and blocking reason.

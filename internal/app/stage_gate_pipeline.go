@@ -74,7 +74,7 @@ func shouldAdvanceAfterMainStage(state State, mode stageGatePipelineMode) bool {
 	if err != nil {
 		return false
 	}
-	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageFix) || stage.isKind(workflowStageArchive)
+	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageRepair) || stage.isKind(workflowStageFix) || stage.isKind(workflowStageArchive)
 }
 
 // failedGateProgressLabel maps persisted gate status to the existing progress vocabulary.

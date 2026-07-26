@@ -27,13 +27,20 @@ func renderBundledPromptForRoleContract(t *testing.T, templateFile, templateName
 	if err != nil {
 		t.Fatal(err)
 	}
+	stages := map[string]string{}
+	if stage == "archive" {
+		stages = map[string]string{"repair_1": "completed", "qa_1": "completed"}
+	}
+	workflow := DefaultWorkflowConfig()
+	workflow.MaxRepairIterations = 2
+	workflow.MaxReviewIterations = 0
 	state := State{
 		RunID:      "role-contract-run",
 		ChangeName: "demo",
 		Stage:      stage,
-		Workflow:   DefaultWorkflowConfig(),
+		Workflow:   workflow,
 		Sessions:   sessions,
-		Stages:     map[string]string{},
+		Stages:     stages,
 	}
 	context, err := promptContext(t.TempDir(), state)
 	if err != nil {
@@ -66,34 +73,24 @@ func requirePromptOmits(t *testing.T, prompt string, rejects ...string) {
 	}
 }
 
-// TestBundledReviewPromptKeepsArtifactRules verifies reviewer prompt keeps compact JSON rules.
-func TestBundledReviewPromptKeepsExamplesOnlyForFirstReviewerTurn(t *testing.T) {
-	first := renderBundledPromptForRoleContract(t, "oz-flow-review.md", "oz-flow-review", "review_1", nil)
-	requirePromptContains(t, first, "严格 JSON", "decision", "scope", "non_blocking_findings", "review-1.json")
+// TestBundledRepairPromptKeepsOneSessionContract verifies every repair round keeps the durable schema and one session.
+func TestBundledRepairPromptKeepsOneSessionContract(t *testing.T) {
+	first := renderBundledPromptForRoleContract(t, "oz-flow-repair.md", "oz-flow-repair", "repair_1", nil)
+	requirePromptContains(t, first, "严格 JSON", "decision", "scope", "non_blocking_findings", "repair-1.json", "needs_more", "repairer 不能自行归档")
 
-	resumed := renderBundledPromptForRoleContract(t, "oz-flow-review.md", "oz-flow-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
-	requirePromptContains(t, resumed, "review-2.json", "review-1.json", "fix-1-summary.md", "JSON object")
-	requirePromptOmits(t, resumed, "JSON schema：", "如需修复，使用：", "如需提前终止无效循环，使用：", "\"summary\": \"一句话总结审核结果\"", "\"decision\": \"needs_fix\"")
+	resumed := renderBundledPromptForRoleContract(t, "oz-flow-repair.md", "oz-flow-repair", "repair_2", map[string]string{"codex:repairer": "repair-session"})
+	requirePromptContains(t, resumed, "repair-2.json", "repair-1.json", "codex:repairer", "复用 backend-scoped 会话")
+	requirePromptOmits(t, resumed, "review-2.json", "fix-2-summary.md")
 }
 
 // TestBundledQAPromptKeepsArtifactRules verifies QA prompt keeps compact JSON rules.
 func TestBundledQAPromptKeepsExamplesOnlyForFirstQATurn(t *testing.T) {
 	first := renderBundledPromptForRoleContract(t, "oz-flow-qa.md", "oz-flow-qa", "qa_1", nil)
-	requirePromptContains(t, first, "decision", "scope", "acceptance_matrix")
+	requirePromptContains(t, first, "decision", "scope", "acceptance_matrix", "repair-1.json", "不修改源码")
 
 	resumed := renderBundledPromptForRoleContract(t, "oz-flow-qa.md", "oz-flow-qa", "qa_2", map[string]string{"codex:qa": "qa-session"})
 	requirePromptContains(t, resumed, "qa-2.json", "schema")
 	requirePromptOmits(t, resumed, "clean 示例：", "needs_fix 示例：", "\"summary\": \"核心业务路径已通过 QA\"", "\"decision\": \"needs_fix\"")
-}
-
-// TestBundledFixPromptKeepsMethodologyOnlyForFirstFixerTurn verifies fixes stop replaying startup methodology.
-func TestBundledFixPromptKeepsMethodologyOnlyForFirstFixerTurn(t *testing.T) {
-	first := renderBundledPromptForRoleContract(t, "oz-flow-fix.md", "oz-flow-fix", "fix_1", nil)
-	requirePromptContains(t, first, "review-1.json", "qa-1.json", "必须做根因分析", "禁止只按错误文本打补丁", "fix-1-summary.md")
-
-	resumed := renderBundledPromptForRoleContract(t, "oz-flow-fix.md", "oz-flow-fix", "fix_2", map[string]string{"codex:fixer": "fix-session"})
-	requirePromptContains(t, resumed, "review-2.json", "qa-2.json", "fix-2-summary.md", "只修复当前 review/QA artifact 中列出的 findings")
-	requirePromptOmits(t, resumed, "充分理解评审意见", "从根源入手，不能治标不治本", "禁止只按错误文本打补丁")
 }
 
 // TestBundledExecutionPromptDelegatesToOzExec verifies execution prompt stays as a skill entry point.
@@ -111,19 +108,20 @@ func TestBundledExecutionPromptDelegatesToOzExec(t *testing.T) {
 // TestBundledDonePromptRequiresAuditableDeliverySummary verifies the final summary is useful to human reviewers.
 func TestBundledDonePromptRequiresAuditableDeliverySummary(t *testing.T) {
 	prompt := renderBundledPromptForRoleContract(t, "oz-flow-done.md", "oz-flow-done", "archive", map[string]string{
-		"codex:reviewer": "review-session",
+		"codex:repairer": "repair-session",
 		"codex:qa":       "qa-session",
-		"codex:fixer":    "fix-session",
 	})
 	requirePromptContains(t, prompt,
 		"delivery-summary.md",
 		"最终审核",
 		"oz-archive",
+		"repair-1.json",
+		"qa-1.json",
 	)
 }
 GO
 
 (
   cd "$ROOT"
-  go test ./internal/app -run 'TestBundled(Review|QA|Fix)PromptKeeps.*First.*Turn|TestBundledExecutionPromptDelegatesToOzExec|TestBundledDonePromptRequiresAuditableDeliverySummary' -count=1
+  go test ./internal/app -run 'TestBundled(RepairPromptKeepsOneSessionContract|QAPromptKeepsExamplesOnlyForFirstQATurn|ExecutionPromptDelegatesToOzExec|DonePromptRequiresAuditableDeliverySummary)' -count=1
 ) | tee "$RESULT_DIR/contract.log"

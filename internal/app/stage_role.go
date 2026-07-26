@@ -21,6 +21,7 @@ type stageRole struct {
 var workflowRoles = []stageRole{
 	{Name: "planning", PromptKey: "planning", PromptName: "oz-flow-discuss", Session: "planner", Label: "规", OptionsKey: "planning", Default: StageOptions{Tool: "codex", Reasoning: "xhigh", Fast: true}},
 	{Name: "execution", PromptKey: "execution", PromptName: "oz-flow-start", Session: "executor", Label: "写", OptionsKey: "execution", Default: StageOptions{Tool: "codex", Reasoning: "low", Fast: false}},
+	{Name: "repair", PromptKey: "repair", PromptName: "oz-flow-repair", Session: "repairer", Label: "修", Iterated: true, OptionsKey: "repair", Default: StageOptions{Tool: "codex", Reasoning: "medium", Fast: false}},
 	{Name: "review", PromptKey: "review", PromptName: "oz-flow-review", Session: "reviewer", Label: "审", Iterated: true, OptionsKey: "review", Default: StageOptions{Tool: "codex", Reasoning: "high", Fast: false}},
 	{Name: "qa", PromptKey: "qa", PromptName: "oz-flow-qa", Session: "qa", Label: "测", Iterated: true, OptionsKey: "qa", Default: StageOptions{Tool: "codex", Reasoning: "high", Fast: false}},
 	{Name: "fix", PromptKey: "fix", PromptName: "oz-flow-fix", Session: "fixer", Label: "修", Iterated: true, OptionsKey: "fix", Default: StageOptions{Tool: "codex", Reasoning: "low", Fast: false}},

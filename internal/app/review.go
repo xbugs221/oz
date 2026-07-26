@@ -285,6 +285,8 @@ func normalizeDecision(decision string) string {
 		return "clean"
 	case "1", "needs_fix", "fail", "failed", "failure":
 		return "needs_fix"
+	case "needs_more":
+		return "needs_more"
 	default:
 		return strings.TrimSpace(decision)
 	}

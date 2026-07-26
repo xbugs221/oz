@@ -61,10 +61,16 @@ func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
 	remainingDeps := map[string]int{}
 	outgoing := map[string][]string{}
 	for _, node := range spec.Nodes {
+		if node.DecisionOnly {
+			continue
+		}
 		nodes[node.ID] = node
 		remainingDeps[node.ID] = 0
 	}
 	for _, edge := range spec.Edges {
+		if edge.DecisionOnly {
+			continue
+		}
 		outgoing[edge.From] = append(outgoing[edge.From], edge.To)
 		remainingDeps[edge.To]++
 	}
@@ -77,6 +83,9 @@ func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
 	for len(completed) < len(nodes) {
 		var ready []WorkflowNode
 		for _, node := range spec.Nodes {
+			if node.DecisionOnly {
+				continue
+			}
 			if !completed[node.ID] && remainingDeps[node.ID] == 0 {
 				ready = append(ready, node)
 			}
@@ -264,15 +273,24 @@ func goDAGOrder(spec WorkflowSpec) []WorkflowNode {
 	incoming := map[string]int{}
 	outgoing := map[string][]string{}
 	for _, node := range spec.Nodes {
+		if node.DecisionOnly {
+			continue
+		}
 		nodes[node.ID] = node
 		incoming[node.ID] = 0
 	}
 	for _, edge := range spec.Edges {
+		if edge.DecisionOnly {
+			continue
+		}
 		outgoing[edge.From] = append(outgoing[edge.From], edge.To)
 		incoming[edge.To]++
 	}
 	var ready []string
 	for _, node := range spec.Nodes {
+		if node.DecisionOnly {
+			continue
+		}
 		if incoming[node.ID] == 0 {
 			ready = append(ready, node.ID)
 		}

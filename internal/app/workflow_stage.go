@@ -10,6 +10,7 @@ import (
 const (
 	workflowStageExecution = "execution"
 	workflowStagePlanning  = "planning"
+	workflowStageRepair    = "repair"
 	workflowStageReview    = "review"
 	workflowStageFix       = "fix"
 	workflowStageQA        = "qa"
@@ -35,6 +36,7 @@ func parseWorkflowStage(stage string) (workflowStage, error) {
 		prefix string
 		kind   string
 	}{
+		{prefix: "repair_", kind: workflowStageRepair},
 		{prefix: "review_", kind: workflowStageReview},
 		{prefix: "fix_", kind: workflowStageFix},
 		{prefix: "qa_", kind: workflowStageQA},

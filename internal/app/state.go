@@ -28,6 +28,17 @@ func workflowStagesForState(state State) []string {
 	return workflowStagesForConfig(state.Workflow)
 }
 
+// blockedWorkflowRole identifies the role responsible for a review-limit block in the sealed generation.
+func blockedWorkflowRole(state State) string {
+	if usesRepairWorkflow(state.Workflow) {
+		if state.Workflow.MaxRepairIterations == 0 {
+			return "qa"
+		}
+		return "repairer"
+	}
+	return "reviewer"
+}
+
 // ensureWorkflowConfig normalizes the workflow snapshot used by state checklists.
 func ensureWorkflowConfig(state *State) {
 	normalizeWorkflowConfig(&state.Workflow)

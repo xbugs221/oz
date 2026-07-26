@@ -15,6 +15,7 @@ type stageArtifactExpectation struct {
 }
 
 type stageArtifactResult struct {
+	Repair Review
 	Review Review
 	QA     QA
 }
@@ -33,6 +34,12 @@ func (e *Engine) stageArtifactExpectation(state State) stageArtifactExpectation 
 		return stageArtifactExpectation{
 			Path:        filepath.Join(base, "review-"+n+".json"),
 			Description: "review JSON schema 和 review decision 合同",
+		}
+	case strings.HasPrefix(state.Stage, "repair_"):
+		n := strings.TrimPrefix(state.Stage, "repair_")
+		return stageArtifactExpectation{
+			Path:        filepath.Join(base, "repair-"+n+".json"),
+			Description: "repair JSON schema、修正证据和 repair decision 合同",
 		}
 	case strings.HasPrefix(state.Stage, "fix_"):
 		n := strings.TrimPrefix(state.Stage, "fix_")
@@ -76,6 +83,19 @@ func (e *Engine) validateStageArtifact(state State) (stageArtifactResult, bool, 
 			return stageArtifactResult{}, false, err
 		}
 		return stageArtifactResult{Review: review}, true, nil
+	case strings.HasPrefix(state.Stage, "repair_"):
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		repair, err := ReadRepair(filepath.Join(base, "repair-"+strconv.Itoa(iteration)+".json"))
+		if os.IsNotExist(err) {
+			return stageArtifactResult{}, false, nil
+		}
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{Repair: repair}, true, nil
 	case strings.HasPrefix(state.Stage, "fix_"):
 		iteration, err := stageIteration(state.Stage)
 		if err != nil {

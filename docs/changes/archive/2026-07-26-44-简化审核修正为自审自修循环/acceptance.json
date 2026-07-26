@@ -1,0 +1,64 @@
+{
+  "summary": "证明 oz flow 用同一 repairer 会话完成可恢复的自审自修循环，并由独立 QA 放行，且轮次与旧运行迁移边界明确。",
+  "coverage": [
+    {
+      "spec": "需求：审核与修正使用同一持续会话 / 场景：问题在多轮自审自修中收敛",
+      "tests": ["self-review-repair-loop-contract"],
+      "evidence": ["repair-loop-state", "repair-loop-runtime"],
+      "risk": "远端 agent 后端的实际会话质量仍由 live 环境决定。"
+    },
+    {
+      "spec": "需求：独立 QA 保留最终放行权 / 场景：QA 失败返回同一自审自修循环",
+      "tests": ["self-review-repair-loop-contract", "root-go-regression"],
+      "evidence": ["repair-loop-state"],
+      "risk": "QA 的语义判断质量不能仅由确定性测试完全证明。"
+    },
+    {
+      "spec": "需求：循环有明确上限与迁移边界 / 场景：轮次耗尽或读取旧运行",
+      "tests": ["self-review-repair-loop-contract", "root-go-regression"],
+      "evidence": ["repair-loop-runtime"],
+      "risk": "ozw 的 repair 展示需要跨仓库联动发布。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "self-review-repair-loop-contract",
+      "source": "change_contract",
+      "path": "docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/tests/test_self_review_repair_loop.sh",
+      "command": "bash docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/tests/test_self_review_repair_loop.sh",
+      "purpose": "从真实 internal/app 源码与测试入口证明 repair 会话、状态机、QA gate、配置上限和旧运行兼容，并产出 test-results/44-self-review-repair-loop/state.json 与 runtime.log。",
+      "assertions": [
+        "工作流注册 repairer 角色，并让 repair_N 轮次复用同一 session key",
+        "repair needs_more 与 QA needs_fix 均进入下一 repair，QA clean 才能归档",
+        "最大 repair 轮次为 10，耗尽后阻塞且旧 sealed run 有兼容测试"
+      ],
+      "expected_initial_failure": "当前源码只有 reviewer/fixer 分离角色及 review_N/fix_N 状态机，测试应失败。"
+    },
+    {
+      "id": "root-go-regression",
+      "source": "existing_regression",
+      "path": "internal/app/stage_decision_test.go",
+      "command": "go test ./... # regression source: internal/app/stage_decision_test.go",
+      "purpose": "证明状态机简化没有破坏配置、runner、sealed state、graph、status 和 archive 既有行为。",
+      "assertions": [
+        "全部 Go 包测试通过",
+        "旧 sealed run 恢复与新 repair run 均有回归覆盖"
+      ],
+      "expected_initial_failure": "提案创建阶段可通过；执行阶段若迁移破坏既有合同则失败。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "repair-loop-state",
+      "kind": "state_snapshot",
+      "path": "test-results/44-self-review-repair-loop/state.json",
+      "purpose": "证明多轮 repair 只记录一个 repairer session，QA 使用独立 session，并保存每轮 durable stage。"
+    },
+    {
+      "id": "repair-loop-runtime",
+      "kind": "runtime_log",
+      "path": "test-results/44-self-review-repair-loop/runtime.log",
+      "purpose": "证明 repair、QA、上限阻塞和旧 run resume 的真实命令路径与结果。"
+    }
+  ]
+}

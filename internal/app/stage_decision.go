@@ -27,10 +27,24 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 	}
 	switch stage.Kind {
 	case workflowStageExecution:
+		if usesRepairWorkflow(state.Workflow) && state.Workflow.MaxRepairIterations == 0 {
+			return StageDecision{NextStage: "qa_1", NextStatus: state.Status}, nil
+		}
+		if state.Workflow.MaxRepairIterations > 0 {
+			return StageDecision{NextStage: "repair_1", NextStatus: state.Status}, nil
+		}
 		if state.Workflow.MaxReviewIterations == 0 {
 			return StageDecision{NextStage: "archive", NextStatus: state.Status}, nil
 		}
 		return StageDecision{NextStage: "review_1", NextStatus: state.Status}, nil
+	case workflowStageRepair:
+		if RepairNeedsMore(review) {
+			if stage.Iteration >= state.Workflow.MaxRepairIterations {
+				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "自审自修达到上限，工作流已中断"}, nil
+			}
+			return StageDecision{NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status}, nil
+		}
+		return StageDecision{NextStage: fmt.Sprintf("qa_%d", stage.Iteration), NextStatus: state.Status}, nil
 	case workflowStageReview:
 		n := strconv.Itoa(stage.Iteration)
 		if ReviewDeclaresWorkflowFailure(review) {
@@ -44,6 +58,15 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 	case workflowStageQA:
 		n := strconv.Itoa(stage.Iteration)
 		if QANeedsFix(qa) {
+			if state.Workflow.MaxRepairIterations > 0 {
+				if stage.Iteration >= state.Workflow.MaxRepairIterations {
+					return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且自审自修达到上限，工作流已中断"}, nil
+				}
+				return StageDecision{NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status}, nil
+			}
+			if usesRepairWorkflow(state.Workflow) {
+				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且未配置自审自修轮次，工作流已中断"}, nil
+			}
 			return StageDecision{NextStage: "fix_" + n, NextStatus: state.Status}, nil
 		}
 		return StageDecision{NextStage: "archive", NextStatus: state.Status}, nil
@@ -215,6 +238,9 @@ func (e *Engine) advance(state *State) error {
 		return e.stageArtifactGateError(*state, fmt.Errorf("%s 阶段 artifact 未完成", state.Stage))
 	}
 	review := result.Review
+	if stage, parseErr := parseWorkflowStage(state.Stage); parseErr == nil && stage.isKind(workflowStageRepair) {
+		review = result.Repair
+	}
 	qa := result.QA
 	stage, err := parseWorkflowStage(state.Stage)
 	if err != nil {
@@ -222,6 +248,8 @@ func (e *Engine) advance(state *State) error {
 	}
 	switch stage.Kind {
 	case workflowStageExecution:
+	case workflowStageRepair:
+		clearStageValidationFailure(state)
 	case workflowStageReview:
 		clearStageValidationFailure(state)
 	case workflowStageQA:
@@ -248,19 +276,26 @@ func (e *Engine) validateArchiveReadiness(state State) error {
 	if !fileExists(filepath.Join(runDir(e.Repo, state.RunID), "delivery-summary.md")) || !archiveExists(e.Repo, state.ChangeName) {
 		return fmt.Errorf("archive 阶段缺少 delivery summary 或归档目录")
 	}
-	if state.Workflow.MaxReviewIterations == 0 {
-		return nil
-	}
 	iteration := latestCompletedQAIteration(state)
 	if iteration == 0 {
 		return fmt.Errorf("archive 阶段缺少 clean QA artifact")
 	}
-	review, err := ReadReview(filepath.Join(runDir(e.Repo, state.RunID), fmt.Sprintf("review-%d.json", iteration)))
-	if err != nil {
-		return err
-	}
-	if NeedsFix(review) {
-		return fmt.Errorf("archive 阶段发现 review-%d 仍需修复", iteration)
+	if state.Workflow.MaxRepairIterations > 0 {
+		repair, err := ReadRepair(filepath.Join(runDir(e.Repo, state.RunID), fmt.Sprintf("repair-%d.json", iteration)))
+		if err != nil {
+			return err
+		}
+		if RepairNeedsMore(repair) {
+			return fmt.Errorf("archive 阶段发现 repair-%d 仍需继续", iteration)
+		}
+	} else if state.Workflow.MaxReviewIterations > 0 {
+		review, err := ReadReview(filepath.Join(runDir(e.Repo, state.RunID), fmt.Sprintf("review-%d.json", iteration)))
+		if err != nil {
+			return err
+		}
+		if NeedsFix(review) {
+			return fmt.Errorf("archive 阶段发现 review-%d 仍需修复", iteration)
+		}
 	}
 	qa, err := ReadQA(filepath.Join(runDir(e.Repo, state.RunID), fmt.Sprintf("qa-%d.json", iteration)))
 	if err != nil {
@@ -284,7 +319,14 @@ func (e *Engine) validateArchiveReadiness(state State) error {
 
 func latestCompletedQAIteration(state State) int {
 	latest := 0
-	for i := 1; i <= state.Workflow.MaxReviewIterations; i++ {
+	limit := state.Workflow.MaxRepairIterations
+	if limit == 0 {
+		limit = state.Workflow.MaxReviewIterations
+		if limit == 0 {
+			limit = 1
+		}
+	}
+	for i := 1; i <= limit; i++ {
 		if state.Stages[fmt.Sprintf("qa_%d", i)] != "" {
 			latest = i
 		}
@@ -297,7 +339,7 @@ func validateArchiveValidationEvidence(state State) error {
 		if status == "" {
 			continue
 		}
-		if stage != "execution" && !strings.HasPrefix(stage, "fix_") {
+		if stage != "execution" && !strings.HasPrefix(stage, "repair_") && !strings.HasPrefix(stage, "fix_") {
 			continue
 		}
 		if state.Validation[stage].Status != validationStatusPassed {

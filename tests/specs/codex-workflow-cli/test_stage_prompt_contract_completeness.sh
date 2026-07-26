@@ -28,12 +28,20 @@ func renderChangeSixPrompt(t *testing.T, templateFile, templateName, stage strin
 	if err != nil {
 		t.Fatal(err)
 	}
+	stages := map[string]string{}
+	if stage == "archive" {
+		stages = map[string]string{"repair_1": "completed", "qa_1": "completed"}
+	}
+	workflow := DefaultWorkflowConfig()
+	workflow.MaxRepairIterations = 2
+	workflow.MaxReviewIterations = 0
 	state := State{
 		RunID:      "change-six-prompt-contract",
 		ChangeName: "6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同",
 		Stage:      stage,
-		Workflow:   DefaultWorkflowConfig(),
+		Workflow:   workflow,
 		Sessions:   sessions,
+		Stages:     stages,
 	}
 	context, err := promptContext(t.TempDir(), state)
 	if err != nil {
@@ -84,23 +92,25 @@ func TestChangeSixExecutionPromptDelegatesToOzExec(t *testing.T) {
 	requireChangeSixPromptOmits(t, prompt, "proposal.md", "design.md", "spec.md", "required_tests", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings")
 }
 
-// TestChangeSixReviewPromptKeepsFirstTurnAuditContract verifies review has inputs, output, schema, and evidence rules.
-func TestChangeSixReviewPromptKeepsFirstTurnAuditContract(t *testing.T) {
-	first := renderChangeSixPrompt(t, "oz-flow-review.md", "oz-flow-review", "review_1", nil)
+// TestChangeSixRepairPromptKeepsSelfReviewContract verifies repair has inputs, output, schema, evidence, and session rules.
+func TestChangeSixRepairPromptKeepsSelfReviewContract(t *testing.T) {
+	first := renderChangeSixPrompt(t, "oz-flow-repair.md", "oz-flow-repair", "repair_1", nil)
 	requireChangeSixPromptContains(t, first,
 		"state.json",
 		"acceptance.json",
 		"完整变更",
-		"review-1.json",
+		"repair-1.json",
 		"严格 JSON",
 		"decision",
 		"scope",
 		"non_blocking_findings",
+		"needs_more",
+		"repairer 不能自行归档",
 	)
 
-	resumed := renderChangeSixPrompt(t, "oz-flow-review.md", "oz-flow-review", "review_2", map[string]string{"codex:reviewer": "review-session"})
-	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "review-2.json", "review-1.json", "fix-1-summary.md", "JSON object")
-	requireChangeSixPromptOmits(t, resumed, "JSON schema：", "如需修复，使用：", "如需提前终止无效循环，使用：")
+	resumed := renderChangeSixPrompt(t, "oz-flow-repair.md", "oz-flow-repair", "repair_2", map[string]string{"codex:repairer": "repair-session"})
+	requireChangeSixPromptContains(t, resumed, "复用 backend-scoped 会话", "codex:repairer", "repair-2.json", "repair-1.json", "严格 JSON")
+	requireChangeSixPromptOmits(t, resumed, "review-2.json", "fix-2-summary.md")
 }
 
 // TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract verifies QA keeps required tests, evidence, and matrix rules.
@@ -109,7 +119,7 @@ func TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract(t *testing.T) {
 	requireChangeSixPromptContains(t, first,
 		"state.json",
 		"acceptance.json",
-		"review-1.json",
+		"repair-1.json",
 		"required_tests",
 		"required_evidence",
 		"acceptance_matrix",
@@ -124,26 +134,6 @@ func TestChangeSixQAPromptKeepsFirstTurnAcceptanceContract(t *testing.T) {
 	requireChangeSixPromptOmits(t, resumed, "clean 示例：", "needs_fix 示例：")
 }
 
-// TestChangeSixFixPromptKeepsFirstTurnRootCauseContract verifies fix keeps current findings, boundaries, and summary output.
-func TestChangeSixFixPromptKeepsFirstTurnRootCauseContract(t *testing.T) {
-	first := renderChangeSixPrompt(t, "oz-flow-fix.md", "oz-flow-fix", "fix_1", nil)
-	requireChangeSixPromptContains(t, first,
-		"state.json",
-		"acceptance.json",
-		"review-1.json",
-		"qa-1.json",
-		"只修复当前 review/QA artifact 中列出的 findings",
-		"必须做根因分析",
-		"禁止只按错误文本打补丁",
-		"不得删除、弱化或绕过",
-		"fix-1-summary.md",
-	)
-
-	resumed := renderChangeSixPrompt(t, "oz-flow-fix.md", "oz-flow-fix", "fix_2", map[string]string{"codex:fixer": "fix-session"})
-	requireChangeSixPromptContains(t, resumed, "复用当前角色会话", "review-2.json", "qa-2.json", "fix-2-summary.md")
-	requireChangeSixPromptOmits(t, resumed, "充分理解评审意见", "必须做根因分析", "禁止只按错误文本打补丁")
-}
-
 // TestChangeSixArchivePromptDelegatesToOzArchive verifies archive prompt stays as a skill entry point.
 func TestChangeSixArchivePromptKeepsDeliveryContract(t *testing.T) {
 	prompt := renderChangeSixPrompt(t, "oz-flow-done.md", "oz-flow-done", "archive", nil)
@@ -152,6 +142,8 @@ func TestChangeSixArchivePromptKeepsDeliveryContract(t *testing.T) {
 		"oz-archive",
 		"delivery-summary.md",
 		"最终审核",
+		"repair-1.json",
+		"qa-1.json",
 	)
 }
 GO

@@ -21,22 +21,24 @@ type WorkflowSpec struct {
 
 // WorkflowNode describes one user-visible graph step.
 type WorkflowNode struct {
-	ID        string `json:"id" yaml:"id"`
-	Name      string `json:"name" yaml:"name"`
-	Type      string `json:"type" yaml:"type"`
-	Group     string `json:"group,omitempty" yaml:"group,omitempty"`
-	Stage     string `json:"stage,omitempty" yaml:"stage,omitempty"`
-	RunStage  string `json:"run_stage,omitempty" yaml:"run_stage,omitempty"`
-	Member    string `json:"member,omitempty" yaml:"member,omitempty"`
-	Mode      string `json:"mode,omitempty" yaml:"mode,omitempty"`
-	Iteration int    `json:"iteration,omitempty" yaml:"iteration,omitempty"`
+	ID           string `json:"id" yaml:"id"`
+	Name         string `json:"name" yaml:"name"`
+	Type         string `json:"type" yaml:"type"`
+	Group        string `json:"group,omitempty" yaml:"group,omitempty"`
+	Stage        string `json:"stage,omitempty" yaml:"stage,omitempty"`
+	RunStage     string `json:"run_stage,omitempty" yaml:"run_stage,omitempty"`
+	Member       string `json:"member,omitempty" yaml:"member,omitempty"`
+	Mode         string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Iteration    int    `json:"iteration,omitempty" yaml:"iteration,omitempty"`
+	DecisionOnly bool   `json:"decision_only,omitempty" yaml:"decision_only,omitempty"`
 }
 
 // WorkflowEdge records execution or decision ordering between graph nodes.
 type WorkflowEdge struct {
-	From  string `json:"from" yaml:"from"`
-	To    string `json:"to" yaml:"to"`
-	Label string `json:"label,omitempty" yaml:"label,omitempty"`
+	From         string `json:"from" yaml:"from"`
+	To           string `json:"to" yaml:"to"`
+	Label        string `json:"label,omitempty" yaml:"label,omitempty"`
+	DecisionOnly bool   `json:"decision_only,omitempty" yaml:"decision_only,omitempty"`
 }
 
 // WorkflowArtifact records files produced by fan-in steps.
@@ -100,6 +102,57 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 	}
 	spec.addNode(WorkflowNode{ID: "execution", Name: "execution", Type: "main_stage", Stage: "execution"})
 	previous := "execution"
+	if usesRepairWorkflow(workflow) {
+		for i := 1; i <= workflow.MaxRepairIterations; i++ {
+			repair := fmt.Sprintf("repair_%d", i)
+			qa := fmt.Sprintf("qa_%d", i)
+			spec.addNode(WorkflowNode{ID: repair, Name: repair, Type: "main_stage", Stage: repair, Iteration: i})
+			if i == 1 {
+				spec.addEdge("execution", repair, "")
+			}
+			repairGate := fmt.Sprintf("gate_repair_%d", i)
+			spec.addGate(repairGate, "repair gate", repair, i)
+			spec.addEdge(repair, repairGate, "")
+			spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: i})
+			spec.addEdge(repairGate, qa, "repair clean")
+			qaGate := fmt.Sprintf("gate_qa_%d", i)
+			spec.addGate(qaGate, "QA gate", qa, i)
+			spec.addEdge(qa, qaGate, "")
+			if i < workflow.MaxRepairIterations {
+				spec.addDecisionEdge(repairGate, fmt.Sprintf("repair_%d", i+1), "repair needs_more")
+				spec.addEdge(qaGate, fmt.Sprintf("repair_%d", i+1), "QA needs_fix")
+				spec.addDecisionEdge(qaGate, "gate_archive", "QA clean")
+			} else {
+				spec.addDecisionEdge(repairGate, statusBlocked, "repair needs_more")
+				spec.addDecisionEdge(qaGate, statusBlocked, "QA needs_fix")
+			}
+		}
+		if workflow.MaxRepairIterations > 0 {
+			spec.addNode(WorkflowNode{
+				ID: statusBlocked, Name: "blocked", Type: "terminal", Stage: statusBlocked, DecisionOnly: true,
+			})
+		}
+		spec.addNode(WorkflowNode{ID: "archive", Name: "archive", Type: "main_stage", Stage: "archive"})
+		archiveGate := "gate_archive"
+		spec.addGate(archiveGate, "archive gate", "archive", 0)
+		if workflow.MaxRepairIterations == 0 {
+			qa := "qa_1"
+			spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: 1})
+			spec.addEdge("execution", qa, "")
+			qaGate := "gate_qa_1"
+			spec.addGate(qaGate, "QA gate", qa, 1)
+			spec.addEdge(qa, qaGate, "")
+			spec.addNode(WorkflowNode{
+				ID: statusBlocked, Name: "blocked", Type: "terminal", Stage: statusBlocked, DecisionOnly: true,
+			})
+			spec.addDecisionEdge(qaGate, statusBlocked, "QA needs_fix")
+			spec.addEdge(qaGate, archiveGate, "QA clean")
+		} else {
+			spec.addEdge(fmt.Sprintf("gate_qa_%d", workflow.MaxRepairIterations), archiveGate, "QA clean")
+		}
+		spec.addEdge(archiveGate, "archive", "")
+		return spec
+	}
 	for i := 1; i <= workflow.MaxReviewIterations; i++ {
 		review := fmt.Sprintf("review_%d", i)
 		qa := fmt.Sprintf("qa_%d", i)
@@ -137,6 +190,29 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 	out.WriteString("flowchart TD\n")
 	out.WriteString("  execution[执行]\n")
 
+	if usesRepairWorkflow(workflow) {
+		if workflow.MaxRepairIterations == 0 {
+			out.WriteString("  qa[独立测试]\n")
+			out.WriteString("  archive[归档]\n")
+			out.WriteString("  blocked[阻塞]\n")
+			out.WriteString("  execution --> qa\n")
+			out.WriteString("  qa -->|clean| archive\n")
+			out.WriteString("  qa -->|needs_fix，无修正轮次| blocked\n")
+			return out.String()
+		}
+		out.WriteString("  repair[自审自修]\n")
+		out.WriteString("  qa[独立测试]\n")
+		out.WriteString("  archive[归档]\n")
+		out.WriteString("  blocked[阻塞]\n")
+		out.WriteString("  execution --> repair\n")
+		out.WriteString("  repair -->|clean| qa\n")
+		fmt.Fprintf(&out, "  repair -->|needs_more，未达第%d轮| repair\n", workflow.MaxRepairIterations)
+		fmt.Fprintf(&out, "  repair -->|needs_more，第%d轮| blocked\n", workflow.MaxRepairIterations)
+		fmt.Fprintf(&out, "  qa -->|needs_fix，未达第%d轮| repair\n", workflow.MaxRepairIterations)
+		fmt.Fprintf(&out, "  qa -->|needs_fix，第%d轮| blocked\n", workflow.MaxRepairIterations)
+		out.WriteString("  qa -->|clean| archive\n")
+		return out.String()
+	}
 	out.WriteString("  review[审核]\n")
 	out.WriteString("  qa[测试]\n")
 	out.WriteString("  fix[修复]\n")
@@ -162,6 +238,11 @@ func (spec *WorkflowSpec) addNode(node WorkflowNode) {
 
 func (spec *WorkflowSpec) addEdge(from, to, label string) {
 	spec.Edges = append(spec.Edges, WorkflowEdge{From: from, To: to, Label: label})
+}
+
+// addDecisionEdge records a business transition that must not become an extra DAG dependency.
+func (spec *WorkflowSpec) addDecisionEdge(from, to, label string) {
+	spec.Edges = append(spec.Edges, WorkflowEdge{From: from, To: to, Label: label, DecisionOnly: true})
 }
 
 func slug(text string) string {

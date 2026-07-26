@@ -119,7 +119,7 @@
 
 // Sources: 22-抽离工作流状态机决策
 
-系统必须在用户确认开始执行后禁止人工介入，并按配置化 execution、review、qa、fix、archive 阶段自动推进。
+系统必须在用户确认开始执行后禁止人工介入，并按配置化 execution、repair、qa、archive 阶段自动推进；旧 sealed run 继续按其快照中的 review/fix 状态机恢复。
 
 #### 场景：运行中新增非当前需求提案
 
@@ -147,27 +147,28 @@
 - **且** prompt 只保留 `state.json`、change 目录、`acceptance.json` 和并行上下文 artifact 读取入口
 - **且** prompt 不得重复 `oz-exec` 技能已定义的 required_tests、任务完成标准或长文档读取策略
 
-#### 场景：审核提前通过
+#### 场景：同会话自审自修后由独立 QA 放行
 
-- **当** `review_i.json` 的 `decision` 为 `clean`
-- **且** review artifact 通过严格校验
-- **则** 系统跳过后续 review 和 fix
-- **且** 进入同轮 `qa_i` 阶段
-- **且** QA clean 后进入 archive 阶段
+// Sources: 44-简化审核修正为自审自修循环
 
-#### 场景：QA 要求修复
+- **给定** `max_repair_iterations` 大于零
+- **当** execution 完成
+- **则** 系统进入 `repair_1`，后续 repair 轮次复用同一 backend-scoped repairer session
+- **且** repair `needs_more` 进入下一 repair，repair `clean` 进入同轮独立 QA
+- **且** QA `needs_fix` 进入下一 repair，QA `clean` 且同轮 repair clean 后才能归档
+- **且**轮次耗尽仍未放行时工作流阻塞
+- **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
 
-- **当** `qa_i.json` 的 `decision` 为 `needs_fix`
-- **且** `i < max_review_iterations`
-- **则** 系统进入 `fix_i`
-- **则** 修复完成后进入 `review_{i+1}`
+#### 场景：零轮 repair 与旧运行兼容
 
-#### 场景：审核要求修复
+// Sources: 44-简化审核修正为自审自修循环
 
-- **当** `review_i.json` 的 `decision` 为 `needs_fix`
-- **且** `i < max_review_iterations`
-- **则** 系统进入 `fix_i`
-- **则** 修复完成后进入 `review_{i+1}`
+- **给定**新运行配置 `max_repair_iterations=0`
+- **则**系统禁用 repair、不生成 repair artifact，仅由独立 QA clean 放行
+- **且** QA `needs_fix` 时工作流阻塞
+- **当**恢复缺少新状态机代际标记的旧 sealed run
+- **则**系统继续按快照中的 review/fix 状态机推进，不得静默迁移
+- **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
 
 #### 场景：阶段跳转规则由独立决策层表达
 
