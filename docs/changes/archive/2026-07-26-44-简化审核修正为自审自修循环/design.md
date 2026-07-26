@@ -3,22 +3,20 @@
 ## 状态机
 
 ```text
-execution
-   ↓
-repair_1 ──needs_more──→ repair_2 ──…──→ repair_N
-   │                         │
-   └──────── clean ──────────┘
-                 ↓
-                qa
-          clean ↙  ↘ needs_fix
-          archive   下一轮 repair
+execution → repair
+               ↻ needs_more
+               ↻ 首次 clean：强制重审
+               ↓ 确认 clean
+              qa
+       clean ↙  ↘ needs_fix
+       archive   下一轮 repair
 ```
 
 `repair_N` 是可恢复的 durable stage，不把全部循环藏在一次长调用中。每轮复用 `tool:repairer` session，并输出 `repair-N.json`，至少记录本轮发现、实际修改、验证证据、剩余问题和 decision。
 
 ## 放行边界
 
-repairer 可以决定“本轮已无已知问题”，但不能直接归档。独立 QA 读取 acceptance contract、最终 diff 与最新 repair artifact；只有 QA clean 才能进入 archive。
+repairer 首次决定“本轮已无已知问题”时不能直接进入 QA，系统会在同一会话强制追加一次完整重审。重审仍为 clean 才进入独立 QA；若发现问题则继续优化，下一次 clean 后再次确认。独立 QA 读取 acceptance contract、最终 diff 与最新 repair artifact；只有 QA clean 才能进入 archive。
 
 ## 配置
 

@@ -13,7 +13,7 @@
 
 ## 3. 保留独立 QA
 
-- [x] repair clean 后进入独立 QA，QA needs_fix 后进入下一轮 repair。
+- [x] repair 首次 clean 后强制完整重审，确认 clean 后进入独立 QA；QA needs_fix 后进入下一轮 repair。
 - [x] 收紧 archive readiness：正轮模式必须同时存在 repair clean 与 QA clean；零轮模式禁用 repair，仅由独立 QA clean 放行。
 - [x] 达到最后一轮仍失败时置为阻塞，不归档。
 

@@ -16,7 +16,7 @@ func TestRepairWorkflowSpecIncludesNeedsMoreDecision(t *testing.T) {
 
 	found := false
 	for _, edge := range spec.Edges {
-		if edge.From == "gate_repair_1" && edge.To == "repair_2" && edge.Label == "repair needs_more" {
+		if edge.From == "gate_repair_1" && edge.To == "repair_2" && edge.Label == "repair needs_more / first clean" {
 			found = true
 			if !edge.DecisionOnly {
 				t.Fatal("repair needs_more must be descriptive without becoming a scheduler dependency")
@@ -46,8 +46,8 @@ func TestRepairWorkflowSpecIncludesFinalBlockedDecisions(t *testing.T) {
 
 	blockedNode := false
 	wants := map[string]bool{
-		"gate_repair_2|repair needs_more": false,
-		"gate_qa_2|QA needs_fix":          false,
+		"gate_repair_2|repair needs_more / first clean": false,
+		"gate_qa_2|QA needs_fix":                        false,
 	}
 	for _, node := range spec.Nodes {
 		if node.ID == statusBlocked && node.DecisionOnly {
@@ -130,8 +130,9 @@ func TestPositiveRepairCompactMermaidShowsFinalBlock(t *testing.T) {
 
 	for _, want := range []string{
 		"blocked[阻塞]",
-		"repair -->|needs_more，未达第2轮| repair",
-		"repair -->|needs_more，第2轮| blocked",
+		"repair -->|确认 clean| qa",
+		"repair -->|needs_more 或首次 clean，未达第2轮| repair",
+		"repair -->|needs_more 或首次 clean，第2轮| blocked",
 		"qa -->|needs_fix，未达第2轮| repair",
 		"qa -->|needs_fix，第2轮| blocked",
 	} {

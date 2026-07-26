@@ -8,7 +8,7 @@ import (
 
 // TestRepairSessionReuse verifies the clean repair path and records the durable session boundary.
 func TestRepairSessionReuse(t *testing.T) {
-	state := stageDecisionState("execution", 2)
+	state := stageDecisionState("execution", 3)
 	state.Sessions = map[string]string{
 		sessionStateKey("codex", "repairer"): "thread-repairer",
 		sessionStateKey("codex", "qa"):       "thread-qa",
@@ -21,14 +21,24 @@ func TestRepairSessionReuse(t *testing.T) {
 	assertStageDecision(t, state, Review{}, QA{}, "repair_1", statusRunning, "")
 
 	state.Stage = "repair_1"
-	assertStageDecision(t, state, cleanReviewForStageDecision(), QA{}, "qa_1", statusRunning, "")
+	firstClean := assertStageDecision(t, state, cleanReviewForStageDecision(), QA{}, "repair_2", statusRunning, "")
+	if !firstClean.UpdateRepairConfirmation || !firstClean.RepairConfirmationPending {
+		t.Fatalf("first clean must require confirmation: %#v", firstClean)
+	}
 
-	state.Stage = "qa_1"
+	state.Stage = "repair_2"
+	state.RepairConfirmationPending = true
+	confirmed := assertStageDecision(t, state, cleanReviewForStageDecision(), QA{}, "qa_2", statusRunning, "")
+	if !confirmed.UpdateRepairConfirmation || confirmed.RepairConfirmationPending {
+		t.Fatalf("confirmed clean must clear pending confirmation: %#v", confirmed)
+	}
+
+	state.Stage = "qa_2"
+	state.RepairConfirmationPending = false
 	assertStageDecision(t, state, Review{}, cleanQAForStageDecision(), "archive", statusRunning, "")
 
 	state.Stage = "archive"
 	assertStageDecision(t, state, Review{}, QA{}, "done", statusDone, "")
-
 }
 
 // TestZeroRepairStillRequiresQA verifies that disabling repair never grants archive authority.
@@ -77,6 +87,29 @@ func TestRepairLimitBlocks(t *testing.T) {
 	assertStageDecision(t, state, repair, QA{}, statusBlocked, statusBlocked, "优化达到上限")
 }
 
+// TestRepairConfirmationFindingResetsPending verifies a failed confirmation requires a new clean-plus-confirmation pair.
+func TestRepairConfirmationFindingResetsPending(t *testing.T) {
+	state := stageDecisionState("repair_2", 4)
+	state.RepairConfirmationPending = true
+	repair := cleanReviewForStageDecision()
+	repair.Decision = "needs_more"
+	repair.Findings = []Finding{blockingFindingForStageDecision()}
+
+	decision := assertStageDecision(t, state, repair, QA{}, "repair_3", statusRunning, "")
+	if !decision.UpdateRepairConfirmation || decision.RepairConfirmationPending {
+		t.Fatalf("failed confirmation must clear pending state: %#v", decision)
+	}
+}
+
+// TestRepairCleanAtLimitBlocksWithoutConfirmation verifies a first clean cannot bypass the final confirmation.
+func TestRepairCleanAtLimitBlocksWithoutConfirmation(t *testing.T) {
+	state := stageDecisionState("repair_2", 2)
+	assertStageDecision(t, state, cleanReviewForStageDecision(), QA{}, statusBlocked, statusBlocked, "缺少最终重审确认")
+
+	state.RepairConfirmationPending = true
+	assertStageDecision(t, state, cleanReviewForStageDecision(), QA{}, "qa_2", statusRunning, "")
+}
+
 // TestWorkflowFailureReviewFailsWorkflow verifies reviewer-declared workflow failure ends the run.
 func TestWorkflowFailureReviewFailsWorkflow(t *testing.T) {
 	state := legacyStageDecisionState("review_1", 3)
@@ -123,7 +156,7 @@ func TestLegacyRepairSnapshotResume(t *testing.T) {
 }
 
 // assertStageDecision checks the business-level next stage, status, and blocking reason.
-func assertStageDecision(t *testing.T, state State, review Review, qa QA, wantStage, wantStatus, wantReason string) {
+func assertStageDecision(t *testing.T, state State, review Review, qa QA, wantStage, wantStatus, wantReason string) StageDecision {
 	t.Helper()
 	decision, err := DecideNextStage(state, review, qa)
 	if err != nil {
@@ -141,6 +174,7 @@ func assertStageDecision(t *testing.T, state State, review Review, qa QA, wantSt
 	if wantReason == "" && decision.BlockedReason != "" {
 		t.Fatalf("BlockedReason = %q, want empty", decision.BlockedReason)
 	}
+	return decision
 }
 
 // cleanReviewForStageDecision returns a review artifact that represents a clean review decision.

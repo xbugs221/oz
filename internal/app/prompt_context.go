@@ -63,6 +63,7 @@ type promptTemplateContext struct {
 	RoleSessionID                string
 	HasRoleSession               bool
 	IsFirstRoleTurn              bool
+	IsRepairConfirmation         bool
 	FixEscalated                 bool
 	FixEscalationReasoning       string
 	ConsecutiveReviewFailures    int
@@ -233,6 +234,7 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 		RoleSessionID:           roleSessionID,
 		HasRoleSession:          roleSessionID != "",
 		IsFirstRoleTurn:         roleSessionID == "",
+		IsRepairConfirmation:    kind == workflowStageRepair && state.RepairConfirmationPending,
 		PreviousReviewPaths:     []string{},
 		PreviousRepairPaths:     []string{},
 		PreviousQAPaths:         []string{},

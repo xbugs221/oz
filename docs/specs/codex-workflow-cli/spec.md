@@ -149,19 +149,20 @@
 
 #### 场景：同会话优化后由独立 QA 放行
 
-// Sources: 44-简化审核修正为优化循环
+// Sources: 44-简化审核修正为自审自修循环
 
 - **给定** `max_repair_iterations` 大于零
 - **当** execution 完成
 - **则** 系统进入 `repair_1`，后续 repair 轮次复用同一 backend-scoped repairer session
-- **且** repair `needs_more` 进入下一 repair，repair `clean` 进入同轮独立 QA
-- **且** QA `needs_fix` 进入下一 repair，QA `clean` 且同轮 repair clean 后才能归档
+- **且** repair `needs_more` 进入下一 repair；首次 `clean` 必须进入下一轮强制重审确认，不设置固定最低轮数
+- **且** 强制重审重新读取状态、验收合同、完整差异与验证结果；确认仍为 `clean` 才进入同轮独立 QA，发现问题则继续 repair 并在下次 `clean` 后重新确认
+- **且** QA `needs_fix` 进入下一 repair，QA `clean` 且同轮 repair 已确认 clean 后才能归档
 - **且**轮次耗尽仍未放行时工作流阻塞
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
 
 #### 场景：零轮 repair 与旧运行兼容
 
-// Sources: 44-简化审核修正为优化循环
+// Sources: 44-简化审核修正为自审自修循环
 
 - **给定**新运行配置 `max_repair_iterations=0`
 - **则**系统禁用 repair、不生成 repair artifact，仅由独立 QA clean 放行

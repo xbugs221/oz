@@ -27,7 +27,7 @@ func (r *repairWorkflowRunner) Run(_ context.Context, _ string, prompt string, s
 	switch r.calls {
 	case 1:
 		if sessionID != "repair-session" {
-			return "", fmt.Errorf("first agent session = %q, want repair-session; prompt=%q", sessionID, promptStageExcerpt(prompt))
+			return "", fmt.Errorf("first repair session = %q, want repair-session; prompt=%q", sessionID, promptStageExcerpt(prompt))
 		}
 		repair := cleanReviewForStageDecision()
 		repair.Evidence = []string{"go test ./internal/app；runtime DAG resume verified"}
@@ -36,8 +36,18 @@ func (r *repairWorkflowRunner) Run(_ context.Context, _ string, prompt string, s
 		}
 		return "repair-session", nil
 	case 2:
+		if sessionID != "repair-session" || !strings.Contains(prompt, "强制重审确认") {
+			return "", fmt.Errorf("confirmation did not reuse repair session: session=%q prompt=%q", sessionID, promptStageExcerpt(prompt))
+		}
+		repair := cleanReviewForStageDecision()
+		repair.Evidence = []string{"go test ./internal/app；runtime fresh confirmation passed"}
+		if err := writeJSONFile(filepath.Join(base, "repair-3.json"), repair); err != nil {
+			return "", err
+		}
+		return "repair-session", nil
+	case 3:
 		if sessionID != "qa-session" {
-			return "", fmt.Errorf("second agent session = %q, want qa-session; prompt=%q", sessionID, promptStageExcerpt(prompt))
+			return "", fmt.Errorf("QA session = %q, want qa-session; prompt=%q", sessionID, promptStageExcerpt(prompt))
 		}
 		qa := cleanQAForStageDecision()
 		qa.Evidence = []string{"runtime go test ./internal/app passed"}
@@ -45,11 +55,11 @@ func (r *repairWorkflowRunner) Run(_ context.Context, _ string, prompt string, s
 			{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "integration contract passed"},
 			{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "runtime log exists"},
 		}
-		if err := writeJSONFile(filepath.Join(base, "qa-2.json"), qa); err != nil {
+		if err := writeJSONFile(filepath.Join(base, "qa-3.json"), qa); err != nil {
 			return "", err
 		}
 		return "qa-session", nil
-	case 3:
+	case 4:
 		if err := os.WriteFile(filepath.Join(base, "delivery-summary.md"), []byte("# 交付\n\n## 最终审核\n\n独立 QA 已通过。\n"), 0o644); err != nil {
 			return "", err
 		}
@@ -206,7 +216,7 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	fixture.git("commit", "-q", "-m", "add repair DAG fixture")
 
 	workflow := DefaultWorkflowConfig()
-	workflow.MaxRepairIterations = 2
+	workflow.MaxRepairIterations = 3
 	workflow.MaxReviewIterations = 0
 	head, diff, err := gitSnapshot(repo)
 	if err != nil {
@@ -268,7 +278,7 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	if got.Status != statusDone || got.Stage != "done" {
 		t.Fatalf("final state = %s/%s, want done/done", got.Status, got.Stage)
 	}
-	if runner.calls != 3 || got.Stages["repair_2"] != "completed" || got.Stages["qa_2"] != "completed" {
+	if runner.calls != 4 || got.Stages["repair_3"] != "completed" || got.Stages["qa_3"] != "completed" || got.RepairConfirmationPending {
 		t.Fatalf("repair/QA resume did not complete exactly once: calls=%d stages=%#v", runner.calls, got.Stages)
 	}
 	if evidencePath != "" {

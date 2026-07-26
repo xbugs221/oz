@@ -12,10 +12,12 @@ import (
 
 // StageDecision describes the durable mutation needed after a workflow stage completes.
 type StageDecision struct {
-	NextStage     string
-	NextStatus    string
-	BlockedReason string
-	NeedsRerun    bool
+	NextStage                 string
+	NextStatus                string
+	BlockedReason             string
+	NeedsRerun                bool
+	UpdateRepairConfirmation  bool
+	RepairConfirmationPending bool
 }
 
 // DecideNextStage returns the next durable stage/status for pure stage transitions.
@@ -42,9 +44,27 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 			if stage.Iteration >= state.Workflow.MaxRepairIterations {
 				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "优化达到上限，工作流已中断"}, nil
 			}
-			return StageDecision{NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status}, nil
+			return StageDecision{
+				NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status,
+				UpdateRepairConfirmation: true,
+			}, nil
 		}
-		return StageDecision{NextStage: fmt.Sprintf("qa_%d", stage.Iteration), NextStatus: state.Status}, nil
+		if state.RepairConfirmationPending {
+			return StageDecision{
+				NextStage: fmt.Sprintf("qa_%d", stage.Iteration), NextStatus: state.Status,
+				UpdateRepairConfirmation: true,
+			}, nil
+		}
+		if stage.Iteration >= state.Workflow.MaxRepairIterations {
+			return StageDecision{
+				NextStage: statusBlocked, NextStatus: statusBlocked,
+				BlockedReason: "优化已完成但达到上限，缺少最终重审确认",
+			}, nil
+		}
+		return StageDecision{
+			NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status,
+			UpdateRepairConfirmation: true, RepairConfirmationPending: true,
+		}, nil
 	case workflowStageReview:
 		n := strconv.Itoa(stage.Iteration)
 		if ReviewDeclaresWorkflowFailure(review) {
@@ -62,7 +82,10 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 				if stage.Iteration >= state.Workflow.MaxRepairIterations {
 					return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且优化达到上限，工作流已中断"}, nil
 				}
-				return StageDecision{NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status}, nil
+				return StageDecision{
+					NextStage: fmt.Sprintf("repair_%d", stage.Iteration+1), NextStatus: state.Status,
+					UpdateRepairConfirmation: true,
+				}, nil
 			}
 			if usesRepairWorkflow(state.Workflow) {
 				return StageDecision{NextStage: statusBlocked, NextStatus: statusBlocked, BlockedReason: "独立 QA 未通过且未配置优化轮次，工作流已中断"}, nil
@@ -262,6 +285,9 @@ func (e *Engine) advance(state *State) error {
 	decision, err := DecideNextStage(*state, review, qa)
 	if err != nil {
 		return err
+	}
+	if decision.UpdateRepairConfirmation {
+		state.RepairConfirmationPending = decision.RepairConfirmationPending
 	}
 	state.Stage = decision.NextStage
 	state.Status = decision.NextStatus

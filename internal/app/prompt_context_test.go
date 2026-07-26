@@ -181,6 +181,34 @@ func TestRepairPromptCarriesLatestFailedQA(t *testing.T) {
 	}
 }
 
+// TestRepairPromptMarksForcedConfirmation verifies a post-clean turn receives an explicit fresh-review instruction.
+func TestRepairPromptMarksForcedConfirmation(t *testing.T) {
+	repo := t.TempDir()
+	state := State{
+		RunID:                     "repair-confirmation",
+		ChangeName:                "1-重审",
+		Stage:                     "repair_2",
+		Workflow:                  DefaultWorkflowConfig(),
+		RepairConfirmationPending: true,
+		Stages: map[string]string{
+			"repair_1": "completed",
+		},
+	}
+	context, err := promptContext(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt, err := renderPromptTemplate("oz-flow-repair", state.Workflow.Prompts["repair"], context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"强制重审确认", "不得直接复述上一轮结论", "无需新增修改"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("confirmation prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
 func mustMarshalValidationAttemptJSON(t *testing.T, attempt ValidationAttempt) []byte {
 	t.Helper()
 	data, err := json.MarshalIndent(attempt, "", "  ")

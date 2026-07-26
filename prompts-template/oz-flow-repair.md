@@ -11,6 +11,10 @@
 {{if .HasPreviousQA}}
 - 触发本轮的上一轮独立 QA：`{{.LatestPreviousQAPath}}`；必须逐项复核并处理其中的 findings。
 {{end}}
+{{if .IsRepairConfirmation}}
+- 本轮是上一轮 `clean` 后的强制重审确认。必须重新从 state、acceptance、完整 diff 和验证结果开始审查，不得直接复述上一轮结论。
+- 发现任何问题时先修复并使用 `needs_more`；只有本轮未发现新问题、无需新增修改且验证仍通过时才能再次使用 `clean`。
+{{end}}
 
 写入：`{{.RepairPath}}`
 

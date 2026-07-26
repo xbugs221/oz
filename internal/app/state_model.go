@@ -37,30 +37,31 @@ func stateUsesGoDAG(state State) bool {
 
 // State is the durable source of truth for one sealed run.
 type State struct {
-	RunID               string                          `json:"run_id"`
-	ChangeName          string                          `json:"change_name"`
-	Sealed              bool                            `json:"sealed"`
-	Status              string                          `json:"status"`
-	Stage               string                          `json:"stage"`
-	Engine              string                          `json:"engine,omitempty"`
-	Error               string                          `json:"error"`
-	BatchID             string                          `json:"batch_id,omitempty"`
-	BatchIndex          int                             `json:"batch_index,omitempty"`
-	BatchTotal          int                             `json:"batch_total,omitempty"`
-	BaselineHead        string                          `json:"baseline_head"`
-	BaselineDiff        string                          `json:"baseline_diff"`
-	Sessions            map[string]string               `json:"sessions"`
-	Stages              map[string]string               `json:"stages"`
-	StageTimings        map[string]StageTiming          `json:"stage_timings,omitempty"`
-	DAGNodes            map[string]DAGNodeState         `json:"dag_nodes,omitempty"`
-	Processes           []ProcessState                  `json:"processes,omitempty"`
-	Paths               map[string]string               `json:"paths"`
-	Validation          map[string]StageValidationState `json:"validation,omitempty"`
-	ArtifactGates       map[string]StageValidationState `json:"artifact_gates,omitempty"`
-	AcceptanceRun       map[string]StageValidationState `json:"acceptance_run,omitempty"`
-	AcceptancePreflight AcceptancePreflightState        `json:"acceptance_preflight,omitempty"`
-	Worker              *WorkerRuntimeState             `json:"worker,omitempty"`
-	Workflow            WorkflowConfig                  `json:"workflow_config"`
+	RunID                     string                          `json:"run_id"`
+	ChangeName                string                          `json:"change_name"`
+	Sealed                    bool                            `json:"sealed"`
+	Status                    string                          `json:"status"`
+	Stage                     string                          `json:"stage"`
+	Engine                    string                          `json:"engine,omitempty"`
+	Error                     string                          `json:"error"`
+	BatchID                   string                          `json:"batch_id,omitempty"`
+	BatchIndex                int                             `json:"batch_index,omitempty"`
+	BatchTotal                int                             `json:"batch_total,omitempty"`
+	BaselineHead              string                          `json:"baseline_head"`
+	BaselineDiff              string                          `json:"baseline_diff"`
+	Sessions                  map[string]string               `json:"sessions"`
+	Stages                    map[string]string               `json:"stages"`
+	StageTimings              map[string]StageTiming          `json:"stage_timings,omitempty"`
+	DAGNodes                  map[string]DAGNodeState         `json:"dag_nodes,omitempty"`
+	Processes                 []ProcessState                  `json:"processes,omitempty"`
+	Paths                     map[string]string               `json:"paths"`
+	Validation                map[string]StageValidationState `json:"validation,omitempty"`
+	ArtifactGates             map[string]StageValidationState `json:"artifact_gates,omitempty"`
+	AcceptanceRun             map[string]StageValidationState `json:"acceptance_run,omitempty"`
+	AcceptancePreflight       AcceptancePreflightState        `json:"acceptance_preflight,omitempty"`
+	RepairConfirmationPending bool                            `json:"repair_confirmation_pending,omitempty"`
+	Worker                    *WorkerRuntimeState             `json:"worker,omitempty"`
+	Workflow                  WorkflowConfig                  `json:"workflow_config"`
 }
 
 // WorkerRuntimeState records one oz worker process for post-mortem diagnosis.

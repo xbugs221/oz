@@ -22,10 +22,10 @@ require_source_contract() {
 
 # require_zero_round_contract 核对零轮 repair 的文档语义与独立 QA 门禁保持一致。
 require_zero_round_contract() {
-  rg -q '配置为 0 时禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/proposal.md
-  rg -q '0 时禁用 repair，不生成 repair artifact，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/spec.md
-  rg -q 'max_repair_iterations=0.*禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/design.md
-  rg -q '零轮模式禁用 repair，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/task.md
+  rg -q '配置为 0 时禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/proposal.md
+  rg -q '0 时禁用 repair，不生成 repair artifact，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/spec.md
+  rg -q 'max_repair_iterations=0.*禁用 repair' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/design.md
+  rg -q '零轮模式禁用 repair，仅由独立 QA clean 放行' docs/changes/archive/2026-07-26-44-简化审核修正为自审自修循环/task.md
 }
 
 # require_behavior_tests 核对实现层存在业务行为测试，避免用静态字符串满足状态机合同。
@@ -33,6 +33,7 @@ require_behavior_tests() {
   rg -q 'Test.*Repair.*Session|Test.*Repair.*Reuse' internal/app/*_test.go
   rg -q 'Test.*QA.*Repair|Test.*Repair.*QA' internal/app/*_test.go
   rg -q 'Test.*Repair.*Limit|Test.*Repair.*Legacy|Test.*Legacy.*Repair' internal/app/*_test.go
+  rg -q 'TestRepairConfirmationFindingResetsPending|TestRepairCleanAtLimitBlocksWithoutConfirmation' internal/app/stage_decision_test.go
 }
 
 # run_targeted_tests 运行真实 app 包测试，覆盖阶段决策、artifact gate 与 sealed run 恢复路径。
@@ -61,8 +62,9 @@ run_targeted_tests() {
     .qa_repair_resume.status == "done" and
     .qa_repair_resume.sessions["codex:repairer"] == "repair-session" and
     .qa_repair_resume.sessions["codex:qa"] == "qa-session" and
-    .qa_repair_resume.stages.repair_2 == "completed" and
-    .qa_repair_resume.stages.qa_2 == "completed" and
+    .qa_repair_resume.stages.repair_3 == "completed" and
+    .qa_repair_resume.stages.qa_3 == "completed" and
+    .qa_repair_resume.repair_confirmation_pending != true and
     .repair_limit_blocked.sealed == true and
     .repair_limit_blocked.status == "blocked_review_limit" and
     .repair_limit_blocked.stage == "blocked_review_limit" and

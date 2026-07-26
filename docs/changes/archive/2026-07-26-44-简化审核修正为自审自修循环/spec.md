@@ -12,7 +12,7 @@
 - **测试**：`docs/changes/archive/2026-07-26-44-简化审核修正为优化循环/tests/test_self_review_repair_loop.sh`
 - **真实数据来源**：`internal/app` 的真实角色映射、prompt context 和阶段决策函数
 - **入口路径**：`oz flow run/resume`
-- **关键断言**：repair 轮次共享 session；needs_more 进入下一 repair；clean 进入 QA
+- **关键断言**：repair 轮次共享 session；needs_more 进入下一 repair；首次 clean 进入强制重审，确认 clean 才进入 QA
 - **剩余风险**：具体 agent 后端的远端会话质量由现有 live 测试覆盖
 
 ### 需求：独立 QA 保留最终放行权

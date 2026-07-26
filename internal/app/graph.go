@@ -114,16 +114,16 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 			spec.addGate(repairGate, "repair gate", repair, i)
 			spec.addEdge(repair, repairGate, "")
 			spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: i})
-			spec.addEdge(repairGate, qa, "repair clean")
+			spec.addEdge(repairGate, qa, "repair confirmation clean")
 			qaGate := fmt.Sprintf("gate_qa_%d", i)
 			spec.addGate(qaGate, "QA gate", qa, i)
 			spec.addEdge(qa, qaGate, "")
 			if i < workflow.MaxRepairIterations {
-				spec.addDecisionEdge(repairGate, fmt.Sprintf("repair_%d", i+1), "repair needs_more")
+				spec.addDecisionEdge(repairGate, fmt.Sprintf("repair_%d", i+1), "repair needs_more / first clean")
 				spec.addEdge(qaGate, fmt.Sprintf("repair_%d", i+1), "QA needs_fix")
 				spec.addDecisionEdge(qaGate, "gate_archive", "QA clean")
 			} else {
-				spec.addDecisionEdge(repairGate, statusBlocked, "repair needs_more")
+				spec.addDecisionEdge(repairGate, statusBlocked, "repair needs_more / first clean")
 				spec.addDecisionEdge(qaGate, statusBlocked, "QA needs_fix")
 			}
 		}
@@ -205,9 +205,9 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 		out.WriteString("  archive[归档]\n")
 		out.WriteString("  blocked[阻塞]\n")
 		out.WriteString("  execution --> repair\n")
-		out.WriteString("  repair -->|clean| qa\n")
-		fmt.Fprintf(&out, "  repair -->|needs_more，未达第%d轮| repair\n", workflow.MaxRepairIterations)
-		fmt.Fprintf(&out, "  repair -->|needs_more，第%d轮| blocked\n", workflow.MaxRepairIterations)
+		out.WriteString("  repair -->|确认 clean| qa\n")
+		fmt.Fprintf(&out, "  repair -->|needs_more 或首次 clean，未达第%d轮| repair\n", workflow.MaxRepairIterations)
+		fmt.Fprintf(&out, "  repair -->|needs_more 或首次 clean，第%d轮| blocked\n", workflow.MaxRepairIterations)
 		fmt.Fprintf(&out, "  qa -->|needs_fix，未达第%d轮| repair\n", workflow.MaxRepairIterations)
 		fmt.Fprintf(&out, "  qa -->|needs_fix，第%d轮| blocked\n", workflow.MaxRepairIterations)
 		out.WriteString("  qa -->|clean| archive\n")

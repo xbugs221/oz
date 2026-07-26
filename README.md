@@ -118,7 +118,8 @@ validation:
 flowchart LR
     E["执行实现"] --> R["同会话优化"]
     R -->|"needs_more"| R
-    R -->|"clean"| Q["独立 QA"]
+    R -->|"首次 clean：强制重新审查"| R
+    R -->|"确认 clean"| Q["独立 QA"]
     Q -->|"needs_fix：携带 qa-N.json"| R
     Q -->|"clean"| A["归档"]
 ```
@@ -128,9 +129,10 @@ flowchart LR
 | repair 续轮复用同一后端、同一角色会话 | 保留修改意图、失败尝试和排查脉络，避免每轮从头理解 |
 | 每轮重读状态、验收合同、完整差异和验证结果 | 文件是权威事实，防止持续会话依据过期记忆判断 |
 | 每轮写 `repair-N.json` | 把发现、修复验证和剩余问题做成可恢复、可审计的检查点 |
+| 首次 clean 后强制再审一轮 | 不写死最低轮数；新的完整审查仍为 clean 才允许推进 |
 | QA 使用独立会话 | 降低修复者自我确认造成的盲区 |
 | QA 失败显式交给下一轮 repair | 隔离会话不能依赖隐含记忆，下一轮必须读取最新 `qa-N.json` 的具体问题 |
-| repair clean 与 QA clean 后才归档 | 修复者不能自行放行；达到轮次上限仍未通过时阻塞 |
+| repair 确认 clean 与 QA clean 后才归档 | 修复者不能凭首次乐观判断放行；达到轮次上限仍未确认时阻塞 |
 
 因此，会话记忆只负责“延续思路”，`state.json`、`acceptance.json`、当前差异、`repair-N.json`、`qa-N.json` 和确定性测试才构成放行证据。`max_repair_iterations=0` 会禁用 repair，但仍保留独立 QA；QA 失败时直接阻塞。
 
