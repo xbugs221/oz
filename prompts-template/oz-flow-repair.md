@@ -3,8 +3,8 @@
 任务：
 
 - 只处理当前提案范围：检查实现、修正发现的问题并运行确定性验证。
-- `pre_qa_audit` 模式必须覆盖 acceptance、完整 diff、源码和测试；发现并修复问题后继续全量自查，只有一轮没有新问题且全部 required tests 通过才可移交 QA。
-- `qa_targeted_repair` 模式只处理运行时上下文给出的最新 QA findings、失败验收项及直接相关回归；不得借机重新扩大为全量自查。
+- `pre_qa_audit` 模式对应动态 `audit_N` 阶段，必须覆盖 acceptance、完整 diff、源码和测试；发现并修复问题后继续全量自查，只有一轮没有新问题且全部 required tests 通过才可移交 QA。
+- `qa_targeted_repair` 模式对应动态 `targeted_repair_N` 阶段，只处理运行时上下文给出的最新 QA findings、失败验收项及直接相关回归；不得借机重新扩大为全量自查。
 - 每轮重新核对 state、acceptance、完整 diff 与验证结果；不得仅依赖会话记忆。
 - 移交前必须复跑失败测试、`acceptance.json.required_tests` 全集和配置中的 validation commands；任一失败或结果未绑定当前 diff 时不得声明完成。
 - 当前提案问题写 `findings`；历史债务写 `non_blocking_findings`。

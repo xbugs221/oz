@@ -1,0 +1,34 @@
+{
+  "summary": "验证升级后的本地 oz 安装版默认生成无固定轮次上限的动态质量循环配置。",
+  "coverage": [
+    {
+      "spec": "场景：升级后的安装版生成无固定轮次上限的动态质量循环配置",
+      "tests": ["installed-quality-loop"],
+      "evidence": ["installed-quality-loop-runtime"],
+      "risk": "模型实际审查质量由本次新工作流的独立 QA 观察，不由配置合同单独证明。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "installed-quality-loop",
+      "source": "change_contract",
+      "path": "docs/changes/archive/2026-07-27-46-验证升级后动态质量循环/tests/test_installed_quality_loop.sh",
+      "command": "bash docs/changes/archive/2026-07-27-46-验证升级后动态质量循环/tests/test_installed_quality_loop.sh",
+      "purpose": "通过 PATH 中真实安装的 oz 生成默认配置，证明新版默认使用动态质量循环且不输出固定轮次上限。",
+      "assertions": [
+        "真实安装版 oz 可以在临时 Git 仓库生成默认 oz-flow.yaml",
+        "默认配置不包含 max_repair_iterations",
+        "默认修复与 QA 提示词表达动态 audit_N、targeted_repair_N 和独立 QA 合同"
+      ],
+      "expected_initial_failure": "若本地仍是旧安装版，应失败于默认配置仍包含 max_repair_iterations 或缺少动态质量循环提示。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "installed-quality-loop-runtime",
+      "kind": "runtime_log",
+      "path": "test-results/46-installed-quality-loop/runtime.log",
+      "purpose": "记录真实安装版路径、版本和生成配置的合同检查结果。"
+    }
+  ]
+}

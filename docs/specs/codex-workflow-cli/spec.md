@@ -171,14 +171,17 @@
 
 #### 场景：质量循环不受固定轮次限制
 
-// Sources: 45-收敛全量自查与QA定向修复闭环
+// Sources: 45-收敛全量自查与QA定向修复闭环, 46-验证升级后动态质量循环
 
 - **给定** 新运行读取到 `max_repair_iterations`
 - **则** 该值只作为迁移诊断保留，不得作为 `quality-loop-v1` 的终止条件
+- **且** 默认配置不得输出 `max_repair_iterations`
+- **且** repair 提示必须把 `pre_qa_audit`、`qa_targeted_repair` 分别映射到动态 `audit_N`、`targeted_repair_N`
+- **且** repairer 不得自行归档，clean 后仍由独立 QA 会话放行
 - **且** 有源码、测试、验证或 evidence 进展时，超过历史十轮后仍可继续
 - **且** 缺少环境前置条件时进入 `blocked_environment`，补齐后从原阶段恢复
 - **且** 相同失败指纹下源码、测试、验证和 evidence 均无变化时进入 `blocked_stalled`，提供新输入后可恢复
-- **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`、`tests/specs/codex-workflow-cli/test_compact_chinese_graph_and_iteration_limit.sh`
 
 #### 场景：旧 sealed 运行按快照兼容
 

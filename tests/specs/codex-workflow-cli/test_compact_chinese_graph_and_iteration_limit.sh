@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证默认质量循环不设轮次上限，且 oz flow graph 输出紧凑中文 Mermaid 图。
-# Sources: 45-收敛全量自查与QA定向修复闭环
+# Sources: 45-收敛全量自查与QA定向修复闭环, 46-验证升级后动态质量循环
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -18,6 +18,16 @@ fail() {
 
 note() {
   printf '%s\n' "$*" | tee -a "$RESULT_DIR/test.log"
+}
+
+# prompt_block 从生成配置中提取指定提示词块，避免跨角色关键词造成假阳性。
+prompt_block() {
+  local prompt_name="$1"
+  awk -v prompt_name="$prompt_name" '
+    $0 == "  " prompt_name ": |" { inside = 1; next }
+    inside && /^  [a-z_]+: \|$/ { exit }
+    inside { print }
+  ' "$PROJECT/oz-flow.yaml"
 }
 
 trap cleanup EXIT
@@ -55,6 +65,12 @@ fi
 if grep -q '^engine:' "$PROJECT/oz-flow.yaml"; then
   fail "default oz-flow.yaml should not expose an engine field"
 fi
+REPAIR_PROMPT="$(prompt_block repair)"
+QA_PROMPT="$(prompt_block qa)"
+rg -q '`pre_qa_audit` 模式对应动态 `audit_N` 阶段' <<<"$REPAIR_PROMPT"
+rg -q '`qa_targeted_repair` 模式对应动态 `targeted_repair_N` 阶段' <<<"$REPAIR_PROMPT"
+rg -q 'repairer 不能自行归档，clean 后仍须独立 QA 放行' <<<"$REPAIR_PROMPT"
+rg -q '使用独立 QA 会话' <<<"$QA_PROMPT"
 
 note "render mermaid graph and verify it is compact"
 (
