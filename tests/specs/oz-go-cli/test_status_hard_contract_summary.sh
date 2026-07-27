@@ -53,12 +53,6 @@ cat >"$change_dir/spec.md" <<'MD'
 - **则** JSON 包含 brief artifact 和 acceptance 摘要
 MD
 
-cat >"$change_dir/task.md" <<'MD'
-# 任务
-
-- [x] 1.1 写入合同摘要示例
-MD
-
 cat >"$change_dir/tests/test_contract.sh" <<'SH'
 #!/usr/bin/env bash
 # 这个测试代表状态合同摘要提案的真实契约测试入口。

@@ -69,7 +69,7 @@ func (f *workflowFixture) writeActiveChange(name string) {
 	if err := os.MkdirAll(changeDir, 0o755); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(changeDir, "task.md"), []byte("- [ ] fixture task\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(changeDir, "brief.md"), []byte("# fixture change\n"), 0o644); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -137,8 +137,8 @@ func TestWorkflowFixtureWritesChangeAndRegistry(t *testing.T) {
 	fixture.writeAcceptanceContract("1-demo", `{"summary":"fixture","coverage":[]}`)
 	registry := fixture.fakeToolRegistry()
 
-	if _, err := os.Stat(filepath.Join(fixture.repo, "docs", "changes", "1-demo", "task.md")); err != nil {
-		t.Fatalf("fixture did not write task.md: %v", err)
+	if _, err := os.Stat(filepath.Join(fixture.repo, "docs", "changes", "1-demo", "brief.md")); err != nil {
+		t.Fatalf("fixture did not write brief.md: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(fixture.repo, "docs", "changes", "1-demo", "acceptance.json")); err != nil {
 		t.Fatalf("fixture did not write acceptance.json: %v", err)

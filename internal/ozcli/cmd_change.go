@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/xbugs221/oz/internal/acceptance"
 )
@@ -80,7 +79,7 @@ func (c *cli) createCmd(args []string) error {
 }
 
 func (c *cli) statusCmd(args []string) error {
-	// statusCmd reports fixed artifact presence and task progress for one active change.
+	// statusCmd reports fixed proposal artifacts and acceptance coverage for one active change.
 	if hasHelp(args) {
 		fmt.Fprintln(c.out, "用法：oz status <change> [--json]")
 		return nil
@@ -201,9 +200,8 @@ func statusPayload(root, change string) map[string]any {
 			"status": status,
 		})
 	}
-	taskTotal, taskDone := taskProgress(filepath.Join(changeDir, "task.md"))
 	status := "incomplete"
-	if allArtifactsPresent(artifacts) && taskTotal > 0 && taskDone == taskTotal {
+	if allArtifactsPresent(artifacts) {
 		status = "ready"
 	}
 	return map[string]any{
@@ -211,16 +209,12 @@ func statusPayload(root, change string) map[string]any {
 		"status":     status,
 		"artifacts":  artifacts,
 		"acceptance": acceptanceSummary(filepath.Join(changeDir, "acceptance.json")),
-		"tasks": map[string]int{
-			"total": taskTotal,
-			"done":  taskDone,
-		},
 	}
 }
 
 func changeArtifactNames() []string {
 	// changeArtifactNames lists the active change artifacts that gate readiness.
-	return []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"}
+	return []string{"brief.md", "proposal.md", "design.md", "spec.md", "acceptance.json", "tests"}
 }
 
 func acceptanceSummary(path string) map[string]map[string]int {
@@ -248,23 +242,4 @@ func allArtifactsPresent(artifacts []map[string]any) bool {
 		}
 	}
 	return true
-}
-
-func taskProgress(path string) (int, int) {
-	// taskProgress counts markdown checkbox tasks in task.md.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, 0
-	}
-	total, done := 0, 0
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "- [ ]") || strings.HasPrefix(trimmed, "- [x]") || strings.HasPrefix(trimmed, "- [X]") {
-			total++
-		}
-		if strings.HasPrefix(trimmed, "- [x]") || strings.HasPrefix(trimmed, "- [X]") {
-			done++
-		}
-	}
-	return total, done
 }

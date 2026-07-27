@@ -51,12 +51,6 @@ cat >"$change_dir/spec.md" <<'MD'
 - **则** 当前 oz flow 允许的 acceptance.json 格式通过校验
 MD
 
-cat >"$change_dir/task.md" <<'MD'
-# 任务
-
-- [x] 1.1 写入验收合同
-MD
-
 cat >"$change_dir/tests/merge_contract_test.sh" <<'SH'
 #!/usr/bin/env bash
 # 这个测试代表提案自带的真实契约测试入口，断言验收合同随 change 落盘。

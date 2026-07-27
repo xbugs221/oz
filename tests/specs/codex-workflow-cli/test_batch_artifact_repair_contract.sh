@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 batch 中某个 change 的 execution 产物可修复时，oz flow 会同会话修正并继续后续 change。
+# 文件功能目的：验证 batch 中某个 change 的归档产物可修复时，oz flow 会同会话修正并继续后续 change。
 # Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同
 set -euo pipefail
 
@@ -36,7 +36,7 @@ mkdir -p "$FAKEBIN"
 
 cat >"$FAKEBIN/oz" <<'SH'
 #!/usr/bin/env bash
-# 文件功能目的：为 batch 测试提供 change 校验和 task 完成状态。
+# 文件功能目的：为 batch 测试提供 change 列表与校验接口。
 set -euo pipefail
 
 case "$1" in
@@ -45,14 +45,6 @@ case "$1" in
     ;;
   validate)
     printf '{"valid":true,"errors":[],"warnings":[],"artifacts":{}}\n'
-    ;;
-  status)
-    change="$2"
-    if grep -q '\[x\]' "docs/changes/$change/task.md"; then
-      printf '{"change":"%s","status":"ready","tasks":{"total":1,"done":1}}\n' "$change"
-    else
-      printf '{"change":"%s","status":"incomplete","tasks":{"total":1,"done":0}}\n' "$change"
-    fi
     ;;
   *)
     printf 'unexpected oz command: %s\n' "$*" >&2
@@ -64,7 +56,7 @@ chmod +x "$FAKEBIN/oz"
 
 cat >"$FAKEBIN/codex" <<'SH'
 #!/usr/bin/env bash
-# 文件功能目的：第一个 change 的 execution 首次不完成 task，验证 batch 等待 artifact gate retry。
+# 文件功能目的：第一个 change 的 archive 首次漏写产物，验证 batch 等待 artifact gate retry。
 set -euo pipefail
 
 repo=""
@@ -115,7 +107,14 @@ state_path, state = running[-1]
 run_dir = state_path.parent
 stage = state["stage"]
 change = state["change_name"]
-role = "archiver" if stage == "archive" else "executor"
+if stage == "archive":
+    role = "archiver"
+elif stage.startswith("audit_") or stage.startswith("targeted_repair_"):
+    role = "repairer"
+elif stage.startswith("qa_"):
+    role = "qa"
+else:
+    role = "executor"
 
 attempt_dir.mkdir(parents=True, exist_ok=True)
 key = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{change}__{stage}")
@@ -133,16 +132,44 @@ with call_log.open("a", encoding="utf-8") as fh:
         "has_artifact_gate_prompt": "Stage artifact gate failed" in prompt,
     }, ensure_ascii=False) + "\n")
 
-task_path = repo / "docs" / "changes" / change / "task.md"
 acceptance_path = repo / "docs" / "changes" / change / "acceptance.json"
-if stage == "execution":
-    if change != "1-a" or attempt >= 2:
-        text = task_path.read_text(encoding="utf-8")
-        task_path.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
-elif stage == "archive":
+if stage.startswith("audit_"):
+    iteration = stage.split("_", 1)[1]
+    (run_dir / f"audit-{iteration}.json").write_text(json.dumps({
+        "summary": "batch audit clean",
+        "decision": "clean",
+        "findings": [],
+        "non_blocking_findings": [],
+        "evidence": ["go test ./... passed; runtime batch audit verified"],
+        "checks": {
+            "oz_aligned": True,
+            "tests_meaningful": True,
+            "implementation_scoped": True,
+            "runtime_behavior_verified": True,
+            "previous_findings_resolved": True
+        }
+    }), encoding="utf-8")
+elif stage.startswith("qa_"):
+    iteration = stage.split("_", 1)[1]
+    (run_dir / f"qa-{iteration}.json").write_text(json.dumps({
+        "summary": "batch QA clean",
+        "decision": "clean",
+        "findings": [],
+        "non_blocking_findings": [],
+        "acceptance_matrix": [{
+            "id": "contract-" + change,
+            "status": "passed",
+            "artifact": f"docs/changes/{change}/tests/demo.sh",
+            "evidence": "batch contract passed"
+        }],
+        "evidence": ["batch QA runtime verified"]
+    }), encoding="utf-8")
+elif stage == "archive" and (change != "1-a" or attempt >= 2):
     archive = repo / "docs" / "changes" / "archive" / ("2026-06-09-" + change)
-    archive.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(acceptance_path, archive / "acceptance.json")
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    active = repo / "docs" / "changes" / change
+    if active.exists() and not archive.exists():
+        shutil.move(str(active), str(archive))
     (run_dir / "delivery-summary.md").write_text(f"archived {change}\n", encoding="utf-8")
 
 print(json.dumps({"type": "thread.started", "thread_id": "thread-" + role}))
@@ -179,11 +206,6 @@ MD
 
 系统必须修复当前 change 后继续 batch。
 MD
-  cat >"$PROJECT/docs/changes/$change/task.md" <<'MD'
-# 任务
-
-- [ ] 1.1 完成 batch 验证
-MD
   cat >"$PROJECT/docs/changes/$change/tests/demo.sh" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
@@ -199,7 +221,8 @@ SH
       "source": "change_contract",
       "path": "docs/changes/$change/tests/demo.sh",
       "command": "bash docs/changes/$change/tests/demo.sh",
-      "purpose": "prove $change test entry exists"
+      "purpose": "prove $change test entry exists",
+      "assertions": ["the current change acceptance contract exists"]
     }
   ],
   "required_evidence": []
@@ -208,20 +231,19 @@ JSON
 done
 
 cat >"$PROJECT/oz-flow.yaml" <<'YAML'
-wo:
-  workflow:
-    engine: 内嵌工作流
-    max_review_iterations: 0
-    validation:
-      max_attempts_per_stage: 3
-      commands: []
-    parallel:
-      enabled: false
-    stages:
-      execution:
-        tool: codex
-      archive:
-        tool: codex
+max_repair_iterations: 2
+validation:
+  limit: 3
+  commands: []
+stages:
+  execution:
+    agent: codex
+  repair:
+    agent: codex
+  qa:
+    agent: codex
+  archive:
+    agent: codex
 YAML
 
 git -C "$PROJECT" add .
@@ -249,19 +271,20 @@ cat >"$batch_dir/state.json" <<'JSON'
 }
 JSON
 
-note "run batch and expect first change execution artifact repair before second change"
+note "run batch and expect first change archive artifact repair before second change"
 set +e
 CODEX_ATTEMPT_DIR="$TMP/attempts" \
 CODEX_CALL_LOG="$RESULT_DIR/codex-calls.jsonl" \
 XDG_STATE_HOME="$TMP/state" \
 HOME="$TMP/home" \
 PATH="$FAKEBIN:/usr/bin:/bin" \
-  bash -c 'cd "$1" && "$2" batch --batch-id batch-artifact-retry --json' _ "$PROJECT" "$OZ_BIN" >"$RESULT_DIR/batch.jsonl" 2>"$RESULT_DIR/batch.err"
+  bash -c 'cd "$1" && "$2" flow batch --batch-id batch-artifact-retry --json' _ "$PROJECT" "$OZ_BIN" >"$RESULT_DIR/batch.jsonl" 2>"$RESULT_DIR/batch.err"
 batch_code=$?
 set -e
 cat "$RESULT_DIR/batch.jsonl" >>"$RESULT_DIR/contract.log"
 cat "$RESULT_DIR/batch.err" >>"$RESULT_DIR/contract.log"
-[[ "$batch_code" -eq 0 ]] || fail "batch should continue after repairing first execution artifact"
+[[ "$batch_code" -eq 0 ]] || fail "batch should continue after repairing first archive artifact"
+cp -R "$TMP/state" "$RESULT_DIR/state"
 
 python3 - "$batch_dir/state.json" "$RESULT_DIR/codex-calls.jsonl" "$TMP/state" "$PROJECT" <<'PY' || exit 1
 import json
@@ -280,14 +303,14 @@ if batch_state.get("current_index") != 2:
 if set(batch_state.get("run_ids", {}).keys()) != {"1-a", "2-b"}:
     raise SystemExit(f"run_ids = {batch_state.get('run_ids')!r}, want both changes")
 
-first_execution = [r for r in records if r["change"] == "1-a" and r["stage"] == "execution"]
-if len(first_execution) < 2:
-    raise SystemExit("1-a execution did not retry")
-retry = first_execution[1]
-if retry.get("session") != "thread-executor":
-    raise SystemExit(f"1-a execution retry session = {retry.get('session')!r}, want thread-executor")
+first_archive = [r for r in records if r["change"] == "1-a" and r["stage"] == "archive"]
+if len(first_archive) < 2:
+    raise SystemExit("1-a archive did not retry")
+retry = first_archive[1]
+if retry.get("session") != "thread-archiver":
+    raise SystemExit(f"1-a archive retry session = {retry.get('session')!r}, want thread-archiver")
 if not retry.get("has_artifact_gate_prompt"):
-    raise SystemExit("1-a execution retry prompt did not include artifact gate failure")
+    raise SystemExit("1-a archive retry prompt did not include artifact gate failure")
 
 run_states = sorted((state_home / "oz" / "flow" / "repos").glob("*/runs/*/state.json"))
 if len(run_states) != 2:
@@ -296,10 +319,6 @@ for path in run_states:
     state = json.loads(path.read_text(encoding="utf-8"))
     if state.get("status") != "done":
         raise SystemExit(f"{path} status = {state.get('status')!r}, want done")
-for change in ["1-a", "2-b"]:
-    task = (project / "docs" / "changes" / change / "task.md").read_text(encoding="utf-8")
-    if "[x]" not in task:
-        raise SystemExit(f"{change} task was not completed")
 print("batch artifact repair assertions passed")
 PY
 

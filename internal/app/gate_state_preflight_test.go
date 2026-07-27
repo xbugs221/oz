@@ -72,6 +72,53 @@ func TestRootExecutionRunsOzValidateAsRetryableGate(t *testing.T) {
 	}
 }
 
+// TestLegacySealedTaskValidationCompatibility proves only pre-migration sealed runs may finish with task.md.
+func TestLegacySealedTaskValidationCompatibility(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(repo, "state"))
+	installGateStateFakeOzMode(t, "task")
+	engine := NewEngine(repo, nil)
+	legacy := State{
+		RunID:      "legacy-task-run",
+		ChangeName: "19-gate-state-preflight",
+		Sealed:     true,
+		Status:     statusRunning,
+		Stage:      workflowStageExecution,
+		Workflow:   DefaultWorkflowConfig(),
+		Validation: map[string]StageValidationState{},
+		Stages:     map[string]string{},
+	}
+	passed, err := engine.validateStage(context.Background(), &legacy)
+	if err != nil || !passed {
+		t.Fatalf("legacy sealed validation = %v, %v; want pass", passed, err)
+	}
+
+	current := legacy
+	current.RunID = "current-task-run"
+	current.ProposalContractVersion = currentProposalContractVersion
+	current.Validation = map[string]StageValidationState{}
+	current.Stages = map[string]string{}
+	passed, err = engine.validateStage(context.Background(), &current)
+	if err != nil {
+		t.Fatalf("current validation returned unexpected error: %v", err)
+	}
+	if passed {
+		t.Fatal("current sealed run must not bypass active task.md prohibition")
+	}
+
+	installGateStateFakeOzMode(t, "task-and-other")
+	legacy.RunID = "legacy-task-with-other-error"
+	legacy.Validation = map[string]StageValidationState{}
+	legacy.Stages = map[string]string{}
+	passed, err = engine.validateStage(context.Background(), &legacy)
+	if err != nil {
+		t.Fatalf("legacy mixed validation returned unexpected error: %v", err)
+	}
+	if passed {
+		t.Fatal("legacy compatibility must preserve every non-task validation error")
+	}
+}
+
 // TestRootAcceptancePreflightReturnsEvidenceWithoutProducerToExecutor proves unproducible evidence is repairable.
 func TestRootAcceptancePreflightReturnsEvidenceWithoutProducerToExecutor(t *testing.T) {
 	repo := t.TempDir()
@@ -108,15 +155,20 @@ func TestRootAcceptancePreflightReturnsEvidenceWithoutProducerToExecutor(t *test
 
 func installGateStateFakeOz(t *testing.T, valid bool) {
 	t.Helper()
+	mode := "invalid"
+	if valid {
+		mode = "valid"
+	}
+	installGateStateFakeOzMode(t, mode)
+}
+
+func installGateStateFakeOzMode(t *testing.T, mode string) {
+	t.Helper()
 	previous := ozCommand
 	previousPrefix := ozCommandPrefix
 	ozCommand = os.Args[0]
 	ozCommandPrefix = []string{"-test.run=TestGateStateFakeOzCommand", "--"}
-	if valid {
-		t.Setenv("OZ_GATE_STATE_FAKE_VALIDATE", "valid")
-	} else {
-		t.Setenv("OZ_GATE_STATE_FAKE_VALIDATE", "invalid")
-	}
+	t.Setenv("OZ_GATE_STATE_FAKE_VALIDATE", mode)
 	t.Cleanup(func() {
 		ozCommand = previous
 		ozCommandPrefix = previousPrefix
@@ -135,6 +187,14 @@ func TestGateStateFakeOzCommand(t *testing.T) {
 			if mode == "valid" {
 				_, _ = os.Stdout.WriteString(`{"valid":true,"errors":[]}` + "\n")
 				os.Exit(0)
+			}
+			if mode == "task" {
+				_, _ = os.Stdout.WriteString(`{"valid":false,"errors":["active 提案禁止包含 task.md；动态计划必须保留在执行器 Todo 或运行态"]}` + "\n")
+				os.Exit(1)
+			}
+			if mode == "task-and-other" {
+				_, _ = os.Stdout.WriteString(`{"valid":false,"errors":["active 提案禁止包含 task.md；动态计划必须保留在执行器 Todo 或运行态","producer missing"]}` + "\n")
+				os.Exit(1)
 			}
 			_, _ = os.Stdout.WriteString(`{"valid":false,"errors":["producer missing"]}` + "\n")
 			os.Exit(1)

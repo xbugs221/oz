@@ -25,7 +25,8 @@ legacy_title="Open""Code"
 note "扫描源码、主规格和根目录长期测试，确认第三后端名称不再出现"
 if hits="$(cd "$ROOT" && git grep -n -I -e "$legacy_lower" -e "$legacy_title" -- \
   internal cmd docs/specs tests \
-  ':(exclude)tests/specs/codex-workflow-cli/test_agent_backend_allowlist_contract.sh' 2>/dev/null || true)" && [[ -n "$hits" ]]; then
+  ':(exclude)tests/specs/codex-workflow-cli/test_agent_backend_allowlist_contract.sh' \
+  ':(exclude)tests/specs/codex-workflow-cli/test_user_visible_surface_cleanup_contract.sh' 2>/dev/null || true)" && [[ -n "$hits" ]]; then
   printf '%s\n' "$hits" | tee -a "$LOG"
   fail "当前源码、主规格或长期测试仍包含第三后端残留"
 fi
@@ -35,10 +36,13 @@ if [[ -e "$ROOT/internal/app/${legacy_lower}.go" || -e "$ROOT/internal/app/${leg
   fail "internal/app 下仍存在第三后端实现或测试文件"
 fi
 
-note "确认 agent registry 只接受 codex/pi/agy"
+note "确认 agent registry 只注册并接受 codex/pi/agy"
 agent_file="$ROOT/internal/app/agent.go"
 [[ -f "$agent_file" ]] || fail "缺少 internal/app/agent.go"
 grep -q 'return name == "codex" || name == "pi" || name == "agy"' "$agent_file" || fail "validAgentTool 未明确收敛为 codex/pi/agy"
-grep -q 'return \[\]string{"codex", "pi", "agy"}' "$agent_file" || fail "agentToolNames 未明确只枚举 codex/pi/agy"
+for tool in CodexTool PiTool AgyTool; do
+  grep -q "$tool{}" "$agent_file" || fail "NewAgentRegistry 缺少 $tool"
+done
+go test "$ROOT/internal/app" -run 'TestAgentRegistryResolvesConfiguredTools|TestValidAgentTool' -count=1 >>"$LOG" 2>&1
 
 note "contract passed: agent backend allowlist is codex/pi/agy only"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sources: 11-新增-MADA-工作流profiles
-# Purpose: 验证 oz flow 默认工作流和 MADA profiles 的 subagent/prompt 配置已从 Go 硬编码迁移到内置 YAML 模板。
+# Purpose: 验证默认工作流和 MADA profiles 的主阶段/prompt 配置由内置 YAML 模板维护。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -74,22 +74,27 @@ for template in "$default_template" "$code_template" "$decision_template" "$rese
   assert_file "$template"
 done
 
-note "校验 default.yaml 保存默认 subagent 和 prompt 配置语义"
-for text in "parallel: true" "max_review_iterations:" "stages:" "before:" "prompts:" "review:" "qa:" "代码库侦察员" "外部资料研究员" '{{ prompt "planning" }}'; do
+note "校验 default.yaml 保存当前主阶段和 prompt 配置语义"
+for text in "stages:" "prompts:" "execution:" "repair:" "qa:" "archive:" '{{ prompt "planning" }}'; do
   assert_contains "$default_template" "$text"
 done
+if rg -n 'parallel:|subagents:|subagent_guard:|before:' "$default_template" >>"$log"; then
+  fail "default.yaml 不得重新引入固定外置子代理"
+fi
 
 note "校验 MADA profile 模板使用同一目录维护"
 for template in "$code_template" "$decision_template" "$research_template"; do
-  assert_contains "$template" "parallel: true"
   assert_contains "$template" "stages:"
   assert_contains "$template" "prompts:"
-  assert_contains "$template" "before:"
-  assert_contains "$template" "review:"
+  assert_contains "$template" "repair:"
+  assert_contains "$template" "qa:"
   assert_contains "$template" '{{ prompt "execution" }}'
+  if rg -n 'parallel:|subagents:|subagent_guard:|before:' "$template" >>"$log"; then
+    fail "$template 不得重新引入固定外置子代理"
+  fi
 done
 
-note "校验生产 Go 源码不再硬编码默认 subagent 角色文本"
+note "校验生产 Go 源码不再硬编码已删除的默认 subagent 角色文本"
 for text in 需求分析员 代码库侦察员 外部资料研究员 "找出需求歧义、风险和遗漏" "搜索现有模块、测试入口和实现约定"; do
   assert_production_go_not_contains "$text"
 done
@@ -107,16 +112,21 @@ note "运行默认 oz flow config，确认 default.yaml 语义仍生成标准 oz
 
 yaml="$repo/oz-flow.yaml"
 [[ -f "$yaml" ]] || fail "默认 oz flow config 未生成 oz-flow.yaml"
-for text in "parallel: true" "before:" "代码库侦察员"; do
+for text in "stages:" "repair:" "qa:" "archive:"; do
   assert_contains "$yaml" "$text"
 done
+if rg -n 'parallel:|subagents:|subagent_guard:|before:' "$yaml" >>"$log"; then
+  fail "默认 oz-flow.yaml 不得重新引入固定外置子代理"
+fi
 
 note "运行 oz flow graph 验证默认模板生成的配置可加载"
 (
   cd "$repo"
   "$oz_bin" flow graph --change "11-template-externalized-demo" --format json
 ) >"$repo/graph.json" 2>>"$log"
-assert_contains "$repo/graph.json" '"type": "subagent"'
-assert_contains "$repo/graph.json" '"type": "fanin"'
+assert_contains "$repo/graph.json" '"type": "main_stage"'
+if rg -n '"type": "(subagent|fanin)"|parallel-' "$repo/graph.json" >>"$log"; then
+  fail "默认 graph 不得包含固定外置子代理节点或产物"
+fi
 
 note "PASS"

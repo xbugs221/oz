@@ -81,9 +81,6 @@ change = state["change_name"]
 stage = state["stage"]
 
 if stage == "execution":
-    task = repo / "docs" / "changes" / change / "task.md"
-    text = task.read_text(encoding="utf-8")
-    task.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
     evidence = repo / "test-results" / "内嵌工作流" / "temporary.log"
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text("execution evidence\n", encoding="utf-8")
@@ -141,12 +138,6 @@ cat >"$project/docs/changes/1-默认内嵌工作流/spec.md" <<'MD'
 - **则** run 完成并记录 内嵌工作流 状态
 MD
 
-cat >"$project/docs/changes/1-默认内嵌工作流/task.md" <<'MD'
-# 任务
-
-- [ ] 1.1 完成默认工作流 验证任务
-MD
-
 cat >"$project/docs/changes/1-默认内嵌工作流/tests/test_contract.sh" <<'SH'
 #!/usr/bin/env bash
 # 临时 change 的测试入口，证明 tests/ 目录不是占位。
@@ -202,8 +193,8 @@ import sys
 state = json.load(open(sys.argv[1], encoding="utf-8"))
 if state.get("engine") != "内嵌工作流":
     raise SystemExit("state.engine must be 内嵌工作流")
-if state.get("workflow_config", {}).get("parallel", {}).get("enabled") is not True:
-    raise SystemExit("workflow_config.parallel.enabled must default to true")
+if state.get("workflow_config", {}).get("parallel", {}).get("enabled") is True:
+    raise SystemExit("workflow_config.parallel.enabled must not expose removed fixed subagents")
 PY
 
 run_id="$(python3 - "$state" <<'PY'
@@ -212,7 +203,7 @@ print(json.load(open(sys.argv[1], encoding="utf-8"))["run_id"])
 PY
 )"
 
-note "检查人类 status 输出包含并行成员阶段树"
+note "检查人类 status 输出只包含主阶段"
 OZ_TEST_REPO="$project" \
 XDG_STATE_HOME="$tmp/state" \
 HOME="$tmp/home" \
@@ -220,8 +211,9 @@ PATH="$fakebin:/usr/bin:/bin" \
   bash -c 'cd "$1" && "$2" flow status -w1' _ "$project" "$wo" >"$tmp/status.txt"
 cat "$tmp/status.txt" >>"$log"
 grep -qF "fake-main-session-execution" "$tmp/status.txt" || fail "oz flow status 必须显示 execution 主阶段 session"
-grep -qF "代码" "$tmp/status.txt" || fail "oz flow status 必须显示 implementation_context 并行成员"
-grep -qF "外部" "$tmp/status.txt" || fail "oz flow status 必须显示 implementation_context 并行成员"
+if rg -q 'implementation_context|parallel-|fan-in' "$tmp/status.txt"; then
+  fail "oz flow status 不得显示已移除的固定子代理或 fan-in"
+fi
 
 note "检查 JSON status 兼容旧 runner contract"
 OZ_TEST_REPO="$project" \

@@ -32,9 +32,6 @@ func (c *cli) archiveCmd(args []string) error {
 	if !result.Valid {
 		return fmt.Errorf("%s: %s", change, strings.Join(result.Errors, "; "))
 	}
-	if err := ensureTasksDone(filepath.Join(root, "changes", change, "task.md")); err != nil {
-		return err
-	}
 	date := c.now().Format("2006-01-02")
 	changeDir := filepath.Join(root, "changes", change)
 	archiveDir := filepath.Join(root, "changes", "archive", date+"-"+change)
@@ -114,22 +111,4 @@ func rewriteRelativeTestReferences(text, testPrefix string) string {
 	}
 	out.WriteString(text[last:])
 	return out.String()
-}
-
-func ensureTasksDone(path string) error {
-	// ensureTasksDone prevents archiving unfinished task lists.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "- [ ]") {
-			return errors.New("task.md 包含未完成任务")
-		}
-	}
-	return nil
 }

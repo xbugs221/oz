@@ -66,7 +66,6 @@ func writeValidChange(t *testing.T, project, change string) {
 		"proposal.md": "## 背景\n需要可追溯变更。\n\n## 变更内容\n- 实现 oz。\n",
 		"design.md":   "## 背景\n固定工作流。\n\n## 决策\nCLI 先归档，智能体再合并主规格。\n",
 		"spec.md":     "## 新增需求\n\n### 需求：归档测试\n\n系统必须保留测试来源。\n\n#### 场景：归档包含测试\n\n- **当** 用户归档提案\n- **则** 提案测试随归档提案保留，测试文件见 `tests/archive_test.go`\n",
-		"task.md":     "## 1. 实现\n\n- [x] 1.1 完成实现\n",
 		"acceptance.json": `{
 	  "summary": "验证归档测试随提案保留",
 	  "coverage": [
@@ -234,10 +233,6 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 			Name   string `json:"name"`
 			Status string `json:"status"`
 		} `json:"artifacts"`
-		Tasks struct {
-			Total int `json:"total"`
-			Done  int `json:"done"`
-		} `json:"tasks"`
 		Acceptance struct {
 			RequiredTests struct {
 				Total int `json:"total"`
@@ -256,17 +251,20 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	if statusPayload.Change != "2-重写-oz-go-cli" || statusPayload.Status != "ready" {
 		t.Fatalf("unexpected status payload: %#v", statusPayload)
 	}
-	if statusPayload.Tasks.Total != 1 || statusPayload.Tasks.Done != 1 {
-		t.Fatalf("unexpected task progress: %#v", statusPayload.Tasks)
+	if strings.Contains(status.stdout, `"tasks"`) {
+		t.Fatalf("status must not expose task checkbox progress: %s", status.stdout)
 	}
 	seen := map[string]string{}
 	for _, artifact := range statusPayload.Artifacts {
 		seen[artifact.Name] = artifact.Status
 	}
-	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json", "tests"} {
+	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "acceptance.json", "tests"} {
 		if seen[name] != "present" {
 			t.Fatalf("artifact %s not present in status: %#v", name, seen)
 		}
+	}
+	if _, ok := seen["task.md"]; ok {
+		t.Fatalf("status must not expose task.md as an active artifact: %#v", seen)
 	}
 	if statusPayload.Acceptance.RequiredTests.Total != 1 || statusPayload.Acceptance.RequiredEvidence.Total != 1 {
 		t.Fatalf("unexpected acceptance summary: %#v", statusPayload.Acceptance)
@@ -426,7 +424,7 @@ func TestValidateAcceptsSmallBriefOnlyChange(t *testing.T) {
 	change := "3-明确-small-入口"
 	writeValidChange(t, project, change)
 	changeDir := filepath.Join(project, "docs", "changes", change)
-	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md"} {
+	for _, name := range []string{"proposal.md", "design.md", "spec.md"} {
 		if err := os.Remove(filepath.Join(changeDir, name)); err != nil {
 			t.Fatal(err)
 		}
@@ -463,10 +461,29 @@ func TestValidateAcceptsSmallBriefOnlyChange(t *testing.T) {
 	if result.code == 0 {
 		t.Fatal("expected partial standard documents to fail")
 	}
-	for _, want := range []string{"缺少 design.md", "缺少 spec.md", "缺少 task.md"} {
+	for _, want := range []string{"缺少 design.md", "缺少 spec.md"} {
 		if !strings.Contains(result.stdout+result.stderr, want) {
 			t.Fatalf("missing standard diagnostic %q:\nstdout=%s\nstderr=%s", want, result.stdout, result.stderr)
 		}
+	}
+}
+
+func TestValidateRejectsTaskFileInActiveChange(t *testing.T) {
+	// TestValidateRejectsTaskFileInActiveChange ensures executors cannot reintroduce a Git-tracked plan.
+	project := newProject(t)
+	change := "2-禁止任务文件"
+	writeValidChange(t, project, change)
+	taskPath := filepath.Join(project, "docs", "changes", change, "task.md")
+	if err := os.WriteFile(taskPath, []byte("- [x] 不应持久化的步骤\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := runCLI(t, project, "validate", change, "--json")
+	if result.code == 0 {
+		t.Fatal("expected active task.md to fail validation")
+	}
+	if !strings.Contains(result.stdout+result.stderr, "禁止包含 task.md") {
+		t.Fatalf("missing explicit task.md prohibition:\nstdout=%s\nstderr=%s", result.stdout, result.stderr)
 	}
 }
 
@@ -803,13 +820,39 @@ func TestArchiveKeepsProposalTestsWithoutEditingMainSpec(t *testing.T) {
 	}
 }
 
+func TestArchivePreservesHistoricalTaskFiles(t *testing.T) {
+	// TestArchivePreservesHistoricalTaskFiles keeps old archived plans as immutable historical material.
+	project := newProject(t)
+	historicalTask := filepath.Join(project, "docs", "changes", "archive", "2026-05-01-1-历史提案", "task.md")
+	if err := os.MkdirAll(filepath.Dir(historicalTask), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const historicalBody = "- [x] 历史任务\n"
+	if err := os.WriteFile(historicalTask, []byte(historicalBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeValidChange(t, project, "2-当前提案")
+
+	result := runCLI(t, project, "archive", "2-当前提案", "--yes")
+	if result.code != 0 {
+		t.Fatalf("archive failed: %s", result.stderr)
+	}
+	data, err := os.ReadFile(historicalTask)
+	if err != nil {
+		t.Fatalf("historical task.md was removed: %v", err)
+	}
+	if string(data) != historicalBody {
+		t.Fatalf("historical task.md changed: %q", data)
+	}
+}
+
 func TestArchiveAcceptsSmallBriefOnlyChange(t *testing.T) {
 	// TestArchiveAcceptsSmallBriefOnlyChange keeps CLI archiving compatible with small proposals.
 	project := newProject(t)
 	change := "2-登录能力"
 	writeValidChange(t, project, change)
 	changeDir := filepath.Join(project, "docs", "changes", change)
-	for _, name := range []string{"proposal.md", "design.md", "spec.md", "task.md"} {
+	for _, name := range []string{"proposal.md", "design.md", "spec.md"} {
 		if err := os.Remove(filepath.Join(changeDir, name)); err != nil {
 			t.Fatal(err)
 		}

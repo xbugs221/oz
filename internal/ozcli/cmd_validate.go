@@ -56,16 +56,20 @@ func validateChange(root, change string) validationResult {
 		result.Errors = append(result.Errors, err.Error())
 	}
 	changeDir := filepath.Join(root, "changes", change)
-	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "task.md", "acceptance.json"} {
+	for _, name := range []string{"brief.md", "proposal.md", "design.md", "spec.md", "acceptance.json"} {
 		path := filepath.Join(changeDir, name)
 		result.Artifacts[name] = path
+	}
+	taskPath := filepath.Join(changeDir, "task.md")
+	if regularFileExists(taskPath) {
+		result.Errors = append(result.Errors, "active 提案禁止包含 task.md；动态计划必须保留在执行器 Todo 或运行态")
 	}
 	for _, name := range []string{"brief.md", "acceptance.json"} {
 		if !regularFileExists(filepath.Join(changeDir, name)) {
 			result.Errors = append(result.Errors, "缺少 "+name)
 		}
 	}
-	longDocs := []string{"proposal.md", "design.md", "spec.md", "task.md"}
+	longDocs := []string{"proposal.md", "design.md", "spec.md"}
 	if changeUsesStandardDocs(changeDir, longDocs) {
 		for _, name := range longDocs {
 			if !regularFileExists(filepath.Join(changeDir, name)) {
@@ -97,9 +101,6 @@ func validateChange(root, change string) validationResult {
 	}
 	if data, err := os.ReadFile(filepath.Join(changeDir, "spec.md")); err == nil {
 		result.Errors = append(result.Errors, validateSpecText(string(data))...)
-	}
-	if data, err := os.ReadFile(filepath.Join(changeDir, "task.md")); err == nil && !strings.Contains(string(data), "- [") {
-		result.Errors = append(result.Errors, "task.md 必须包含任务项")
 	}
 	acceptancePath := filepath.Join(changeDir, "acceptance.json")
 	diagnostics, acceptanceErrors := validateAcceptanceFiles(filepath.Dir(root), acceptancePath)

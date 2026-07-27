@@ -99,7 +99,6 @@ func newRepairEvidenceFixture(t *testing.T) (string, string, string, string, str
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"task.md":     "- [x] fixture task\n",
 		"brief.md":    "# 优化 DAG 集成测试\n",
 		"design.md":   "# 优化 DAG 集成测试\n",
 		"proposal.md": "# 优化 DAG 集成测试\n",
@@ -185,9 +184,6 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	changeName := "1-演示"
 	changeDir := filepath.Join(repo, "docs", "changes", changeName)
 	if err := os.MkdirAll(changeDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(changeDir, "task.md"), []byte("- [x] fixture task\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"brief.md", "design.md", "proposal.md", "spec.md"} {
@@ -318,6 +314,8 @@ func (r *zeroRepairWorkflowRunner) Run(_ context.Context, _ string, prompt strin
 	r.calls++
 	switch r.calls {
 	case 1:
+		return "zero-execution-session", nil
+	case 2:
 		if sessionID != "zero-qa-session" {
 			return "", fmt.Errorf("zero-repair QA session = %q; prompt=%q", sessionID, promptStageExcerpt(prompt))
 		}
@@ -328,7 +326,7 @@ func (r *zeroRepairWorkflowRunner) Run(_ context.Context, _ string, prompt strin
 			return "", err
 		}
 		return "zero-qa-session", nil
-	case 2:
+	case 3:
 		if !strings.Contains(prompt, filepath.Join(runDir(r.repo, r.runID), "qa-1.json")) {
 			return "", fmt.Errorf("zero-repair archive prompt misses qa-1.json: %q", promptStageExcerpt(prompt))
 		}
@@ -385,7 +383,7 @@ func TestZeroRepairWorkflowDAGArchive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != statusDone || got.Stage != "done" || runner.calls != 2 {
+	if got.Status != statusDone || got.Stage != "done" || runner.calls != 3 {
 		t.Fatalf("zero-repair final state = %s/%s calls=%d", got.Status, got.Stage, runner.calls)
 	}
 }

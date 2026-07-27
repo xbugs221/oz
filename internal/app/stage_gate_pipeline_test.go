@@ -2,9 +2,38 @@
 package app
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestExecutionArtifactGateUsesRuntimeState verifies execution completion never depends on a Git task file.
+func TestExecutionArtifactGateUsesRuntimeState(t *testing.T) {
+	repo := t.TempDir()
+	engine := NewEngine(repo, NewAgentRegistry())
+	state := State{
+		RunID:      "no-task-file",
+		ChangeName: "47-无任务文件",
+		Stage:      "execution",
+		Stages:     map[string]string{"execution": stageStatusAgentCompleted},
+	}
+
+	expectation := engine.stageArtifactExpectation(state)
+	if expectation.Path != filepath.Join(runDir(repo, state.RunID), "state.json") {
+		t.Fatalf("execution artifact = %q, want runtime state", expectation.Path)
+	}
+	if strings.Contains(expectation.Path+expectation.Description, "task.md") {
+		t.Fatalf("execution gate still mentions task.md: %#v", expectation)
+	}
+	pending := state
+	pending.Stages = map[string]string{}
+	if _, done, err := engine.validateStageArtifact(pending); err != nil || done {
+		t.Fatalf("execution must not be skipped before the agent returns: done=%v err=%v", done, err)
+	}
+	if _, done, err := engine.validateStageArtifact(state); err != nil || !done {
+		t.Fatalf("successful execution return must satisfy fileless artifact gate: done=%v err=%v", done, err)
+	}
+}
 
 // TestFailedGateProgressLabelCoversAcceptanceAndValidationFailures proves blocked/retry labels stay compatible.
 func TestFailedGateProgressLabelCoversAcceptanceAndValidationFailures(t *testing.T) {

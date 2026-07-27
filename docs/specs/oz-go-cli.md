@@ -46,7 +46,7 @@
 
 ### 场景：下游校验接口要求 standard 验收硬合同
 
-- **给定** 一个活动提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`tests/` 和当前 `oz flow` 允许的 `acceptance.json`
+- **给定** 一个活动提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`tests/` 和当前 `oz flow` 允许的 `acceptance.json`
 - **当** 下游工具运行 `oz validate <change> --json`
 - **则** 命令成功并在 artifacts 中返回 `brief.md` 和 `acceptance.json`
 - **并且** `acceptance.json` 支持 `coverage`、`required_tests[].assertions` 和 `required_tests[].expected_initial_failure`
@@ -91,11 +91,32 @@
 - **并且** artifacts 必须包含 `brief.md`
 - **并且** acceptance 摘要必须暴露 `required_tests`、`required_evidence` 和 `coverage` 的数量
 - **当** 下游工具运行 `oz archive 1-需求 --yes`
-- **则** 命令继续按既有规则校验任务完成状态并归档提案
-- **并且** small brief-only 提案没有 `task.md` 时不得因为缺少任务清单被 CLI 拒绝
+- **则** 命令继续按既有规则校验验收合同并归档提案
+- **并且** small 与 standard 提案都不得依赖任务复选框判断完成状态
 - **并且** 命令必须同步更新归档提案的测试脚本、验收合同和文档中指向 `tests/` 的相对路径
 - **并且** 命令不得把提案测试按业务能力机械合并进长期 `tests/specs/`
 - **并且** 归档后的提案测试留在 `docs/changes/archive/<date>-1-需求/tests/` 作为后续规格测试合并来源
+
+### 需求：提案执行计划保持动态
+
+// Sources: 47-移除并禁止提案任务文件
+
+active 提案必须把实现步骤保留在执行器 Todo 或运行态中，不得创建 Git 跟踪的任务文件。
+
+#### 场景：standard 不含任务文件仍通过校验
+
+- **给定** standard 提案包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`acceptance.json` 和真实 `tests/`
+- **且** 提案不包含 `task.md`
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令必须返回 `valid=true`
+
+#### 场景：active 提案重新引入任务文件时明确拒绝
+
+- **给定** 任意 active 提案中出现 `task.md`
+- **当** 下游工具运行 `oz validate <change> --json`
+- **则** 命令必须返回 `valid=false`
+- **且** errors 必须明确说明 active 提案禁止包含 `task.md`
+- **并且** 历史归档目录中的旧 `task.md` 保持原样，不参与 active 提案校验
 
 ### 场景：oz flow 继续通过 oz JSON 协议选择和校验 change
 
@@ -116,7 +137,8 @@
 
 - **当** 维护者调整 standalone `oz` CLI 的入口、安装、提案查询、校验或归档命令
 - **则** `internal/ozcli/cli.go`、`internal/ozcli/cmd_install.go`、`internal/ozcli/cmd_change.go`、`internal/ozcli/cmd_validate.go` 和 `internal/ozcli/cmd_archive.go` 必须作为独立边界文件存在
-- **并且** `Main/run`、`installCmd/printInstallHelp`、`listCmd/createCmd/statusCmd`、`validateCmd/validateChange/validateAcceptanceFiles`、`archiveCmd/ensureTasksDone` 必须分别落在对应职责文件
+- **并且** `Main/run`、`installCmd/printInstallHelp`、`listCmd/createCmd/statusCmd`、`validateCmd/validateChange/validateAcceptanceFiles`、`archiveCmd` 必须分别落在对应职责文件
+- **并且** active 提案的 `task.md` 禁令只能由 validate 边界负责，archive 不得恢复任务清单完成度检查
 - **并且** `internal/ozcli/ozcli.go` 不得重新成为 700 行以上的混合职责文件
 - **并且** `internal/ozcli` Go 回归必须通过，证明拆分不改变现有 CLI 行为
 

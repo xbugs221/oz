@@ -385,6 +385,27 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 	t.Fatalf("runner observability missing running execution row: %s", data)
 }
 
+// TestStatusViewUsesRuntimeExecutionArtifact verifies status output has no task-file dependency.
+func TestStatusViewUsesRuntimeExecutionArtifact(t *testing.T) {
+	repo := t.TempDir()
+	state := statusViewImplementationContextState()
+	view := buildStatusView(repo, state, state.RunID, "")
+	if _, ok := view.Artifacts["change_task"]; ok {
+		t.Fatalf("root artifacts still expose change_task: %#v", view.Artifacts)
+	}
+	for _, row := range view.Rows {
+		if row.Stage != "execution" {
+			continue
+		}
+		want := filepath.Join(runDir(repo, state.RunID), "state.json")
+		if row.Artifacts["stage_artifact"] != want {
+			t.Fatalf("execution artifact = %q, want %q", row.Artifacts["stage_artifact"], want)
+		}
+		return
+	}
+	t.Fatal("missing execution status row")
+}
+
 // TestStatusViewSelectsRepairGeneration verifies a new run never exposes legacy review/fix rows.
 func TestStatusViewSelectsRepairGeneration(t *testing.T) {
 	state := statusViewImplementationContextState()

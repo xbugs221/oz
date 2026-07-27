@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：长期验证 standalone oz CLI 按命令职责拆分源码文件并保持回归通过。
-# Sources: 34-拆分ozcli命令边界
+# Sources: 34-拆分ozcli命令边界, 47-移除并禁止提案任务文件
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -27,6 +27,16 @@ assert_file_has() {
   rg -n "$pattern" "$file" >>"$log" || fail "$file 缺少模式：$pattern"
 }
 
+assert_file_lacks() {
+  # assert_file_lacks 确认已移除的职责不会重新进入目标源码文件。
+  local file="$1"
+  local pattern="$2"
+  [[ -f "$file" ]] || fail "缺少目标文件：$file"
+  if rg -n "$pattern" "$file" >>"$log"; then
+    fail "$file 不应包含模式：$pattern"
+  fi
+}
+
 cd "$repo_root"
 
 note "evidence id: ozcli-command-boundary-log"
@@ -44,7 +54,9 @@ assert_file_has "internal/ozcli/cmd_validate.go" 'func \(c \*cli\) validateCmd'
 assert_file_has "internal/ozcli/cmd_validate.go" 'func validateChange'
 assert_file_has "internal/ozcli/cmd_validate.go" 'func validateAcceptanceFiles'
 assert_file_has "internal/ozcli/cmd_archive.go" 'func \(c \*cli\) archiveCmd'
-assert_file_has "internal/ozcli/cmd_archive.go" 'func ensureTasksDone'
+assert_file_has "internal/ozcli/cmd_validate.go" 'active 提案禁止包含 task.md'
+assert_file_lacks "internal/ozcli/cmd_archive.go" 'ensureTasksDone'
+assert_file_lacks "internal/ozcli/cmd_archive.go" 'task.md'
 
 if [[ -f internal/ozcli/ozcli.go ]]; then
   line_count="$(wc -l < internal/ozcli/ozcli.go | tr -d ' ')"

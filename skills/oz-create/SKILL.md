@@ -5,14 +5,14 @@ description: 当用户提到 oz create，或要求创建 oz 变更提案时使�
 
 # oz Create
 
-创建 `oz` 变更提案并生成对应产物。创建阶段不是写愿景文档，而是建立可执行的交付合同；`brief.md`、`acceptance.json` 和 `tests/` 始终是硬边界，standard 的 `proposal.md`、`design.md`、`spec.md`、`task.md` 也必须和合同等强度对齐。
+创建 `oz` 变更提案并生成对应产物。创建阶段不是写愿景文档，而是建立可执行的交付合同；`brief.md`、`acceptance.json` 和 `tests/` 始终是硬边界，standard 的 `proposal.md`、`design.md`、`spec.md` 也必须和合同等强度对齐。
 
 ## 入口分类
 
 | 类型 | 适用场景 | 产物 |
 | --- | --- | --- |
 | small | 单一业务意图，最多 2 个验收场景或 2 个 required tests，且没有复杂设计分歧 | `brief.md`、`acceptance.json`、`tests/`，即 brief-only |
-| standard | 跨模块、高风险、多场景，或超过 small 上限 | `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`tests/` |
+| standard | 跨模块、高风险、多场景，或超过 small 上限 | `brief.md`、`proposal.md`、`design.md`、`spec.md`、`acceptance.json`、`tests/` |
 
 micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器是风险、跨度和场景复杂度，不得为了进入 standard 硬凑测试或任务。
 
@@ -21,7 +21,7 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 1. 先运行 `oz create` 获取下一个编号，只把输出整数作为 `<number>`。
 2. 根据规划结果创建 `docs/changes/<number>-<change-name>/`。
 3. 按 small 或 standard 先列出验收矩阵：small 可直接从 `brief.md` 的验收条目映射到 `required_tests`、`required_evidence`；standard 先列出 `spec.md` 场景到矩阵。
-4. small 写 `brief.md`、`acceptance.json` 和 `tests/`；standard 写 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/`。
+4. small 写 `brief.md`、`acceptance.json` 和 `tests/`；standard 写 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`acceptance.json` 和 `tests/`。
 5. 运行 `oz validate <change> --json`，并人工核对文档、测试和 JSON 合同是否一致。
 6. 创建阶段完成后提交提案产物，避免执行阶段误删或混入无关改动。
 
@@ -31,9 +31,10 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 - `proposal.md`：standard 必填，说明做什么和为什么；small 不要求
 - `design.md`：standard 必填，说明关键技术决策、取舍和风险；small 不要求
 - `spec.md`：standard 必填，使用中文 `### 需求：` 和 `#### 场景：` 描述验收行为；每个场景都必须说明对应 `tests/` 文件、真实数据来源、入口路径、关键断言和剩余风险；small 不要求
-- `task.md`：standard 必填，拆分实现步骤和验证条件，第一组任务必须是先运行创建阶段写好的契约测试；small 不要求
 - `acceptance.json`：结构化验收合同，必须逐条覆盖 `spec.md` 中的需求和场景，复用 `tests/` 中的契约测试，并补齐根目录端到端/回归测试、截图、trace、network、console、runtime log 等 QA 证据要求
 - `tests/`：必须包含真实项目测试代码，用来表达本次变更的核心契约；不得为空，不写测试说明文档或占位文件，但是测试文件内部要多用中文写批注，确保非专业软件工程师也能看懂
+
+禁止创建或修改 `task.md`。创建阶段只定义目标、边界、场景和验收合同，不预先写死实现步骤；动态计划由执行器在 Todo 或运行态中维护，不写入 Git 跟踪文件。
 
 创建阶段负责定义简报、核心契约测试和完整验收合同，执行阶段负责让这些测试通过。不得把核心行为标准推迟给执行器自行制定，也不得让文档承诺高于测试能证明的行为。
 
@@ -94,7 +95,7 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 
 如果暂时无法确定测试策略、真实数据来源、用户可感知断言或 QA 证据要求，先和用户澄清；不要创建缺少契约测试或 `acceptance.json` 的提案。
 
-执行阶段可以新增单元测试、回归测试、端到端测试或边界测试，但不得删除、弱化或绕过创建阶段写入的契约测试和 `acceptance.json`。只有用户明确变更意图时，才能同步更新 `spec.md`、`design.md`、`task.md`、`acceptance.json` 和 `tests/`，并记录原因。
+执行阶段可以新增单元测试、回归测试、端到端测试或边界测试，但不得删除、弱化或绕过创建阶段写入的契约测试和 `acceptance.json`。只有用户明确变更意图时，才能同步更新 `spec.md`、`design.md`、`acceptance.json` 和 `tests/`，并记录原因。
 
 ## 退出条件
 

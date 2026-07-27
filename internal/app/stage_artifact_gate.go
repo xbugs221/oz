@@ -26,8 +26,8 @@ func (e *Engine) stageArtifactExpectation(state State) stageArtifactExpectation 
 	switch {
 	case state.Stage == "execution":
 		return stageArtifactExpectation{
-			Path:        filepath.Join(e.Repo, "docs", "changes", state.ChangeName, "task.md"),
-			Description: "oz status tasks.total > 0 且 tasks.done == tasks.total",
+			Path:        filepath.Join(base, "state.json"),
+			Description: "execution agent 成功返回；后续 validation 与 acceptance gate 独立验证交付结果",
 		}
 	case strings.HasPrefix(state.Stage, "review_"):
 		n := strings.TrimPrefix(state.Stage, "review_")
@@ -80,8 +80,8 @@ func (e *Engine) validateStageArtifact(state State) (stageArtifactResult, bool, 
 	base := runDir(e.Repo, state.RunID)
 	switch {
 	case state.Stage == "execution":
-		done, err := ChangeTasksDone(e.Repo, state.ChangeName)
-		return stageArtifactResult{}, done, err
+		stageStatus := state.Stages[state.Stage]
+		return stageArtifactResult{}, stageStatus == stageStatusAgentCompleted || stageStatus == "completed", nil
 	case strings.HasPrefix(state.Stage, "review_"):
 		iteration, err := stageIteration(state.Stage)
 		if err != nil {

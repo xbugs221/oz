@@ -55,7 +55,7 @@ bad_out="$tmpdir/bad-profile.out"
 note "运行 oz flow config --list-profiles"
 (
   cd "$repo"
-  "$oz_bin" config --list-profiles
+  "$oz_bin" flow config --list-profiles
 ) >"$list_out" 2>&1
 cat "$list_out" | tee -a "$log"
 
@@ -73,7 +73,7 @@ note "运行未知 profile 错误路径"
 set +e
 (
   cd "$repo"
-  "$oz_bin" config --profile not-real
+  "$oz_bin" flow config --profile not-real
 ) >"$bad_out" 2>&1
 status=$?
 set -e

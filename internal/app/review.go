@@ -31,7 +31,6 @@ type Review struct {
 // ReviewChecks records the review coverage that must be true before clean.
 type ReviewChecks struct {
 	OzAligned                bool `json:"oz_aligned"`
-	TasksVerified            bool `json:"tasks_verified"`
 	TestsMeaningful          bool `json:"tests_meaningful"`
 	ImplementationScoped     bool `json:"implementation_scoped"`
 	RuntimeBehaviorVerified  bool `json:"runtime_behavior_verified"`
@@ -335,7 +334,6 @@ func decodeStrictArtifactJSON(data []byte, target interface{}) error {
 
 func validateCleanReview(review Review, iteration int) error {
 	if !review.Checks.OzAligned ||
-		!review.Checks.TasksVerified ||
 		!review.Checks.TestsMeaningful ||
 		!review.Checks.ImplementationScoped ||
 		!review.Checks.RuntimeBehaviorVerified ||

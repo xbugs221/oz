@@ -297,7 +297,7 @@ func runValidationCommands(ctx context.Context, repo, stage string, attempt int,
 }
 
 // runStageValidation executes mandatory change validation before user-configured commands.
-func runStageValidation(ctx context.Context, repo, changeName, stage string, attempt int, config ValidationConfig) ValidationAttempt {
+func runStageValidation(ctx context.Context, repo, changeName, stage string, attempt int, config ValidationConfig, allowLegacyTask bool) ValidationAttempt {
 	// runStageValidation keeps oz validate failures in the normal same-stage retry path.
 	result := ValidationAttempt{
 		Stage:     stage,
@@ -307,7 +307,7 @@ func runStageValidation(ctx context.Context, repo, changeName, stage string, att
 	}
 	parsed, err := parseWorkflowStage(stage)
 	if err == nil && shouldRunChangeValidation(parsed) {
-		commandResult := runChangeValidationCommand(ctx, repo, changeName)
+		commandResult := runChangeValidationCommand(ctx, repo, changeName, allowLegacyTask)
 		result.Commands = append(result.Commands, commandResult)
 		if commandResult.ExitCode != 0 {
 			result.Status = validationStatusFailed
@@ -325,7 +325,7 @@ func runStageValidation(ctx context.Context, repo, changeName, stage string, att
 }
 
 // runChangeValidationCommand runs oz validate for the active change and captures its JSON diagnostics.
-func runChangeValidationCommand(ctx context.Context, repo, changeName string) ValidationCommandResult {
+func runChangeValidationCommand(ctx context.Context, repo, changeName string, allowLegacyTask bool) ValidationCommandResult {
 	// runChangeValidationCommand uses the same oz command resolution as workflow startup validation.
 	path, err := resolveCommand(ozCommand)
 	label := changeValidationCommandDescription + " " + changeName + " --json"
@@ -341,13 +341,27 @@ func runChangeValidationCommand(ctx context.Context, repo, changeName string) Va
 	cmd.Stderr = &output
 	runErr := cmd.Run()
 	exitCode := commandExitCode(runErr)
-	if exitCode == 0 {
+	if output.Len() > 0 {
 		var response ozValidateResponse
 		if err := json.Unmarshal(output.Bytes(), &response); err != nil {
-			exitCode = -1
-			output.WriteString("\n解析 oz validate JSON 失败：" + err.Error())
-		} else if !response.Valid {
-			exitCode = 1
+			if exitCode == 0 {
+				exitCode = -1
+				output.WriteString("\n解析 oz validate JSON 失败：" + err.Error())
+			}
+		} else {
+			if allowLegacyTask {
+				response = filterLegacyTaskValidationError(response)
+				if data, err := json.Marshal(response); err == nil {
+					output.Reset()
+					output.Write(data)
+					output.WriteByte('\n')
+				}
+			}
+			if response.Valid {
+				exitCode = 0
+			} else {
+				exitCode = 1
+			}
 		}
 	}
 	return ValidationCommandResult{
@@ -355,6 +369,29 @@ func runChangeValidationCommand(ctx context.Context, repo, changeName string) Va
 		ExitCode: exitCode,
 		Output:   limitValidationOutput(output.String()),
 	}
+}
+
+// filterLegacyTaskValidationError lets already-sealed pre-migration runs finish without weakening new runs.
+func filterLegacyTaskValidationError(response ozValidateResponse) ozValidateResponse {
+	filtered := response.Errors[:0]
+	removed := false
+	for _, item := range response.Errors {
+		if strings.Contains(item, "active 提案禁止包含 task.md") {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	response.Errors = filtered
+	if removed && len(filtered) == 0 {
+		response.Valid = true
+	}
+	return response
+}
+
+// allowsLegacyTaskCompatibility identifies sealed runs created before task.md was prohibited.
+func allowsLegacyTaskCompatibility(state State) bool {
+	return state.Sealed && state.ProposalContractVersion == ""
 }
 
 // validationAttemptKind classifies the persisted validation failure for retry prompts.

@@ -148,9 +148,6 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	if state.Status != statusRunning || state.Stage != runStage {
 		return nil
 	}
-	if e.goDAGShouldSkipCompletedExecutionContext(state, node) {
-		return nil
-	}
 	e.recordGoDAGNode(runID, node.ID, DAGNodeState{Status: "running", StartedAt: time.Now().UTC().Format(time.RFC3339Nano)})
 	var out bytes.Buffer
 	switch node.Type {
@@ -188,11 +185,6 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	}
 	e.recordGoDAGNode(runID, node.ID, next)
 	return nil
-}
-
-// goDAGShouldSkipCompletedExecutionContext skips advisory execution helpers when task.md is already complete.
-func (e *Engine) goDAGShouldSkipCompletedExecutionContext(state State, node WorkflowNode) bool {
-	return false
 }
 
 // goDAGNodeReachedTerminalBlock reports non-failed workflow blocks created by node logic.

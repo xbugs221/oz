@@ -128,7 +128,6 @@
 - **则** 当前 run 不得中止
 - **且** 系统必须更新当前 run 的 git baseline，避免同一新增需求在后续阶段重复报错
 - **但** 当前 change、源码和配置变化仍必须中止或阻断当前 run
-- **且** subagent guard 默认以 advisory 方式报告越界异常：从 subagent 会话开始到结束，仓库实际 git change 内容如发生变化，系统必须把路径和摘要写入 member artifact 交给主智能体判断，不得默认作为硬指标中断流程；`strict` 模式才允许自动撤回或阻断
 
 #### 场景：提案验收合同先行
 
@@ -201,14 +200,14 @@
 - **且** 该决策层必须可被 `internal/app` 的 Go 测试直接验证
 - **且** `state.go` 不得重新承载全部阶段跳转规则
 - **测试**：`tests/specs/codex-workflow-cli/test_stage_decision_contract.sh`
-- **关键断言**：独立 stage decision 源文件、`StageDecision`/`DecideNextStage` 合同、关键状态机回归测试和 `state.go` 行数阈值同时满足
+- **关键断言**：独立 stage decision 源文件、`StageDecision`/`DecideNextStage` 合同、关键状态机回归测试和 `state.go` 职责归属同时满足
 - **剩余风险**：该测试覆盖 fake runner 和状态文件行为，不替代真实外部 agent CLI 的端到端执行
 
 #### 场景：Artifact 枚举值支持 KISS 数字码
 
-- **当** review、QA 或 parallel subagent artifact 使用数字码表达状态、严重级别或范围
+- **当** review 或 QA artifact 使用数字码表达状态、严重级别或范围
 - **则** 系统必须在读入时归一化为内部标准值，保持历史英文 artifact 兼容
-- **且** `decision`、subagent `status` 和 `acceptance_matrix[].status` 必须支持 `0=通过`、`1=失败或需修复`
+- **且** `decision` 和 `acceptance_matrix[].status` 必须支持 `0=通过`、`1=失败或需修复`
 - **且** `findings[].severity` 必须支持 `1=blocker`、`2=major`、`3=minor`
 - **且** `findings[].scope` 必须支持 `1=current_change`、`2=introduced_regression`、`0=out_of_scope_existing`
 - **且** `out_of_scope_existing` 仍表示历史债务或无关问题，不得阻断当前提案 clean
@@ -304,7 +303,7 @@
 
 #### 场景：Agy 作为 Pi 候选后端
 
-- **当** workflow stage 或 parallel member 配置 `tool: agy` 或 `cli: agy`
+- **当** workflow 主阶段配置 `agent: agy`
 - **则** 系统必须接受该后端并在 sealed run 创建状态前预检 `agy` CLI
 - **且** sealed run 必须调用 `agy --print`，按配置追加 `--model`、`--conversation`、`--dangerously-skip-permissions` 或 `--sandbox`
 - **且** planning 入口必须调用 `agy --prompt-interactive`
@@ -348,20 +347,18 @@
 - **当** 用户在仓库根目录调用 `oz flow config`
 - **且** 仓库根目录不存在 `oz-flow.yaml` 或 `oz-flow.yml`
 - **则** 系统创建默认 `oz-flow.yaml`
-- **且** 默认配置根节点包含 `parallel`、`subagent_guard`、`max_review_iterations`、`stages`、`validation` 和 `prompts`
-- **且** 默认配置包含 `max_review_iterations: 5`
-- **且** 默认配置包含 `stages.planning/execution/review/qa/fix/archive`
+- **且** 默认配置根节点包含 `stages`、`validation` 和 `prompts`
+- **且** 默认配置包含 `stages.planning/execution/repair/qa/archive`
 - **且** 每类会话配置包含 `agent` 和 `reasoning`
-- **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: low`、`review.reasoning: high`、`qa.reasoning: high`、`fix.reasoning: low`、`archive.reasoning: low`
+- **且** 默认配置写入 `planning.reasoning: xhigh`、`execution.reasoning: medium`、`repair.reasoning: high`、`qa.reasoning: high`、`archive.reasoning: low`
 - **且** 默认配置写入 `validation.limit`
 - **且** 默认配置写入空的 `validation.commands: []`
-- **且** 默认配置写入 `subagent_guard: advisory`
-- **且** 默认配置写入 `prompts.planning/execution/review/qa/fix/archive`
+- **且** 默认配置写入 `prompts.planning/execution/repair/qa/archive`
 - **且** 默认配置不包含 `wo:`、`workflow:`、`engine:`、`defaults:`、`iterations:`、`permissions:`、`cli:`、`tool:`、`groups:` 或 `mode:`，并为所有 Codex 阶段写入 `model: gpt-5.6-sol`
-- **且** `stages.execution.before`、`stages.review.before` 和 `stages.qa.before` 包含默认子代理
+- **且** 默认配置不包含 `parallel`、`subagents`、`subagent_guard` 或 `stages.*.before`
 - **且** 不创建 legacy repo dir
 - **且** 后续规划、graph 或 sealed run 能读取其中的根节点配置
-- **测试**：`tests/specs/codex-workflow-cli/test_tree_config_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
 
 #### 场景：初始化全局默认配置
 
@@ -407,15 +404,6 @@
 - **且** 不创建新的运行态
 - **测试**：`tests/specs/codex-workflow-cli/test_legacy_config_rejection_contract.sh`
 
-#### 场景：顶层 parallel false 关闭阶段内子代理
-
-- **给定** `oz-flow.yaml` 中保留 `stages.execution.before`
-- **且** 顶层配置 `parallel: false`
-- **当** 用户导出 workflow graph
-- **则** graph 不包含任何子代理节点
-- **且** 主阶段仍保留
-- **测试**：`tests/specs/codex-workflow-cli/test_tree_config_contract.sh`
-
 #### 场景：配置文件冲突
 
 - **当** 仓库根目录同时存在 `oz-flow.yaml` 和 `oz-flow.yml`
@@ -427,65 +415,6 @@
 - **当** 仓库根目录不存在 `oz-flow.yaml` 或 `oz-flow.yml`
 - **则** 系统使用内置默认配置
 
-#### 场景：主阶段和子代理会话只在显式配置 model 时传模型参数
-
-- **给定** 新格式 `oz-flow.yaml`
-- **且** `stages.execution.model` 配置为 `codex-exec-model`
-- **且** `stages.qa.before[].model` 为浏览器路径测试员配置 `pi-browser-model`
-- **且** `validation.limit: 2`
-- **当** 用户运行 `oz flow run --change <change> --json`
-- **则** execution 主阶段调用 Codex 时包含 `-m codex-exec-model`
-- **且** 浏览器路径测试员调用 Pi 时包含 `--model pi-browser-model`
-- **且** 未配置模型的子代理调用不包含 `--model`
-- **且** 配置读取接受 `validation.limit`
-- **测试**：`tests/specs/codex-workflow-cli/test_subagent_relevance_contract.sh`
-
-#### 场景：默认子代理全部启动且无关职责不阻断主阶段
-
-- **给定** 一个只修改 CLI 配置解析的提案
-- **且** `stages.qa.before` 包含 `CLI/API 测试员`、`浏览器路径测试员` 和 `回归场景测试员`
-- **当** 用户运行 `oz flow run --change <change> --json`
-- **则** 这些子代理都会被调用
-- **且** 浏览器路径测试员收到 relevance check prompt 后返回 `relevant:false`
-- **且** 浏览器路径测试员不执行浏览器探索
-- **且** `required:true` 加 `relevant:false` 不阻断 QA 主阶段
-- **且** 最终 run 完成为 `done`
-- **测试**：`tests/specs/codex-workflow-cli/test_subagent_relevance_contract.sh`
-
-### 需求：OMO 风格并行增强配置
-
-系统必须在保留 sealed run 主状态机的前提下，提供默认关闭的 `workflow.parallel` prompt-driven artifact contract。`workflow.subagents` 是同一结构的 OmO 命名别名，`members[].cli` 是 `members[].tool` 的别名。并行组只能作为 planning/execution 前置上下文、review 输入或 QA 输入，不得绕过 review、QA、fix 或 archive gate。`members[].tool` 和 `members[].subagent` 只作为提示词角色线索，不触发额外 CLI 发现、subagent 调度或 backend 专属参数。
-
-#### 场景：默认配置包含并行能力骨架
-
-- **当** 用户运行 `oz flow config`
-- **则** 生成的 `oz-flow.yaml` 包含顶层 `parallel`
-- **且** `enabled` 默认为 `true`
-- **且** 包含 `implementation_context`、`review`、`qa` 三类默认 groups
-- **且** 默认成员名称包含“代码库侦察员”“外部资料研究员”“目标核对审核员”“CLI/API 测试员”等直观职责名
-- **且** 不把 Sisyphus、Prometheus、Metis、Momus、Oracle 或 Explore 等内部 agent 名称作为主要用户可见成员名称
-
-#### 场景：并行层关闭时行为兼容
-
-- **给定** 默认生成的 `oz-flow.yaml`
-- **当** 用户没有显式启用 `workflow.parallel.enabled`
-- **则** sealed run 仍按现有串行阶段推进
-- **且** review、QA、fix 和 archive 的 artifact gate 规则不变
-
-#### 场景：导出 workflow 图
-
-- **给定** `workflow.parallel.enabled` 或 `workflow.subagents.enabled` 为 `true`
-- **且** 配置了 `before_execution`、`before_review` 或 `before_qa` 并行组
-- **当** 用户运行 `oz flow graph --change demo --format json`
-- **则** 输出必须是合法 WorkflowSpec JSON
-- **且** 包含 `main_stage`、`subagent`、`fanin` 和 `gate` 节点
-- **当** 用户运行 `oz flow graph --change demo --format mermaid`
-- **则** 输出必须显示 fan-out/fan-in、review clean/needs_fix、QA clean/needs_fix 和 archive gate
-- **且** 可选 graph format 只有 `json` 和 `mermaid`
-- **且** 图只描述 workflow spec，不暴露内部调度命令
-- **且** 不得直接拼接 `codex exec` 或 `pi --mode json`
-- **且** 导出图时不得创建 run、batch 或 agent session
-
 #### 场景：workflow engine 是内部实现细节
 
 - **给定** 当前仓库存在 active change 和合法 `acceptance.json`
@@ -494,164 +423,9 @@
 - **且** `oz flow run --change demo --engine unknown --json` 必须被拒绝，并说明该参数不可用或已删除
 - **且** 默认配置、帮助、graph、status 和错误输出不得暴露内部 engine 名称
 
-#### 场景：内嵌工作流 subagent artifact schema retry
-
-- **给定** 内嵌工作流 在进程内调度 `before_review` 的 subagent 节点，参数包含 run id、member name、stage 和 iteration
-- **当** subagent 正常退出但写出的 member artifact 中 `evidence` 为对象数组而非字符串数组
-- **则** 系统必须 resume 同一 subagent session 要求只重写 `ARTIFACT_PATH`
-- **且** 修正 prompt 必须包含字段名、期望类型、`ARTIFACT_DIR` 和 artifact 路径
-- **且** 最多重试 3 次，仍失败时必须写出 `status=failed` 的 member artifact 作为证据输入，不得仅因 helper artifact 交付失败将 run 标记为 `failed`
-- **且** 修正通过后 fan-in 才能继续读取该成员产物
-- **则** `oz flow` 必须渲染只读 subagent prompt，包含 `CURRENT_CHANGE`、`STATE_PATH`、`CHANGE_PATH`、`ACCEPTANCE_PATH`、`BASELINE_HEAD`、`SUBAGENT_GROUP`、`SUBAGENT_NAME`、`SUBAGENT_PURPOSE`、`ARTIFACT_DIR` 和 `ARTIFACT_PATH`
-- **且** prompt 必须要求 subagent 先读取当前 run 的 `state.json`、当前 `docs/changes/<change>` 和当前 `acceptance.json`，不得自行把其它活动提案作为当前目标
-- **且** member artifact 路径必须是 `parallel-members/<group>/<iteration>/<member-slug>.artifact/member.json`；非迭代 group 可省略 `<iteration>` 层
-- **且** subagent 应只在当前 member 的 `ARTIFACT_DIR` 写出单成员 JSON artifact；若会话结束时留下源码、worktree、当前提案文件、其它 run artifact 或 sibling member artifact 的实际内容变化，默认 `subagent_guard: advisory` 必须把异常写入该 member artifact 的 evidence/finding，并刷新 baseline 让主智能体继续判断
-- **且** `subagent_guard: strict` 必须保留硬边界行为，检测到实际内容变化时自动撤回可安全撤回的变更或阻断；`subagent_guard: off` 必须跳过该检测
-- **且** subagent 可以执行 `git stash/pop` 等临时 git 操作，但 guard 只应以会话前后实际 git change 内容是否一致作为越界依据；index/hash/status 抖动或引擎维护的 `state.json` 进度写入不得被单独判为越界
-- **且** prompt 必须提供 `oz flow validate-member-artifact --artifact "$ARTIFACT_PATH" --group <group> --member <member> --change <change-name>` 自校验命令
-- **且** 单成员 JSON 顶层只允许 `name`、`change_name`、`purpose`、`status`、`summary`、`evidence`、`findings`、`required`
-- **且** `change_name` 必须等于当前 run 的 `state.change_name`，否则必须按 artifact 格式错误重试或失败
-- **且** `evidence` 必须是字符串数组
-- **且** `findings[]` 每项只允许 `title`、`severity`、`scope`、`evidence`、`recommendation` 字段
-- **且** blocker/major 且 scope 为当前提案或回归的 finding 不得指向其它 `docs/changes/<change>`，其它提案只能作为非阻断背景或无关问题
-- **且** prompt 必须明确禁止 `category`、`description`、`detail`、`location`、`level`、`type` 等额外字段
-- **且** `findings[].severity` 最终只允许 `blocker`、`major`、`minor`
-- **且** `critical/blocker` 归一为 `blocker`，`high/medium/major` 归一为 `major`，`low/nit/minor/info/informational/note/warning` 归一为 `minor`
-- **当** 内嵌工作流 在进程内执行 fan-in 节点
-- **则** `oz flow` 必须汇总为既有 `parallel-implementation-context.json`、`parallel-review-N.json` 或 `parallel-qa-N.json`
-- **当** 内嵌工作流 在进程内执行 gate 节点
-- **则** review clean 必须由主审核归一化 gate_input subagent 结论后决定，原始 subagent finding 或成员失败不得直接覆盖主 review artifact
-- **且** QA clean 不得忽略已有 gate_input subagent artifact 中当前提案 blocker/major finding
-- **且** helper artifact 缺失、格式错误、成员失败或 required helper 未产出证据只作为主阶段证据完整性输入，不得直接覆盖主 QA/Review 决策
-- **且** implementation context 只作为 execution 前上下文输入，不得因 required helper 自身失败阻断 execution
-- **且** clean review/QA 必须跳过未激活 fix 分支，needs_fix 必须激活下一轮 fix/review/QA 分支
-- **测试**：`tests/specs/codex-workflow-cli/test_subagent_artifact_directory_contract.sh`
-- **真实数据来源**：脚本临时写入 `internal/app` 包级测试，调用真实 `memberArtifactPath`、`subagentPrompt`、`oz flow validate-member-artifact` 分发入口和 `nodeRunSubagent`
-- **关键断言**：member artifact 固定为 `*.artifact/member.json`；prompt 提供 `ARTIFACT_PATH` 和校验命令；格式坏的 required QA helper 产出 failed member artifact 但不把 run 置为 failed；sibling artifact 写入仍阻断
-
-// Sources: 33-拆分子智能体执行边界
-
-#### 场景：subagent 执行边界拆分
-
-- **当** 内嵌工作流 调度 subagent member 执行 retry、只读边界、artifact 处理和 prompt 组装
-- **则** retry/attempt 执行必须位于 `internal/app/subagent_attempt.go`
-- **且** 只读边界检查必须位于 `internal/app/subagent_boundary.go`
-- **且** member artifact 读写、schema 校验和 captured text 兜底生成必须位于 `internal/app/subagent_artifact.go`
-- **且** prompt context、初次 prompt 和 retry prompt 必须位于 `internal/app/subagent_prompt.go`
-- **且** `internal/app/subagent.go` 必须只保留薄编排入口，不得重新承载 retry 循环、runner 调用或 retryable error 包装
-- **且** 子智能体超时、只读边界、artifact 兜底和并发 artifact 相关 Go 回归必须继续通过
-- **测试**：`tests/specs/codex-workflow-cli/test_subagent_boundary_contract.sh`
-- **真实数据来源**：脚本读取仓库当前 `internal/app` 生产代码，并运行真实 `go test ./internal/app` subagent/parallel 相关回归
-- **关键断言**：目标边界文件存在且包含对应关键函数；`subagent.go` 行数保持薄入口；关键 retry/attempt 细节不回流入口文件；Go 回归通过
-- **剩余风险**：该测试不直接启动真实外部 Codex/Pi CLI，真实外部 agent 集成仍依赖环境验证
-
-#### 场景：并行层开启时主阶段不变
-
-- **给定** 用户启用 `workflow.parallel.enabled: true`
-- **当** sealed run 进入 execution、review 或 QA
-- **则** 当前主 agent 可以按 prompt 读取 `workflow_config.parallel.groups` 并写入对应 `parallel-*.json`
-- **且** 当前主阶段仍分别产出 execution 结果、`review_i.json` 或 `qa_i.json`
-- **且** sealed run 不为并行成员创建额外 session 或调用额外 `AgentRunner`
-- **且** archive gate 仍只接受现有证据链完整后完成
-
-#### 场景：execution 并行上下文进入后续 prompt
-
-- **给定** `implementation_context` 组已启用
-- **当** sealed run 进入后续 execution、review 或 QA prompt
-- **则** prompt 必须引用当前 run 目录中的 `parallel-implementation-context.json`
-- **且** prompt 必须说明 `tool/subagent` 只作为提示词角色线索，不作为 CLI 参数
-- **且** advisory 成员失败时必须记录失败摘要并继续主阶段
-- **且** required 成员失败时必须阻断阶段完成或推进
-
-// Sources: 17-已完成执行跳过上下文subagents
-
-#### 场景：task 全部完成时不启动 execution 前上下文 subagents
-
-- **给定** active change 的 `task.md` 已全部勾选
-- **且** `oz-flow.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
-- **当** 用户运行 `oz flow run --change <change> --json`
-- **则** workflow 不得调用这些 execution 前 subagents
-- **且** 不得生成 execution context member artifact 或 subagent session
-- **且** workflow 仍可继续进入 archive 并完成
-- **测试**：`tests/specs/codex-workflow-cli/test_skip_execution_context_when_tasks_done.sh`
-- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `oz-flow.yaml` 并运行当前仓库构建出的 `oz flow` 和 `oz`
-- **关键断言**：fake subagent 一旦收到 `SUBAGENT_OUTPUT` 就让测试失败；最终 state 必须为 `done` 且无 subagent session/artifact
-- **剩余风险**：该测试只覆盖 execution 前 advisory groups，不覆盖 review/QA gate input subagents
-
-#### 场景：task 未完成时仍启动 execution 前上下文 subagents
-
-- **给定** active change 的 `task.md` 尚未勾选
-- **且** `oz-flow.yaml` 启用了 `implementation_context` 中的代码侦察和外部资料 advisory subagents
-- **当** 用户运行 `oz flow run --change <change> --json`
-- **则** workflow 必须先调用这些 execution 前 subagents 并生成 fan-in artifact
-- **且** execution 主 agent 可以继续勾选 task
-- **且** workflow 可进入 archive 并完成
-- **测试**：`tests/specs/codex-workflow-cli/test_run_execution_context_when_tasks_pending.sh`
-- **真实数据来源**：脚本创建临时 git 仓库、真实 oz change 文件、真实 `oz-flow.yaml`，fake subagents 写入真实 member artifact
-- **关键断言**：两个 configured subagents 都被调用；`parallel-implementation-context.json` 包含两个成员；最终 state 为 `done`
-- **剩余风险**：fake execution 只勾选 task，不代表真实 agent 修改业务代码；真实修改质量仍由具体提案测试和 QA 负责
-
-#### 场景：并行成员 tool 不作为主阶段 CLI 参数
-
-- **给定** 所有主阶段使用默认 `codex`
-- **且** `workflow.parallel.enabled: true`
-- **且** 并行成员配置 `tool: pi` 和 `subagent: explore`
-- **当** sealed run 构造主阶段 prompt 和 CLI 参数
-- **则** `tool/subagent` 只作为并行成员角色 metadata 和提示词线索
-- **且** 主阶段 CLI 参数不得包含 `--subagent`、`--agent` 或并行成员 `subagent` 名称
-- **且** sealed run 启动前工具发现仍按 Codex/Pi 后端集合固定要求本机同时存在 `codex` 和 `pi`
-
-#### 场景：Pi 参数不携带并行 subagent metadata
-
-- **给定** 主阶段使用 `cli: pi`
-- **且** 并行成员包含 `subagent: explore`
-- **当** 系统构造 Pi sealed run 参数
-- **则** 参数不得包含 `--subagent`、`--agent`、`explore` 或 Pi 专属 agent 参数
-- **且** 当该 Pi 调用来自并行 subagent 节点时，参数必须包含只读工具白名单 `--tools read,grep,find,ls`
-- **且** 主 Pi 阶段不得因为并行成员 metadata 被自动降级为只读工具白名单
-
 // Sources: 12-收窄验收gate到提案范围
 
-#### 场景：并行 review 输入由主审核归一化
-
-- **给定** `review` 并行组已启用
-- **当** `parallel-review-i.json` 中任一配置成员报告 blocker/major finding、成员失败或把正向确认误写为 blocker
-- **则** 主 review 必须先归一化这些 gate_input 结论
-- **且** 只有主 review 复核后写入 `review_i.json.findings` 的当前提案 acceptance/spec 可复现 blocker/major 行为失败才触发修复轮
-- **且** 正向确认、其它提案内容、历史债务、无操作项、更深覆盖建议、可维护性建议和未承诺扩展只能进入 `evidence` 或 `non_blocking_findings`
-
-#### 场景：out-of-scope severe finding 不阻断 clean
-
-- **给定** `parallel-review-1.json` 中所有配置成员均成功
-- **并且**某成员报告 `severity=major`、`scope=out_of_scope_existing` 的历史债务
-- **当**系统读取 parallel review artifact
-- **则** artifact 必须保持可解析，并作为主 review 输入
-- **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
-- **真实数据来源**：脚本临时写入真实 parallel review artifact JSON，调用真实 `ReadParallelArtifact`
-- **入口路径**：`internal/app/parallel.go`
-- **关键断言**：out-of-scope major finding 保持为 reviewer 输入；成员 status 全部 success
-- **剩余风险**：该 artifact 合同只能校验结构，是否采纳为当前提案 finding 由主审核负责
-
-#### 场景：当前变更和旧格式 severe finding 只是主审核输入
-
-- **给定** `parallel-review-1.json` 中存在 `scope=current_change` 的 major finding
-- **当**系统读取 parallel review artifact
-- **则** artifact 必须保持可解析，并交给主 review 归一化
-- **并且**缺少 `scope` 的旧格式 major finding 也必须保持解析兼容，并作为主审核输入而不是直接阻断
-- **测试**：`tests/specs/codex-workflow-cli/test_parallel_scope_gate_contract.sh`
-- **真实数据来源**：同一脚本构造 current-change artifact 和 legacy artifact
-- **入口路径**：`internal/app/parallel.go`
-- **关键断言**：当前变更 severe finding 不覆盖主 review；legacy missing scope 保持解析兼容；无操作 blocker 被 artifact 边界拒绝
-- **剩余风险**：不会自动判断真实 git blame，scope 仍由 reviewer/QA 给出并接受 review
-
-#### 场景：并行 QA 覆盖 acceptance 合同
-
-- **给定** `qa` 并行组已启用
-- **当** 当前轮 QA 开始
-- **则** 当前主 agent 按 `workflow_config.parallel.groups.qa` 的职责生成 `parallel-qa-i.json`
-- **且** `qa_i.json.acceptance_matrix` 必须逐项覆盖 `acceptance.json.required_tests` 和 `required_evidence`
-- **且** 任一配置成员缺失、成员失败、blocker/major finding 或 required evidence 缺失时，`qa_i.json.decision` 不得为 `clean`
-- `non_blocking_findings` 仅允许 `scope=out_of_scope_existing`，仅用于记录历史债务；`acceptance_matrix` 仍必须逐项覆盖 acceptance 合同 id，不得扩展为债务项。
+`non_blocking_findings` 仅允许 `scope=out_of_scope_existing`，仅用于记录历史债务；`acceptance_matrix` 仍必须逐项覆盖 acceptance 合同 id，不得扩展为债务项。
 
 #### 场景：QA 可记录历史债务但 acceptance_matrix 不得新增无关 id
 
@@ -666,53 +440,6 @@
 - **入口路径**：`internal/app/qa.go`
 - **关键断言**：non-blocking finding 不影响 acceptance matrix；未知 acceptance id 仍失败
 - **剩余风险**：该测试不启动浏览器，浏览器路径由具体业务提案自行定义
-
-### 需求：并行 subagent 会话状态不互相覆盖
-
-系统必须让同一 parallel group 中并发运行的 subagent 只合并自己的状态增量，不得用启动时的旧 `state.json` 快照覆盖其他 subagent 已写入的 session。
-
-#### 场景：implementation_context 多成员并发完成后保留全部 session
-
-- **给定** 一个 running `execution` run，`implementation_context` 配置了多个 subagent member
-- **当** 这些 member 使用各自的旧 state 快照并发完成，并分别写出 member artifact 和 session ID
-- **则** 最终 `state.json.sessions` 必须包含每个 member 的 session key
-- **并且** 不得丢失主阶段已有 session
-- **测试**：`tests/specs/codex-workflow-cli/test_parallel_subagent_session_merge_contract.sh`
-- **真实数据来源**：测试在临时 git 仓库中创建真实 run state，调用 `nodeRunSubagent` 写真实 `parallel-members/` artifact
-- **入口路径**：`nodeRunSubagent`、`saveState/loadState`、状态合并 helper
-- **关键断言**：全部 subagent session key 都存在；每个 member artifact 都存在
-- **剩余风险**：该场景不修复历史 run 中已经丢失的 session
-
-### 需求：status 展示完成 subagent 的真实 session
-
-系统必须让 `oz flow status/watch` 的 subagent 行反映 durable state 中已经记录的 session ID。已完成 member artifact 对应的行不应因为并发保存覆盖而随机显示 `-`。
-
-#### 场景：已完成 member artifact 对应的 status 行显示 session ID
-
-- **给定** 并发 subagent 已完成，member artifact 存在，`state.json.sessions` 应包含每个 member 的 session
-- **当** 系统构建 compact status view
-- **则** 每个完成 member 行必须显示对应 session ID
-- **并且** marker 必须仍是完成态 `✓`
-- **测试**：`tests/specs/codex-workflow-cli/test_parallel_subagent_session_merge_contract.sh`
-- **真实数据来源**：同一测试中由 fake runner 通过 subagent prompt 写出的 member artifact 和真实 `state.json`
-- **入口路径**：`buildStatusView`、`statusSubagentRows`、`statusSubagentSessionID`
-- **关键断言**：每个 member 的 row `SessionID` 等于对应 session；row `Marker` 为 `✓`
-- **剩余风险**：status 不从外部 agent 历史记录补救缺失 session，缺失状态应由写入路径修复
-
-### 需求：运行中 subagent session 可提前观测
-
-系统必须在 subagent backend 输出 session started 事件后立即把 session 合并进 `state.json`，不能等到 member artifact 完成后才保存。
-
-#### 场景：backend 输出 session started 后，artifact 完成前 state 已包含 session
-
-- **给定** 一个 subagent runner 在写 artifact 前先输出 session started 事件
-- **当** subagent 仍阻塞在运行中，member artifact 尚未完成
-- **则** `state.json.sessions` 必须已经包含该 subagent 的 session key
-- **测试**：`tests/specs/codex-workflow-cli/test_parallel_subagent_session_merge_contract.sh`
-- **真实数据来源**：测试 runner 实现 progress writer，在 artifact 写入前发送 session started 事件并阻塞
-- **入口路径**：`nodeRunSubagent` 与 agent runner progress writer 的连接点
-- **关键断言**：释放 runner 前读取 `state.json`，能看到对应 subagent session；释放后 goroutine 正常完成
-- **剩余风险**：该场景不要求未完成 member 行显示成功，只要求 session 可观测
 
 ### 需求：默认配置经过审计并保持一致
 
@@ -766,14 +493,16 @@
 
 // Sources: 42-拆除固定子代理编排
 
-系统必须让新用户默认看不到 oz 外置固定子代理配置。默认 workflow 只表达 planning、execution、review、qa、fix、archive 主阶段，以及 validation、prompt 和主 agent 配置。默认 graph、prompt、status/watch 和源码边界不得再依赖 oz 生成的 subagent、fan-in、parallel artifact 或外置子代理 runner。
+系统必须让新用户默认看不到 oz 外置固定子代理配置。默认 workflow 只表达 planning、execution、repair、qa、archive 主阶段，以及 validation、prompt 和主 agent 配置；运行图使用动态 audit、targeted repair 与 QA 循环。默认 graph、prompt、status/watch 和源码边界不得再依赖 oz 生成的 subagent、fan-in、parallel artifact 或外置子代理 runner。
+
+归档提案 42 内的 `tests/test_remove_fixed_subagents_contract.sh` 是当时 review/fix 状态机的历史快照；后续主流程演进为 repair，再演进为 audit/targeted repair 后，现行验证入口由根目录 `tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh` 取代，归档脚本不参与当前合同运行。
 
 #### 场景：默认配置不再生成外置子代理配置
 
 - **当** 用户在临时 git 仓库运行真实 `oz flow config`
 - **则** 默认 `oz-flow.yaml` 不包含 `parallel:`、`subagent_guard:` 或 `before:`
 - **且** 默认 `oz-flow.yaml` 不包含内置固定 helper 名称，例如 `代码库侦察员`、`目标核对审核员`、`浏览器路径测试员`
-- **且** 默认 `oz-flow.yaml` 仍包含 execution、review、qa、fix、archive 主阶段配置
+- **且** 默认 `oz-flow.yaml` 仍包含 execution、repair、qa、archive 主阶段配置
 - **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
 - **关键断言**：真实 `cmd/oz` 生成的默认配置只保留主阶段配置，不暴露固定外置子代理
 - **剩余风险**：用户自定义旧配置不自动迁移，只在读取时明确拒绝
@@ -783,17 +512,17 @@
 - **当** 用户运行真实 `oz flow graph --change demo --format json`
 - **则** graph nodes 不包含 `type=subagent` 或 `type=fanin`
 - **且** graph artifacts 不包含 `parallel-*` 路径
-- **且** graph 仍包含 `execution`、`review_1`、`qa_1`、`fix_1`、`archive` 和 gate 节点
+- **且** graph 仍包含 `execution`、`audit_N`、`qa_N`、`targeted_repair_N`、`archive` 和 gate 节点
 - **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
 - **关键断言**：默认拓扑只保留主阶段和 gate，状态观测事实源不再包含外置子代理节点
 - **剩余风险**：该场景不启动完整 sealed run；运行时 status/watch 由源码边界和 Go 回归共同约束
 
 #### 场景：主阶段 prompt 不依赖 oz 子代理 artifact
 
-- **给定** 内置 prompt 模板 `prompts-template/oz-flow-start.md`、`oz-flow-review.md` 和 `oz-flow-qa.md`
+- **给定** 内置 prompt 模板 `prompts-template/oz-flow-start.md`、`oz-flow-repair.md` 和 `oz-flow-qa.md`
 - **当** 系统渲染主阶段 prompt
-- **则** execution/review/QA prompt 不包含 `subagent artifact`、`parallel-`、`ParallelContext`、`ParallelReview`、`ParallelQA`、`review helper` 或 `QA helper`
-- **且** prompt 仍保留 `StatePath`、`AcceptancePath`、`ChangePath`、`ReviewPath` 或 `QAPath` 等主阶段必要输入
+- **则** execution/repair/QA prompt 不包含 `subagent artifact`、`parallel-`、`ParallelContext`、`ParallelReview`、`ParallelQA`、`review helper` 或 `QA helper`
+- **且** prompt 仍保留 `StatePath`、`AcceptancePath`、`ChangePath`、`RepairPath` 或 `QAPath` 等主阶段必要输入
 - **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
 - **关键断言**：内置 prompt 不再要求主 agent 读取 oz 生成的固定外置子代理产物
 - **剩余风险**：用户自定义 prompt 可自行保留文本，不属于默认模板合同
@@ -997,7 +726,7 @@
 - **当** 系统渲染默认 execution prompt
 - **则** prompt 必须调用 `oz-exec` 技能并指向当前 run 的 `state.json`
 - **且** prompt 必须保留当前 change、acceptance 和并行上下文 artifact 的读取路径
-- **且** prompt 不得重复 `proposal.md`、`design.md`、`spec.md`、`task.md`、`required_tests` 或 `tasks.done` 等 oz-exec 技能正文
+- **且** prompt 不得重复 `proposal.md`、`design.md`、`spec.md` 或 `required_tests` 等 oz-exec 技能正文
 - **且** prompt 不得混入 review/fix 当前轮 artifact，例如 `review-1.json`、`fix-1-summary.md` 或“只修复当前 review/QA artifact”
 
 #### 场景：review 续轮隐藏 JSON 示例
@@ -1149,23 +878,24 @@
 
 ### 需求：统一主阶段 artifact gate retry
 
-系统必须在任意主阶段 agent 返回后检查该阶段应有产物。产物缺失、格式非法或合同不满足时，系统必须记录 `Stage artifact gate failed`，resume 同一角色 session，要求只补写或改写当前阶段产物，最多重试 3 次。第三次仍失败后才进入阻断状态。
+系统必须在需要持久产物的主阶段 agent 返回后检查该阶段应有产物。产物缺失、格式非法或合同不满足时，系统必须记录 `Stage artifact gate failed`，resume 同一角色 session，要求只补写或改写当前阶段产物，最多重试 3 次。第三次仍失败后才进入阻断状态。execution 不创建 Git 阶段文件，以 agent 成功返回为完成信号，再由独立 validation 与 acceptance gate 校验交付结果。
 
-#### 场景：所有主阶段产物缺失或非法都会同会话重试
+#### 场景：持久阶段产物缺失或非法都会同会话重试
 
-- **给定** 默认 `内嵌工作流` workflow 正在执行 execution、review、fix、QA 或 archive
+- **给定** 默认 `内嵌工作流` workflow 正在执行 review、fix、QA 或 archive
 - **当** 当前阶段 agent 返回后未完成该阶段产物，或写出的 artifact 不满足 schema / acceptance / readiness 合同
 - **则** 系统必须记录同阶段 artifact gate 失败
 - **且** 下一次运行必须 resume 同一角色 session
 - **且** retry prompt 必须包含 `Stage artifact gate failed`、目标阶段、目标 artifact 路径和失败原因
 - **且** retry prompt 必须要求只补写或改写当前阶段产物，不得修改 acceptance 合同或其他阶段 artifact
-- **且** execution 阶段 task 未完成、fix summary 缺失、archive delivery summary 或归档目录缺失也必须进入同一 artifact gate retry
+- **且** fix summary 缺失、archive delivery summary 或归档目录缺失也必须进入同一 artifact gate retry
+- **且** execution 成功返回后不得等待或创建任务文件，必须直接进入独立 validation 与 acceptance gate
 - **且** 未达到最大尝试次数前不得把 run 或 batch 标记为 `failed`
 
 #### 场景：batch 中阶段产物修复后继续后续 change
 
-- **给定** batch 中当前 change 的 execution 产物首次未完成
-- **当** 同一 executor session 在 artifact gate retry 中修复该产物
+- **给定** batch 中当前 change 的 archive 产物首次未完成
+- **当** 同一 archiver session 在 artifact gate retry 中修复该产物
 - **则** batch worker 必须继续执行后续 change
 - **且** batch state 不得因为可修复 artifact gate failure 进入 `failed`
 - **且** 只有达到重试上限、真实 agent/backend 失败或不可恢复阻断时，batch 才能停止为 `failed`
@@ -1681,11 +1411,10 @@
 
 #### 场景：查询人类状态
 
-- **给定** 当前 run 已完成 planning，正在 execution，且配置了 implementation context 子代理
+- **给定** 当前 run 已完成 planning，正在 execution
 - **当** 调用 `oz flow status -w1`
 - **则** stdout 第一行必须是提案列表项，例如 `- 7-统一输出`
 - **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `  规划阶段 planner-session ✓ 2.00` 和 `  执行阶段 writer-session → 6.50`
-- **且** 子代理行必须在阶段行下继续缩进并使用用户可读短名，例如 `    代码侦察 explore-session ✓ 1.50`
 - **且** marker 只使用 `-`、`→`、`✓` 或 `x`
 - **且** 耗时必须格式化为两位小数分钟，不追加单位
 - **且** 输出不得包含 `工作流`、状态英文单词、workflow 短编号 header、`引擎`、并行 group 汇总行或总耗时行
@@ -1854,7 +1583,7 @@
 - **且** 输出必须把 `1-a`、`2-b` 和 `3-c` 分别显示为只包含 change 名称的独立行
 - **且** change 行不得包含 workflow 短编号、run id、索引、状态或运行中标记
 - **且** 未开始的 `3-c` 行不得追加 `未开始`
-- **且** 每个已创建 workflow 的固定列阶段/子代理行必须直接显示在对应 change 行下方
+- **且** 每个已创建 workflow 的固定列主阶段行必须直接显示在对应 change 行下方
 - **且** 未开始 change 下方不得显示伪造的内部阶段
 
 #### 场景：batch 刚提交但尚未创建 run
@@ -1979,7 +1708,7 @@
 
 ### 需求：JSON status 机器接口保持兼容
 
-系统必须保持 `oz flow status --run-id <run-id> --json` 的 runner 顶层 contract 不变，同时允许新增 `observability` 字段暴露阶段和子代理产物路径。耗时统计只出现在人类可读输出。
+系统必须保持 `oz flow status --run-id <run-id> --json` 的 runner 顶层 contract 不变，同时允许新增 `observability` 字段暴露主阶段产物路径。耗时统计只出现在人类可读输出。
 
 #### 场景：JSON 输出不包含耗时内部字段
 
@@ -1995,10 +1724,10 @@
 
 - **给定** 当前仓库存在一个 sealed run
 - **当** 用户运行 `oz flow status --run-id <run-id> --json`
-- **则** `observability.rows` 必须为 execution、review、fix、qa 和 archive 阶段给出稳定行
+- **则** `observability.rows` 必须为 execution、audit、targeted repair、qa 和 archive 阶段给出稳定行
 - **且** 每个阶段 row 必须包含阶段中文名、session id、marker 和固定 `stage_artifact` 路径
-- **且** 即使审核、测试或归档尚未开始，也必须给出 `review-1.json`、`qa-1.json` 和 `delivery-summary.md` 的预期路径
-- **且** subagent row 必须给出短名、完整名称、session id、`member_artifact` 和 `group_artifact` 绝对路径
+- **且** 即使自查、测试或归档尚未开始，也必须给出 `audit-1.json`、`qa-1.json` 和 `delivery-summary.md` 的预期路径
+- **且** 不得生成固定外置 subagent row、`member_artifact` 或 `group_artifact`
 
 ### 需求：失败 batch 展示可理解原因
 
@@ -2635,93 +2364,6 @@
 - **关键断言**：核心 app、oz CLI 和根测试包可单独证明当前基线可用
 - **剩余风险**：该测试不替代定向 shell 合同测试，CI/Release 不盲目遍历历史 shell 脚本
 
-### 需求：极简 human status 不泄漏 parallel fan-in
-
-// Sources: 13-修正-oz-flow-status-多轮并行状态展示
-
-系统必须让 human `oz flow status` 和 `oz flow watch` 保持固定列极简输出。parallel fan-in artifact 是内部聚合产物，不得以 `- 并行 <group>` 或 fan-in member raw status 的形式显示给用户。短名 subagent 行仍通过 `DAGNodes` 和 `sessions` 表达真实 helper 执行状态。
-
-#### 场景：多轮 run 不显示并行 summary/raw member status
-
-- **给定** 当前 run 启用了 `implementation_context` 或 `review` parallel group
-- **且** run 目录存在合法 `parallel-implementation-context.json` 或 `parallel-review-<n>.json`
-- **当** 用户运行 `oz flow status -wN` 或 `oz flow watch -wN`
-- **则** 输出不包含 `- 并行`、`implementation_context`、`parallel-review`、`LGTM_WITH_MINOR_CONCERNS` 或 `completed - -`
-- **且** 输出仍保留短名 subagent 行和固定列阶段行
-- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
-- **关键断言**：human 输出不泄漏 fan-in summary、internal group name 或 raw member status
-- **剩余风险**：不验证真实 TTY 原地刷新，只验证 status/watch 共用 compact view 内容
-
-#### 场景：batch status 不展示并行摘要
-
-- **给定** 当前 batch 中某个 change 已创建 run
-- **且** 该 run 已到达或已产出 parallel group artifact
-- **当** 用户运行 `oz flow status` 或 `oz flow status -bN`
-- **则** batch 输出不包含 `- 并行`、group name 或 fan-in summary
-- **且** 短名 subagent 行仍正常显示
-- **且** 不得把所有 subagent 行统一堆到 batch 底部
-
-#### 场景：JSON status 保留机器可读 artifact 路径
-
-- **当** 用户运行 `oz flow status --run-id <run-id> --json`
-- **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
-- **且** JSON 不得将 fan-in summary 注入 human 可读字段
-- **且** JSON observability 可继续包含机器可读 artifact 路径
-
-### 需求：规划阶段完成态正确
-
-// Sources: 13-修正-oz-flow-status-多轮并行状态展示
-
-系统必须在默认 sealed run 中隐藏没有运行证据的规划占位行。若旧配置显式启用并完成了 `planning_context` fan-in，human status 仍可把它视为规划准备完成，且不得展开已完成的规划 subagent 明细。
-
-#### 场景：execution 起跑且 planning_context fan-in 成功时规划行显示完成
-
-- **给定** sealed run 从 execution 阶段起跑且旧配置显式启用 `planning_context`
-- **且** `planning_context_*` fan-in 节点全部成功且 `parallel-planning-context.json` 存在
-- **当** 用户运行 `oz flow status -wN`
-- **则** `规划阶段` 行显示 `✓` marker
-- **且** `规划阶段` 行不展开 `需求分析`、`代码侦察`、`外部资料` 等已完成的 planning subagent 明细
-- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
-- **关键断言**：规划阶段 marker 为 `✓` 且不显示 planning subagent
-- **剩余风险**：历史 run 如果没有 planning fan-in artifact 或 DAG node，仍可保守显示未完成
-
-### 需求：多轮阶段 marker 保留历史
-
-// Sources: 13-修正-oz-flow-status-多轮并行状态展示
-
-系统必须在 compact 阶段行展示已发生轮次的历史状态。当前轮次失败不能抹掉前序成功轮次。`review_*`、`qa_*`、`fix_*` 已完成轮次显示 `✓`，当前失败轮次显示 `x`，当前运行轮次显示 `→` 或 watch spinner。
-
-#### 场景：第三轮 review 失败时审核行显示 ✓✓x
-
-- **给定** run 的 `review_1` 和 `review_2` 已完成
-- **且** `review_3` 失败
-- **当** 用户运行 `oz flow status -wN`
-- **则** `审核阶段` 行显示 reviewer session id
-- **且** `审核阶段` 行 marker 显示 `✓✓x`
-- **且** `修正阶段` 行 marker 显示 `✓✓`（fix_1 和 fix_2 已完成）
-- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
-- **关键断言**：审核行包含 `✓✓x`，修正行包含 `✓✓`
-- **剩余风险**：本场景覆盖 review/fix；多轮 QA 使用同一 marker 逻辑
-
-### 需求：子代理明细绑定当前轮次
-
-// Sources: 13-修正-oz-flow-status-多轮并行状态展示
-
-系统必须让 review/qa 子代理明细跟随当前 compact stage 代表轮次。`review_3` 失败时，审核阶段下的子代理应显示第三轮 subagent session 和 DAG node 状态，不得固定读取第一轮或把主阶段 `review_3` node 误判为 subagent。
-
-#### 场景：review_3 失败时显示第三轮 review subagent 且不误判主阶段节点
-
-- **给定** `before_review_1_*`、`before_review_2_*`、`before_review_3_*` 三轮 helper DAG node 均存在
-- **且** 第三轮 helper 全部 success，但主阶段 `review_3` node failed
-- **当** 用户运行 `oz flow status -wN`
-- **则** 审核阶段下子代理行使用第三轮 session（如 `review3-target`、`review3-quality` 等）
-- **且** 输出不包含第一轮 session（如 `review1-target`）
-- **且** helper 如 `测试有效 review3-test ✓` 不能因为主阶段 `review_3` failed 被标成 `x`
-- **且** review helper 只匹配 `before_review_<iteration>_<index>`，不把 `review_3` main_stage node 当成 subagent
-- **测试**：`tests/specs/codex-workflow-cli/test_status_multiround_parallel_display_contract.sh`
-- **关键断言**：当前轮次 subagent session 正确，不包含旧轮次 session，helper 独立于主阶段 node 状态
-- **剩余风险**：不要求展示所有历史轮次 subagent，仅要求当前代表轮次正确
-
 ### 需求：默认内置 workflow
 
 // Sources: 36-清理历史垃圾并隐藏内部引擎信息
@@ -2733,7 +2375,7 @@
 - **当** 用户在真实 active change 上运行 `oz flow run --change <change> --json`
 - **则** 默认运行必须成功推进 workflow
 - **且** run state 必须记录 `engine: 内嵌工作流`
-- **且** 默认 workflow 配置必须启用 `parallel.enabled: true`
+- **且** 默认 workflow 配置不得暴露已移除的固定外置子代理或 fan-in
 - **且** `oz flow status -wN` 必须使用公开 workflow 标签展示运行方式，不得展示内部实现名或并行 group fan-in summary
 - **测试**：`tests/specs/codex-workflow-cli/test_default_go_dag_run_contract.sh`
 
@@ -2752,34 +2394,11 @@
 - **且** `tests/specs` 和 Go 测试继续作为当前业务测试入口
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
 
-### 需求：默认 parallel subagents 与 DAG 图
-
-系统必须默认启用 parallel subagents，并在默认配置、DAG graph 和人类 status 中表达 implementation context、review 和 QA 的 fan-out/fan-in 语义。
-
-#### 场景：默认配置启用 parallel
-
-- **当** 用户运行 `oz flow config`
-- **则** 生成的 `oz-flow.yaml` 必须包含 `parallel.enabled: true`
-- **且** 不得包含用户需要选择的 `engine` 字段
-
-#### 场景：Mermaid 图展示 fan-out/fan-in
-
-- **当** 用户运行 `oz flow graph --change <change> --format mermaid`
-- **则** Mermaid 输出必须包含 implementation context、review、QA 的 subagent 节点和 fan-in 节点
-- **且** 图中必须包含 archive gate
-- **且** 默认图不得要求任何外部 workflow scheduler
-
-#### 场景：默认工作流 status 保持 JSON contract 兼容
-
-- **当** 默认工作流 run 完成后，用户运行 `oz flow status --run-id <run-id> --json`
-- **则** JSON 字段名必须仍包含 `run_id`、`change_name`、`status`、`stage`、`stages`、`paths`、`sessions` 和 `error`
-- **且** JSON 不得新增 `parallel`、`parallel_status`、`parallel_summary` 或 `members`
-
 ### 需求：默认工作流模板脱离 Go 硬编码
 
 // Sources: 11-新增-MADA-工作流profiles
 
-系统必须把默认 `oz-flow.yaml` 生成逻辑中的并行 subagent 描述、角色 purpose、profile 提示词配置从 Go 字符串拼接中剥离到独立内置 YAML 模板文件 `profiles-template/*.yaml`。
+系统必须把默认 `oz-flow.yaml` 的主阶段、验证和提示词配置从 Go 字符串拼接中剥离到独立内置 YAML 模板文件 `profiles-template/*.yaml`，并且不得在模板中恢复已删除的固定外置子代理。
 
 #### 场景：默认 profile 由内置 YAML 模板生成
 
@@ -2787,10 +2406,10 @@
 - **当** 系统生成默认工作流配置
 - **则** 仓库必须包含 `profiles-template/default.yaml`
 - **并且** `profiles-template/default.yaml` 必须保存默认 `oz flow config` 当前输出语义
-- **并且** Go 源码不得继续硬编码默认 subagent 角色名和 purpose 文本
+- **并且** Go 源码不得继续硬编码已删除的默认 subagent 角色名和 purpose 文本
 - **并且** 默认 `oz flow config` 不带 `--profile` 时仍生成与现有默认 profile 等价的标准 `oz-flow.yaml`
 - **测试**：`tests/specs/codex-workflow-cli/test_profile_templates_externalized_contract.sh`
-- **关键断言**：模板文件存在且包含业务角色；Go 源码不再承载默认角色文本；默认 `oz flow config` 仍可生成和加载标准配置
+- **关键断言**：模板文件存在且包含主阶段与 prompt；Go 源码不再承载旧默认角色文本；默认 `oz flow config` 仍可生成和加载标准配置
 - **剩余风险**：替换内置模板后需要重新构建二进制
 
 ### 需求：MADA profile 生成标准配置
@@ -2804,23 +2423,12 @@
 - **给定** 一个临时 git 仓库
 - **当** 用户分别运行 `oz flow config --profile mada-code`、`oz flow config --profile mada-decision`、`oz flow config --profile mada-research`
 - **则** 每次都必须生成 `oz-flow.yaml`
-- **并且** YAML 中必须启用 `parallel.enabled`
-- **并且** 必须包含 `implementation_context`、`review`、`qa` 三个默认并行组
-- **并且** `review` 和 `qa` 必须是 `gate_input`，`implementation_context` 必须是 `advisory`
+- **并且** YAML 必须包含 execution、repair、qa 和 archive 主阶段
+- **并且** YAML 不得包含 `parallel`、`subagents`、`subagent_guard` 或 `stages.*.before`
 - **并且** `oz flow graph --change <change> --format json` 必须能成功读取该配置
 - **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
-- **关键断言**：三类 profile 都生成标准配置；三类默认并行组模式正确
+- **关键断言**：三类 profile 都生成可加载的标准主阶段配置，且不恢复固定外置子代理
 - **剩余风险**：不启动真实 agent，避免创建阶段依赖外部模型
-
-#### 场景：decision profile 包含决策评审所需角色
-
-- **给定** 一个临时 git 仓库
-- **当** 用户运行 `oz flow config --profile mada-decision`
-- **则** 生成的 `oz-flow.yaml` 必须包含面向技术选型的角色：`约束建模员`、`候选方案研究员`、`反方评审员`、`运维部署评审员`、`学习路线评审员`、`证据审计员`
-- **并且** `oz flow graph --change <change> --format json` 必须展示这些 review 子代理节点
-- **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
-- **关键断言**：decision profile 不退化为默认代码审查角色
-- **剩余风险**：该测试不评价具体推荐答案质量
 
 ### 需求：Profile 可发现且错误明确
 
@@ -2851,17 +2459,17 @@
 
 // Sources: 12-收窄验收gate到提案范围
 
-### 需求：旧提案兼容
+### 需求：旧 acceptance 合同兼容
 
 系统必须保证执行本变更后，已创建但尚未运行的旧提案不需要补 scope 字段或迁移 acceptance 合同。
 
-#### 场景：未运行旧提案不增加新必填字段
+#### 场景：未运行旧 acceptance 不增加新必填字段
 
-- **给定** 一个只包含既有 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json` 和 `tests/` 的 active change
+- **给定** 一个只包含 `brief.md`、`proposal.md`、`design.md`、`spec.md`、`acceptance.json` 和 `tests/` 的 active change
 - **并且**其 `acceptance.json` 不包含任何 scope 或 non-blocking 字段
 - **当**用户运行 `oz validate <change> --json`
 - **则**校验必须成功
-- **测试**：`tests/specs/codex-workflow-cli/test_legacy_active_change_compatibility_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_legacy_acceptance_compatibility_contract.sh`
 - **真实数据来源**：脚本创建临时 git 仓库和旧格式 active change，并运行真实编译后的 `oz validate`
 - **入口路径**：`cmd/oz validate`
 - **关键断言**：旧格式 active change 通过 validate；新 scope 字段不是 acceptance 必填项
@@ -2940,14 +2548,14 @@ review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 
 
 ### 需求：flow 命令入口和状态映射收敛
 
-系统必须把 `oz flow` 命令路由、workflow 阶段/并行组拓扑和公共 status 展示收敛到明确边界，避免后续重构继续在多个文件同步维护同一套业务映射，同时保持现有 CLI 行为。
+系统必须把 `oz flow` 命令路由、workflow 阶段拓扑和公共 status 展示收敛到明确边界，避免后续重构继续在多个文件同步维护同一套业务映射，同时保持现有 CLI 行为。
 
 #### 场景：命令、拓扑和状态视图边界收敛且 CLI 行为保持稳定
 
 - **给定** 仓库内真实 `internal/app`、`internal/ozcli` 和 `tests` 生产代码
 - **当** 维护者运行 flow 边界收敛合同测试
 - **则** `internal/app/flow_command_registry.go` 必须定义命令 registry 结构或查询入口
-- **并且** `internal/app/workflow_topology.go` 必须成为阶段和并行组映射边界
+- **并且** `internal/app/workflow_topology.go` 必须成为阶段映射及旧并行字段拒绝所需的兼容边界
 - **并且** graph/config/status 关键文件不得继续直接硬编码 `planning_context`、`implementation_context`、`before_execution`、`before_review`、`before_qa` 这些映射分支
 - **并且** 公共 status/progress 入口不得直接调用 legacy `stageChecklistLines` 系列函数
 - **并且** `go test ./internal/app ./internal/ozcli ./tests -count=1` 必须通过
@@ -2955,4 +2563,4 @@ review 和 QA prompt 必须把 scope 分类作为执行规则写清楚，避免 
 - **真实数据来源**：当前仓库 `internal/app`、`internal/ozcli`、`tests` 生产代码和 Go 回归测试
 - **入口路径**：shell 合同测试从仓库根目录执行
 - **关键断言**：命令 registry、workflow topology、公共 status view 三个边界已建立，真实 Go 命令面和状态回归保持稳定
-- **剩余风险**：该场景不逐个验证所有历史 shell 合同；执行阶段应根据改动影响面补跑 status/watch、graph、parallel 和 command dispatch 相关 specs
+- **剩余风险**：该场景不逐个验证所有历史 shell 合同；执行阶段应根据改动影响面补跑 status/watch、graph、固定子代理拆除和 command dispatch 相关 specs

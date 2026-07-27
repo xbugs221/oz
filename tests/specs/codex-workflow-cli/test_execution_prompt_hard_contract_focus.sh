@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证 execution prompt 默认聚焦 brief、acceptance 和 tests，而不是要求读取所有长文档。
-# Sources: 8-强化验收硬合同并精简执行上下文
+# Sources: 8-强化验收硬合同并精简执行上下文, 47-移除并禁止提案任务文件
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"

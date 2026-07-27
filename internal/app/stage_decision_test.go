@@ -186,7 +186,6 @@ func cleanReviewForStageDecision() Review {
 		Decision: "clean",
 		Checks: ReviewChecks{
 			OzAligned:                true,
-			TasksVerified:            true,
 			TestsMeaningful:          true,
 			ImplementationScoped:     true,
 			RuntimeBehaviorVerified:  true,

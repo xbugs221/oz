@@ -490,7 +490,7 @@ func statusStageArtifact(repo string, state State, stage string) string {
 	case "planning":
 		return filepath.Join(repo, "docs", "changes", state.ChangeName, "proposal.md")
 	case "execution":
-		return filepath.Join(repo, "docs", "changes", state.ChangeName, "task.md")
+		return filepath.Join(base, "state.json")
 	case "archive":
 		return filepath.Join(base, "delivery-summary.md")
 	}
@@ -523,7 +523,6 @@ func statusRootArtifacts(repo string, state State) map[string]string {
 		"change_proposal":   filepath.Join(changeDir, "proposal.md"),
 		"change_design":     filepath.Join(changeDir, "design.md"),
 		"change_spec":       filepath.Join(changeDir, "spec.md"),
-		"change_task":       filepath.Join(changeDir, "task.md"),
 		"change_acceptance": filepath.Join(changeDir, "acceptance.json"),
 	}
 }

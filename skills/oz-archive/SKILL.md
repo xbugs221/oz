@@ -18,9 +18,9 @@ description: 当用户提到 oz archive，或要求归档已完成的 oz 提案�
 
 - 确认工作区干净或相关修改已提交，避免混入非提案文件
 - 运行 `oz validate <change> --json`
-- standard 确认 `task.md` 已完成；small brief-only 没有 `task.md` 时不补写任务文件
+- 禁止创建或修改 `task.md`；归档完成条件以校验、验收结果和最终审核为准
 - 确认相关测试已经运行
-- 先运行 `oz archive <change> --yes`，由 CLI 完成提案目录（含 `tests/`）迁移，并自动改写测试脚本、`acceptance.json`、`brief.md`、`spec.md`、`task.md` 等文本中的提案测试路径；CLI 不负责把测试按业务能力合并进长期 `tests/specs/`
+- 先运行 `oz archive <change> --yes`，由 CLI 完成提案目录（含 `tests/`）迁移，并自动改写测试脚本、`acceptance.json`、`brief.md`、`spec.md` 等文本中的提案测试路径；CLI 不负责把测试按业务能力合并进长期 `tests/specs/`
 - 读取 `docs/changes/archive/<date>-<change>/tests/`，理解每个测试表达的业务契约和断言
 - 像合并 `docs/specs/*.md` 一样，把测试用例按业务能力合并到 `tests/specs/` 中稳定的规格测试文件；不要按 `<change>` 机械创建目录，也不要只搬运文件
 - 合并后的规格测试文件开头可以批注相关来源提案，例如 `// Sources: 1-登录能力, 3-权限收敛`，但文件名和目录应表达能力而不是提案编号
@@ -38,7 +38,7 @@ description: 当用户提到 oz archive，或要求归档已完成的 oz 提案�
 
 归档阶段只有在以下条件同时满足时才算完成：
 
-- `oz validate <change> --json` 通过，且 standard 的 `task.md` 已完成；small brief-only 没有 `task.md` 时不适用
+- `oz validate <change> --json` 通过，验收测试与最终审核已经完成
 - 归档后的提案目录存在于 `docs/changes/archive/`
 - 提案 `tests/` 的业务意图已按能力合并到稳定的 `tests/specs/` 文件，或明确说明无需合并的原因
 - 归档 `spec.md` 的长期行为已合并到 `docs/specs/*.md`，或明确说明无需合并的原因

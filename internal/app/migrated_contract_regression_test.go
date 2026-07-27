@@ -71,7 +71,7 @@ func TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff(t *testing
 	mustWriteForMigratedContract(t, filepath.Join(repo, "internal", "app", "existing.go"), "package app\n")
 	runGitForMigratedContract(t, repo, "add", ".")
 	runGitForMigratedContract(t, repo, "commit", "-m", "current change baseline")
-	mustWriteForMigratedContract(t, filepath.Join(repo, "docs", "changes", "10-当前需求", "task.md"), "- [x] execution edit\n")
+	mustWriteForMigratedContract(t, filepath.Join(repo, "docs", "changes", "10-当前需求", "design.md"), "# execution edit\n")
 	mustWriteForMigratedContract(t, filepath.Join(repo, "internal", "app", "existing.go"), "package app\n\nconst executionEdit = true\n")
 	head, diff, err := gitSnapshot(repo)
 	if err != nil {
@@ -215,7 +215,6 @@ func mustChangeForMigratedContract(t *testing.T, repo, name string) {
 	t.Helper()
 	base := filepath.Join(repo, "docs", "changes", name)
 	mustWriteForMigratedContract(t, filepath.Join(base, "brief.md"), "# "+name+"\n")
-	mustWriteForMigratedContract(t, filepath.Join(base, "task.md"), "- [ ] task\n")
 }
 
 // mustWriteForMigratedContract writes a test file and creates parent directories.

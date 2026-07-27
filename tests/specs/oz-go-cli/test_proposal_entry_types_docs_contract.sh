@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：长期验证 README、规格和内置 oz skills 已说明 micro、small、standard 三种提案入口。
-# Sources: 43-支持三种提案入口
+# Sources: 43-支持三种提案入口, 47-移除并禁止提案任务文件
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -41,7 +41,7 @@ assert_file_lacks() {
 note "README 必须给出三种入口和 small 最小产物"
 assert_file_has "$ROOT/README.md" 'micro.*TDD.*git commit|TDD.*git commit.*micro'
 assert_file_has "$ROOT/README.md" 'small.*brief\.md.*acceptance\.json.*tests|brief\.md.*acceptance\.json.*tests.*small'
-assert_file_has "$ROOT/README.md" 'standard.*proposal\.md.*design\.md.*spec\.md.*task\.md|完整提案.*standard'
+assert_file_has "$ROOT/README.md" 'standard.*proposal\.md.*design\.md.*spec\.md.*acceptance\.json.*tests'
 assert_file_has "$ROOT/README.md" 'small.*长期规格|长期规格.*small'
 assert_file_has "$ROOT/README.md" 'small.*(最多|<=).*2.*验收场景|small.*2.*required'
 assert_file_has "$ROOT/README.md" 'standard.*升级触发器|升级 standard'
@@ -60,7 +60,7 @@ assert_file_has "$ROOT/skills/oz-plan/SKILL.md" 'micro.*small.*standard|standard
 assert_file_has "$ROOT/skills/oz-plan/SKILL.md" 'small.*2.*验收场景|small.*2.*required'
 assert_file_has "$ROOT/skills/oz-plan/SKILL.md" '升级 standard|standard.*升级触发器'
 assert_file_has "$ROOT/skills/oz-create/SKILL.md" 'small.*brief\.md.*acceptance\.json.*tests|brief-only'
-assert_file_has "$ROOT/skills/oz-create/SKILL.md" 'standard.*proposal\.md.*design\.md.*spec\.md.*task\.md|完整提案'
+assert_file_has "$ROOT/skills/oz-create/SKILL.md" 'standard.*proposal\.md.*design\.md.*spec\.md.*acceptance\.json.*tests'
 assert_file_has "$ROOT/skills/oz-create/SKILL.md" '不得.*凑.*测试|不能.*凑.*任务|不.*硬凑'
 assert_file_has "$ROOT/skills/oz-exec/SKILL.md" 'small.*brief\.md.*acceptance\.json.*tests|brief-only'
 assert_file_has "$ROOT/skills/oz-archive/SKILL.md" 'small.*brief\.md|brief-only.*归档'

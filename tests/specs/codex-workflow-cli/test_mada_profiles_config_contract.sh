@@ -55,31 +55,25 @@ assert_profile_config() {
 
   [[ -f "$template" ]] || fail "$profile 缺少内置 YAML 模板: $template"
   assert_contains "$template" "stages:"
-  assert_contains "$template" "parallel:"
+  if rg -n 'parallel:|subagents:|before:' "$template" >>"$log"; then
+    fail "$profile 模板不应重新引入已移除的固定子代理配置"
+  fi
 
   note "运行 oz flow config --profile $profile"
   (
     cd "$repo"
-    "$oz_bin" config --profile "$profile"
+    "$oz_bin" flow config --profile "$profile"
   ) 2>&1 | tee -a "$log"
 
   local yaml="$repo/oz-flow.yaml"
   [[ -f "$yaml" ]] || fail "$profile 未生成 oz-flow.yaml"
-  assert_contains "$yaml" "parallel: true"
   assert_contains "$yaml" "stages:"
   assert_contains "$yaml" "execution:"
-  assert_contains "$yaml" "review:"
+  assert_contains "$yaml" "repair:"
   assert_contains "$yaml" "qa:"
-  assert_contains "$yaml" "before:"
-
-  local member_count
-  local pi_agent_count
-  member_count="$(grep -c '^      - name:' "$yaml" || true)"
-  pi_agent_count="$(grep -c '^        agent: pi$' "$yaml" || true)"
-  [[ "$member_count" -gt 0 ]] || fail "$profile oz-flow.yaml 缺少 subagent members"
-  [[ "$pi_agent_count" -eq "$member_count" ]] || fail "$profile oz-flow.yaml 必须为每个 subagent member 显式写 agent: pi，当前 $pi_agent_count/$member_count"
-  if grep -Eq '^[[:space:]]+agent: pi$' "$yaml"; then
-    fail "$profile oz-flow.yaml 不应包含 pi subagent"
+  assert_contains "$yaml" "archive:"
+  if rg -n 'parallel:|subagents:|before:|agent: pi' "$yaml" >>"$log"; then
+    fail "$profile oz-flow.yaml 不应包含固定外置子代理"
   fi
 
   note "运行 oz flow graph 验证 $profile 可加载"
@@ -88,9 +82,10 @@ assert_profile_config() {
     "$oz_bin" flow graph --change "11-${profile}-演示" --format json
   ) >"$repo/graph.json" 2>>"$log"
 
-  assert_contains "$repo/graph.json" '"type": "subagent"'
-  assert_contains "$repo/graph.json" '"type": "fanin"'
-  assert_contains "$repo/graph.json" "implementation_context"
+  assert_contains "$repo/graph.json" '"type": "main_stage"'
+  if rg -n '"type": "(subagent|fanin)"|parallel-' "$repo/graph.json" >>"$log"; then
+    fail "$profile graph 不应包含固定外置子代理节点或产物"
+  fi
 }
 
 oz_bin="$tmpdir/wo"
@@ -99,16 +94,6 @@ go build -C "$repo_root" -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
 for profile in mada-code mada-decision mada-research; do
   assert_profile_config "$oz_bin" "$profile"
-done
-
-decision_repo="$tmpdir/mada-decision"
-decision_yaml="$decision_repo/oz-flow.yaml"
-decision_graph="$decision_repo/graph.json"
-
-note "校验 mada-decision 包含当前内置 MADA 角色"
-for role in 代码库侦察员 外部资料研究员 目标核对审核员 测试有效性审核员 CLI/API\ 测试员 回归场景测试员; do
-  assert_contains "$decision_yaml" "name: $role"
-  assert_contains "$decision_graph" "$role"
 done
 
 note "PASS"

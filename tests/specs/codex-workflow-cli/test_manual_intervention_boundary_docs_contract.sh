@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 文件功能目的：验证主规格把人工干预保护描述为路径感知规则，而不是禁止一切工作区变化。
-# Sources: 16-允许运行中追加新需求但保留subagent写保护
+# Sources: 16-允许运行中追加新需求但保留subagent写保护, 42-拆除固定子代理编排
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -27,7 +27,7 @@ grep -Eiq '运行中.*(新增|追加).*(非当前|其他).*docs/changes|docs/cha
 note "主规格必须说明当前 change、源码和配置变化仍会中止"
 grep -Eiq '当前.*change.*(源码|配置).*(中止|阻断)|源码.*配置.*当前.*change.*(中止|阻断)' "$SPEC" || fail "主规格没有保留当前 run 相关路径保护"
 
-note "主规格必须说明 subagent 仍保持只读写保护"
-grep -Eiq 'subagent.*只读|只读.*subagent|subagent.*写保护' "$SPEC" || fail "主规格没有说明 subagent 写保护"
+note "主规格必须说明固定外置子代理已被拆除"
+grep -Eiq '不再生成固定外置子代理|旧外置子代理配置字段明确拒绝' "$SPEC" || fail "主规格没有同步提案 42 的固定子代理拆除合同"
 
 note "contract passed: manual intervention boundary is documented"

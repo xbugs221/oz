@@ -29,15 +29,6 @@ type ozListResponse struct {
 	} `json:"changes"`
 }
 
-type ozStatusResponse struct {
-	Tasks ozTaskProgress `json:"tasks"`
-}
-
-type ozTaskProgress struct {
-	Total int `json:"total"`
-	Done  int `json:"done"`
-}
-
 type ozValidateResponse struct {
 	Valid  bool     `json:"valid"`
 	Errors []string `json:"errors"`
@@ -79,26 +70,6 @@ func ValidateChange(repo, changeName string) error {
 		return fmt.Errorf("%s 不是有效 oz change", changeName)
 	}
 	return cmdErr
-}
-
-// ChangeTasksDone asks oz status whether all tracked tasks are complete.
-func ChangeTasksDone(repo, changeName string) (bool, error) {
-	if err := validateChangeNameForPath(changeName); err != nil {
-		return false, err
-	}
-	status, err := ozStatus(repo, changeName)
-	if err != nil {
-		return false, err
-	}
-	return status.Tasks.Total > 0 && status.Tasks.Done == status.Tasks.Total, nil
-}
-
-func ozStatus(repo, changeName string) (ozStatusResponse, error) {
-	var out ozStatusResponse
-	if err := runOzJSON(repo, []string{"status", changeName, "--json"}, &out); err != nil {
-		return ozStatusResponse{}, err
-	}
-	return out, nil
 }
 
 func runOzJSON(repo string, args []string, target any) error {

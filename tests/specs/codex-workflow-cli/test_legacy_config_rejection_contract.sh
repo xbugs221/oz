@@ -137,90 +137,25 @@ iterations:
 YAML
 
 run_rejection_case "old-cli" "cli" <<'YAML'
-parallel: true
 stages:
   execution:
     cli: codex
 YAML
 
 run_rejection_case "old-tool" "tool" <<'YAML'
-parallel: true
 stages:
   execution:
     tool: codex
 YAML
 
-run_rejection_case "old-before-cli" "cli" <<'YAML'
-parallel: true
-stages:
-  execution:
-    agent: codex
-    before:
-      - name: 代码库侦察员
-        purpose: 搜索相关源码
-        cli: pi
-YAML
-
-run_rejection_case "old-before-tool" "tool" <<'YAML'
-parallel: true
-stages:
-  execution:
-    agent: codex
-    before:
-      - name: 代码库侦察员
-        purpose: 搜索相关源码
-        tool: pi
-YAML
-
-run_rejection_case "old-before-stage" "stage" <<'YAML'
-parallel: true
-stages:
-  execution:
-    agent: codex
-    before:
-      - name: 代码库侦察员
-        purpose: 搜索相关源码
-        agent: pi
-        stage: before_execution
-YAML
-
 run_rejection_case "old-permissions" "permissions" <<'YAML'
-parallel: true
 stages:
   execution:
     agent: codex
     permissions: danger-full-access
 YAML
 
-run_rejection_case "old-parallel-groups" "groups" <<'YAML'
-parallel:
-  enabled: true
-  groups:
-    implementation_context:
-      mode: advisory
-      members:
-        - name: 代码库侦察员
-          purpose: 搜索相关源码
-          tool: pi
-stages:
-  execution:
-    agent: codex
-YAML
-
-run_rejection_case "old-mode" "mode" <<'YAML'
-parallel: true
-stages:
-  execution:
-    agent: codex
-    before:
-      - name: 代码库侦察员
-        purpose: 搜索相关源码
-        agent: pi
-        mode: advisory
-YAML
-
 run_rejection_case "old-validation-max" "max_attempts_per_stage" <<'YAML'
-parallel: true
 stages:
   execution:
     agent: codex

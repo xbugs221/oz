@@ -20,6 +20,8 @@ var (
 	qualityAttemptCounter     = regexp.MustCompile(`\battempt=\d+\b`)
 )
 
+const stageStatusAgentCompleted = "agent_completed"
+
 // runStage builds the stage prompt and invokes the proper agent session.
 func (e *Engine) runStage(ctx context.Context, state *State) error {
 	e.routeUntrustedQualityLoopTargetedRepair(state)
@@ -119,6 +121,12 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 	timing = state.StageTimings[state.Stage]
 	timing.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	state.StageTimings[state.Stage] = timing
+	if state.Stage == workflowStageExecution {
+		state.Stages[state.Stage] = stageStatusAgentCompleted
+		if err := saveState(e.Repo, *state); err != nil {
+			return err
+		}
+	}
 	if qaInput.DiffHash != "" {
 		qaReadOnlyPassed, gateErr := e.verifyQualityLoopQAReadOnlyGate(state)
 		if gateErr != nil {
@@ -135,7 +143,7 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 	if !archiveReadOnlyPassed {
 		return saveState(e.Repo, *state)
 	}
-	head, diff, snapshotErr := gitSnapshot(e.Repo)
+	head, diff, snapshotErr := e.gitSnapshotAfterStage()
 	if snapshotErr != nil {
 		return snapshotErr
 	}
@@ -149,6 +157,14 @@ func (e *Engine) runStage(ctx context.Context, state *State) error {
 		state.QualityLoop.DiffHash = qualityHashStrings(content)
 	}
 	return saveState(e.Repo, *state)
+}
+
+// gitSnapshotAfterStage supports deterministic failure injection at the post-agent boundary.
+func (e *Engine) gitSnapshotAfterStage() (string, string, error) {
+	if e.stageGitSnapshot != nil {
+		return e.stageGitSnapshot(e.Repo)
+	}
+	return gitSnapshot(e.Repo)
 }
 
 // routeUntrustedQualityLoopTargetedRepair sends legacy or tampered repair inputs through a fresh audit.
@@ -251,7 +267,15 @@ func (e *Engine) validateStage(ctx context.Context, state *State) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	attempt := runStageValidation(ctx, e.Repo, state.ChangeName, state.Stage, current.Attempts, state.Workflow.Validation)
+	attempt := runStageValidation(
+		ctx,
+		e.Repo,
+		state.ChangeName,
+		state.Stage,
+		current.Attempts,
+		state.Workflow.Validation,
+		allowsLegacyTaskCompatibility(*state),
+	)
 	if usesQualityLoop(state.Workflow) {
 		attempt.Kind = validationAttemptKind(attempt)
 		// DiffHash records the exact source snapshot supplied to this validation attempt.

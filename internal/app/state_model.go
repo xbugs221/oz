@@ -9,6 +9,7 @@ import (
 const (
 	internalGoDAGEngine             = "go-dag"
 	publicWorkflowEngineLabel       = "内嵌工作流"
+	currentProposalContractVersion  = "no-task-file-v1"
 	statusRunning                   = "running"
 	statusFailed                    = "failed"
 	statusStale                     = "stale"
@@ -42,6 +43,7 @@ type State struct {
 	RunID                     string                          `json:"run_id"`
 	ChangeName                string                          `json:"change_name"`
 	Sealed                    bool                            `json:"sealed"`
+	ProposalContractVersion   string                          `json:"proposal_contract_version,omitempty"`
 	Status                    string                          `json:"status"`
 	Stage                     string                          `json:"stage"`
 	Engine                    string                          `json:"engine,omitempty"`

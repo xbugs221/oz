@@ -55,7 +55,6 @@ write_demo_change() {
 - **当** 执行测试
 - **则** brief 存在
 MD
-  printf -- '- [ ] demo task\n' >"$repo/docs/changes/$change/task.md"
   cat >"$repo/docs/changes/$change/tests/test_smoke.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail

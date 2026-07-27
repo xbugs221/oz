@@ -543,7 +543,7 @@ func writeFlowControlChange(t *testing.T, repo, name string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, file := range []string{"acceptance.json", "task.md"} {
+	for _, file := range []string{"brief.md", "acceptance.json"} {
 		if err := os.WriteFile(filepath.Join(dir, file), []byte(file+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}

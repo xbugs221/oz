@@ -1,0 +1,41 @@
+{
+  "summary": "验证 standard 提案移除 task.md，并在创建、执行、校验和归档边界禁止重新引入该文件。",
+  "coverage": [
+    {
+      "spec": "场景：standard 提案不含 task.md 仍能通过严格校验",
+      "tests": ["no-task-file-contract"],
+      "evidence": ["no-task-file-runtime"],
+      "risk": "历史归档提案仍保留旧 task.md，但不参与 active 提案校验。"
+    },
+    {
+      "spec": "场景：active 提案出现 task.md 时校验失败，且执行相关技能禁止创建或修改该文件",
+      "tests": ["no-task-file-contract"],
+      "evidence": ["no-task-file-runtime"],
+      "risk": "无法约束绕过 oz 工作流直接写文件的外部程序；Git 审阅仍需识别越界写入。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "no-task-file-contract",
+      "source": "change_contract",
+      "path": "docs/changes/archive/2026-07-27-47-移除并禁止提案任务文件/tests/test_no_task_file_contract.sh",
+      "command": "bash docs/changes/archive/2026-07-27-47-移除并禁止提案任务文件/tests/test_no_task_file_contract.sh",
+      "purpose": "通过当前源码构建真实 oz，验证 standard 无 task.md 可校验、active task.md 被拒绝，并核对技能与运行门禁不再依赖任务复选框。",
+      "assertions": [
+        "完整 standard 提案不含 task.md 时 oz validate 返回 valid=true",
+        "同一 active 提案新增 task.md 后 oz validate 返回 valid=false 并解释该文件已禁止",
+        "oz-create、oz-exec、oz-archive 明令禁止创建或修改 task.md",
+        "执行 artifact gate 不再读取 task.md 或 tasks.total/tasks.done"
+      ],
+      "expected_initial_failure": "当前实现会拒绝缺少 task.md 的 standard 提案，并接受包含已勾选 task.md 的提案；技能和执行门禁仍依赖任务复选框。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "no-task-file-runtime",
+      "kind": "runtime_log",
+      "path": "test-results/47-no-task-file/runtime.log",
+      "purpose": "记录真实 oz 校验结果和技能/运行门禁检查结果。"
+    }
+  ]
+}

@@ -22,6 +22,7 @@ type Engine struct {
 	progressLines     int
 	stageRuntime      map[string]stageRuntime
 	inPlaceProgress   bool
+	stageGitSnapshot  func(string) (string, string, error)
 }
 
 // stageRuntime is transient process metadata shown beside the current stage.
@@ -100,18 +101,19 @@ func (e *Engine) createRun(changeName string) (State, error) {
 		return State{}, err
 	}
 	state := State{
-		RunID:        newRunID(),
-		ChangeName:   changeName,
-		Sealed:       true,
-		Status:       statusRunning,
-		Stage:        "execution",
-		Engine:       publicEngineLabel(workflow.Engine),
-		BaselineHead: head,
-		BaselineDiff: diff,
-		Sessions:     map[string]string{},
-		Stages:       map[string]string{},
-		Paths:        map[string]string{},
-		Workflow:     workflow,
+		RunID:                   newRunID(),
+		ChangeName:              changeName,
+		Sealed:                  true,
+		ProposalContractVersion: currentProposalContractVersion,
+		Status:                  statusRunning,
+		Stage:                   "execution",
+		Engine:                  publicEngineLabel(workflow.Engine),
+		BaselineHead:            head,
+		BaselineDiff:            diff,
+		Sessions:                map[string]string{},
+		Stages:                  map[string]string{},
+		Paths:                   map[string]string{},
+		Workflow:                workflow,
 	}
 	if e.PlanningSessionID != "" {
 		tool := e.PlanningTool

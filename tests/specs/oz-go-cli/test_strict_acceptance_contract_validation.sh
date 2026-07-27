@@ -53,12 +53,6 @@ cat >"$change_dir/spec.md" <<'MD'
 - **则** 缺断言或弱断言合同失败
 MD
 
-cat >"$change_dir/task.md" <<'MD'
-# 任务
-
-- [x] 1.1 写入示例合同
-MD
-
 cat >"$change_dir/tests/test_contract.sh" <<'SH'
 #!/usr/bin/env bash
 # 这个测试模拟提案自带契约测试，断言验收合同和用户简报都存在。
@@ -137,11 +131,11 @@ cat >"$change_dir/acceptance.json" <<'JSON'
       "id": "contract-demo",
       "source": "change_contract",
       "path": "docs/changes/1-严格验收合同/tests/test_contract.sh",
-      "command": "bash docs/changes/1-严格验收合同/tests/test_contract.sh",
-      "purpose": "证明验收合同引用真实测试",
+      "command": "bash docs/changes/1-严格验收合同/tests/test_contract.sh && mkdir -p test-results/strict-contract && printf 'validate passed\\n' > test-results/strict-contract/validate.log",
+      "purpose": "证明验收合同引用真实测试并生成 validate-log",
       "assertions": [
         "brief.md 随 active change 落盘，用户可通过简报理解变更",
-        "acceptance.json 通过真实测试入口被同一路径验证"
+        "acceptance.json 通过真实测试入口被同一路径验证并生成 test-results/strict-contract/validate.log"
       ],
       "expected_initial_failure": "缺少 brief.md 或 acceptance.json 时测试失败"
     }

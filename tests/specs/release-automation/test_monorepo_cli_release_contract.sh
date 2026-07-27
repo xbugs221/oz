@@ -68,7 +68,7 @@ grep -q '选择模型' "$tmp/release-notes-v1.1.9.md"
 bash scripts/extract-release-notes.sh CHANGELOG.md v1.2.0 "$tmp/release-notes-v1.2.0.md"
 grep -q '同一个修复会话' "$tmp/release-notes-v1.2.0.md"
 bash scripts/extract-release-notes.sh CHANGELOG.md v0.0.0-contract "$tmp/release-notes-unreleased.md"
-grep -q '暂无尚未发布' "$tmp/release-notes-unreleased.md"
+grep -q '不再创建 `task.md`' "$tmp/release-notes-unreleased.md"
 
 grep -q 'go test ./...' docs/specs/release-automation/spec.md
 grep -Eq 'CI 和 Release 使用本地 oz|本地 `oz`' docs/specs/release-automation/spec.md

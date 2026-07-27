@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Sources: 12-收窄验收gate到提案范围
-# 文件功能目的：验证已创建但未运行的旧提案不需要新增 scope 或 non_blocking 字段，也能继续通过 oz validate。
+# Sources: 12-收窄验收gate到提案范围, 47-移除并禁止提案任务文件
+# 文件功能目的：验证未增加 scope 或 non_blocking 字段的旧 acceptance 合同无需迁移，也能继续通过 oz validate。
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 result_dir="$repo_root/test-results/12-scope-gate"
-log="$result_dir/legacy-active-change-compatibility.log"
+log="$result_dir/legacy-acceptance-compatibility.log"
 oz_bin="$result_dir/oz"
 project="$result_dir/legacy-project"
 change="1-旧提案兼容"
@@ -23,7 +23,7 @@ cd "$repo_root"
 note "构建真实 oz 二进制"
 go build -o "$oz_bin" ./cmd/oz 2>&1 | tee -a "$log"
 
-note "创建旧格式 active change，不包含 scope 或 non_blocking 字段"
+note "创建无任务文件的 active change，保留旧 acceptance 字段结构"
 rm -rf "$project"
 mkdir -p "$project/docs/changes/$change/tests"
 git -C "$project" init -q
@@ -68,12 +68,6 @@ cat >"$project/docs/changes/$change/spec.md" <<'MD'
 - **则** `oz validate` 应当校验成功
 MD
 
-cat >"$project/docs/changes/$change/task.md" <<'MD'
-# 任务
-
-- [ ] 1.1 运行旧格式合同测试。
-MD
-
 cat >"$project/docs/changes/$change/tests/test_legacy_contract.sh" <<'SH'
 #!/usr/bin/env bash
 # 文件功能目的：作为旧提案兼容测试中的真实合同入口。
@@ -100,11 +94,11 @@ cat >"$project/docs/changes/$change/acceptance.json" <<'JSON'
       "id": "legacy-contract",
       "source": "change_contract",
       "path": "docs/changes/1-旧提案兼容/tests/test_legacy_contract.sh",
-      "command": "bash docs/changes/1-旧提案兼容/tests/test_legacy_contract.sh",
-      "purpose": "证明旧格式 active change 的测试和 acceptance 合同仍可被 validate 接受。",
+      "command": "bash docs/changes/1-旧提案兼容/tests/test_legacy_contract.sh && mkdir -p test-results/legacy-active-change && printf 'legacy acceptance passed\\n' > test-results/legacy-active-change/legacy-contract.log",
+      "purpose": "证明旧格式 active change 的测试和 acceptance 合同仍可被 validate 接受，并生成 legacy-contract-log。",
       "assertions": [
         "acceptance.json 存在且无需 scope 字段",
-        "brief.md 说明这是旧格式 active change"
+        "brief.md 说明这是旧格式 active change，并生成 test-results/legacy-active-change/legacy-contract.log"
       ],
       "expected_initial_failure": "该兼容性测试当前应通过；执行阶段必须保持通过。"
     }

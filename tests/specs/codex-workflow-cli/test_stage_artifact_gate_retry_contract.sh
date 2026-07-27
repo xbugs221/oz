@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证 oz flow 对每个主阶段的缺失或非法产物都使用同一角色会话重试修正，而不是直接失败。
-# Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同
+# 文件功能目的：验证 oz flow 对需要持久产物的阶段使用同一角色会话重试修正，而 execution 以成功返回和后续门禁判定完成。
+# Sources: 6-统一-oz-flow-阶段产物门禁重试并修复-parallel-artifact-合同, 47-移除并禁止提案任务文件
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -45,14 +45,6 @@ case "$1" in
     ;;
   validate)
     printf '{"valid":true,"errors":[],"warnings":[],"artifacts":{}}\n'
-    ;;
-  status)
-    change="$2"
-    if grep -q '\[x\]' "docs/changes/$change/task.md"; then
-      printf '{"change":"%s","status":"ready","tasks":{"total":1,"done":1}}\n' "$change"
-    else
-      printf '{"change":"%s","status":"incomplete","tasks":{"total":1,"done":0}}\n' "$change"
-    fi
     ;;
   *)
     printf 'unexpected oz command: %s\n' "$*" >&2
@@ -146,12 +138,7 @@ with call_log.open("a", encoding="utf-8") as fh:
         "has_artifact_gate_prompt": "Stage artifact gate failed" in prompt,
     }, ensure_ascii=False) + "\n")
 
-task_path = repo / "docs" / "changes" / change / "task.md"
 acceptance_path = repo / "docs" / "changes" / change / "acceptance.json"
-
-def mark_task_done():
-    text = task_path.read_text(encoding="utf-8")
-    task_path.write_text(text.replace("- [ ]", "- [x]"), encoding="utf-8")
 
 def repair_needs_more(path):
     path.write_text(json.dumps({
@@ -168,7 +155,6 @@ def repair_needs_more(path):
         "evidence": ["runtime evidence repaired in the same repairer session"],
         "checks": {
             "oz_aligned": True,
-            "tasks_verified": True,
             "tests_meaningful": True,
             "implementation_scoped": True,
             "runtime_behavior_verified": True,
@@ -184,7 +170,6 @@ def repair_clean(path):
         "non_blocking_findings": [],
         "checks": {
             "oz_aligned": True,
-            "tasks_verified": True,
             "tests_meaningful": True,
             "implementation_scoped": True,
             "runtime_behavior_verified": True,
@@ -260,10 +245,7 @@ def archive_change(write_delivery):
     if write_delivery:
         (run_dir / "delivery-summary.md").write_text("archive completed after artifact gate retry\n", encoding="utf-8")
 
-if stage == "execution":
-    if attempt >= 2:
-        mark_task_done()
-elif stage == "audit_1":
+if stage == "audit_1":
     if attempt >= 2:
         repair_needs_more(run_dir / "audit-1.json")
 elif stage == "audit_2":
@@ -356,12 +338,6 @@ cat >"$PROJECT/docs/changes/1-stage-artifact-retry/spec.md" <<'MD'
 系统必须同会话修正缺失或非法阶段产物。
 MD
 
-cat >"$PROJECT/docs/changes/1-stage-artifact-retry/task.md" <<'MD'
-# 任务
-
-- [ ] 1.1 完成阶段产物重试验证
-MD
-
 cat >"$PROJECT/docs/changes/1-stage-artifact-retry/tests/demo.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -422,7 +398,7 @@ YAML
 git -C "$PROJECT" add .
 git -C "$PROJECT" commit -q -m initial
 
-note "run oz flow and expect every stage artifact problem to be repaired in-session"
+note "run oz flow and expect artifact-producing stage problems to be repaired in-session"
 set +e
 CODEX_ATTEMPT_DIR="$TMP/attempts" \
 CODEX_CALL_LOG="$RESULT_DIR/codex-calls.jsonl" \
@@ -460,13 +436,15 @@ for record in records:
     by_stage.setdefault(record["stage"], []).append(record)
 
 required_retry = {
-    "execution": "thread-executor",
     "audit_1": "thread-repairer",
     "audit_2": "thread-repairer",
     "qa_1": "thread-qa",
     "targeted_repair_1": "thread-repairer",
     "archive": "thread-archiver",
 }
+execution_attempts = by_stage.get("execution", [])
+if len(execution_attempts) != 1 or execution_attempts[0].get("has_artifact_gate_prompt"):
+    raise SystemExit(f"execution should complete once without a file artifact retry: {execution_attempts}")
 for stage, session in required_retry.items():
     attempts = by_stage.get(stage, [])
     if len(attempts) < 2:
@@ -510,4 +488,4 @@ if [[ -z "$archive_dir" ]]; then
   fail "archive directory missing after archive retry"
 fi
 
-note "contract passed: all main stage artifact problems are repaired through same-session retry"
+note "contract passed: artifact-producing stages retry in-session without an execution task file"

@@ -26,7 +26,7 @@ oz 按变更大小选择 micro、small、standard 三种入口。数量只作为
 | --- | --- | --- |
 | micro | 不改变用户可感知行为、命令契约、状态语义或长期规格的纯实现修复 | TDD + git commit，不创建 change 目录 |
 | small | 单一业务意图，最多 2 个验收场景或 2 个 required tests，且没有复杂设计分歧 | `docs/changes/<编号-中文需求>/brief.md`、`acceptance.json`、`tests/` |
-| standard | 中大型、高风险、跨模块、多场景，或超过 small 上限 | 完整提案：`brief.md`、`proposal.md`、`design.md`、`spec.md`、`task.md`、`acceptance.json`、`tests/` |
+| standard | 中大型、高风险、跨模块、多场景，或超过 small 上限 | 完整提案：`brief.md`、`proposal.md`、`design.md`、`spec.md`、`acceptance.json`、`tests/` |
 
 ```text
 是否改变行为或长期规格？
@@ -54,8 +54,6 @@ flowchart TD
     D --> D1["边界在哪"]
     C --> S["spec.md"]
     S --> S1["预期结果是什么"]
-    C --> T["task.md"]
-    T --> T1["具体怎么做"]
     C --> A["acceptance.json"]
     A --> A1["验收必测项"]
     C --> UT["tests/（场景测试）"]
@@ -63,7 +61,10 @@ flowchart TD
     M["docs/specs/*.md"] --> LM["长期规范"]
     LM --> RS["tests/specs/*（长期回归测试集）"]
     R["test-results/acceptance-run/<change>/result.json"] --> E["测试证据清单"]
+    RT["执行器 Todo / state.json"] --> DP["动态实现计划（不进入 Git）"]
 ```
+
+active 提案禁止包含 `task.md`。创建阶段定义目标、边界和验收合同，具体步骤由执行器在 Todo 或运行态中动态决策；历史归档中的旧任务文件只作为历史资料保留。
 
 ## 命令入口
 
@@ -100,6 +101,8 @@ oz flow watch
 ```text
 内置默认 -> ~/oz-flow.yaml -> 仓库 oz-flow.yaml -> 本次 run 快照
 ```
+
+职责边界：skill 说明各角色怎么做；change 目录保存需求与范围；`acceptance.json` 是测试和证据的可执行合同；`oz flow` 决定何时推进阶段并执行门禁。
 
 常见门禁配置：
 
