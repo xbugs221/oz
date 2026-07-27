@@ -18,21 +18,24 @@ import (
 var Version = "dev"
 
 // runnerCapabilities lists the JSON subcommands promised by the runner contract.
-var runnerCapabilities = []string{"list-changes", "run", "run-acceptance", "resume", "restart", "status", "abort"}
+var runnerCapabilities = []string{"graph", "list-changes", "run", "run-acceptance", "resume", "restart", "status", "abort"}
 
 // RunnerState is the JSON DTO consumed by workflow runners.
 type RunnerState struct {
-	RunID         string              `json:"run_id"`
-	ChangeName    string              `json:"change_name"`
-	Status        string              `json:"status"`
-	Stage         string              `json:"stage"`
-	Stages        map[string]string   `json:"stages"`
-	Paths         map[string]string   `json:"paths"`
-	Sessions      map[string]string   `json:"sessions"`
-	Processes     []ProcessState      `json:"processes,omitempty"`
-	Worker        *WorkerRuntimeState `json:"worker,omitempty"`
-	Error         string              `json:"error"`
-	Observability *statusView         `json:"observability,omitempty"`
+	RunID              string              `json:"run_id"`
+	ChangeName         string              `json:"change_name"`
+	Status             string              `json:"status"`
+	Stage              string              `json:"stage"`
+	Stages             map[string]string   `json:"stages"`
+	Paths              map[string]string   `json:"paths"`
+	Sessions           map[string]string   `json:"sessions"`
+	Processes          []ProcessState      `json:"processes,omitempty"`
+	Worker             *WorkerRuntimeState `json:"worker,omitempty"`
+	Error              string              `json:"error"`
+	WorkflowGeneration string              `json:"workflow_generation,omitempty"`
+	QualityMode        string              `json:"quality_mode,omitempty"`
+	BlockedFromStage   string              `json:"blocked_from_stage,omitempty"`
+	Observability      *statusView         `json:"observability,omitempty"`
 }
 
 // runnerContract is the capability discovery payload for oz flow.
@@ -59,16 +62,19 @@ func runnerStateFromState(state State) RunnerState {
 	normalizeStateMaps(&state)
 	refreshStateProcesses(&state)
 	return RunnerState{
-		RunID:      state.RunID,
-		ChangeName: state.ChangeName,
-		Status:     state.Status,
-		Stage:      state.Stage,
-		Stages:     state.Stages,
-		Paths:      state.Paths,
-		Sessions:   state.Sessions,
-		Processes:  state.Processes,
-		Worker:     state.Worker,
-		Error:      state.Error,
+		RunID:              state.RunID,
+		ChangeName:         state.ChangeName,
+		Status:             state.Status,
+		Stage:              state.Stage,
+		Stages:             state.Stages,
+		Paths:              state.Paths,
+		Sessions:           state.Sessions,
+		Processes:          state.Processes,
+		Worker:             state.Worker,
+		Error:              state.Error,
+		WorkflowGeneration: state.Workflow.Generation,
+		QualityMode:        state.QualityLoop.Mode,
+		BlockedFromStage:   state.QualityLoop.BlockedFromStage,
 	}
 }
 

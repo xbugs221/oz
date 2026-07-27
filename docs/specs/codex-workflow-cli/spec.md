@@ -147,33 +147,53 @@
 - **且** prompt 只保留 `state.json`、change 目录、`acceptance.json` 和并行上下文 artifact 读取入口
 - **且** prompt 不得重复 `oz-exec` 技能已定义的 required_tests、任务完成标准或长文档读取策略
 
-#### 场景：同会话优化后由独立 QA 放行
+#### 场景：全量自查后由独立 QA 放行
 
-// Sources: 44-简化审核修正为自审自修循环
+// Sources: 45-收敛全量自查与QA定向修复闭环
 
-- **给定** `max_repair_iterations` 大于零
+- **给定** 新 sealed run 使用 `quality-loop-v1`
 - **当** execution 完成
-- **则** 系统进入 `repair_1`，后续 repair 轮次复用同一 backend-scoped repairer session
-- **且** repair `needs_more` 进入下一 repair；首次 `clean` 必须进入下一轮强制重审确认，不设置固定最低轮数
-- **且** 强制重审重新读取状态、验收合同、完整差异与验证结果；确认仍为 `clean` 才进入同轮独立 QA，发现问题则继续 repair 并在下次 `clean` 后重新确认
-- **且** QA `needs_fix` 进入下一 repair，QA `clean` 且同轮 repair 已确认 clean 后才能归档
-- **且**轮次耗尽仍未放行时工作流阻塞
+- **则** 系统进入 `audit_1`，后续全量自查与定向修复复用同一 backend-scoped repairer session
+- **且** audit 必须重新读取状态、封存验收合同、完整差异与验证结果；发现并修复问题后进入下一次 audit
+- **且** 只有 audit `clean`、全部 required tests 与 validation commands 通过且结果绑定当前差异，系统才进入独立 `qa_1`
+- **且** 每轮 QA 使用隔离会话；QA `clean` 才能归档
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
 
-#### 场景：零轮 repair 与旧运行兼容
+#### 场景：QA 打回后定向修复
 
-// Sources: 44-简化审核修正为自审自修循环
+// Sources: 45-收敛全量自查与QA定向修复闭环
 
-- **给定**新运行配置 `max_repair_iterations=0`
-- **则**系统禁用 repair、不生成 repair artifact，仅由独立 QA clean 放行
-- **且** QA `needs_fix` 时工作流阻塞
-- **当**恢复缺少新状态机代际标记的旧 sealed run
-- **则**系统继续按快照中的 review/fix 状态机推进，不得静默迁移
+- **给定** `qa_N` 返回 `needs_fix`、blocking findings 和失败 acceptance IDs
+- **则** 系统进入 `targeted_repair_N`，并向 repairer 提供最新 QA artifact
+- **且** 定向修复只处理最新 findings、失败验收项及直接相关回归，不重新启动全量扩审
+- **且** 失败测试、全部 required tests 与 validation commands 均通过且结果绑定当前差异后，系统才进入隔离的 `qa_(N+1)`
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
+
+#### 场景：质量循环不受固定轮次限制
+
+// Sources: 45-收敛全量自查与QA定向修复闭环
+
+- **给定** 新运行读取到 `max_repair_iterations`
+- **则** 该值只作为迁移诊断保留，不得作为 `quality-loop-v1` 的终止条件
+- **且** 有源码、测试、验证或 evidence 进展时，超过历史十轮后仍可继续
+- **且** 缺少环境前置条件时进入 `blocked_environment`，补齐后从原阶段恢复
+- **且** 相同失败指纹下源码、测试、验证和 evidence 均无变化时进入 `blocked_stalled`，提供新输入后可恢复
+- **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
+
+#### 场景：旧 sealed 运行按快照兼容
+
+// Sources: 44-简化审核修正为自审自修循环, 45-收敛全量自查与QA定向修复闭环
+
+- **给定** 已 sealed 的 `repair-v1` run
+- **则** 系统继续按快照中的 `max_repair_iterations`、有限 repair/QA 阶段和零轮 repair 语义恢复
+- **当** 恢复缺少 repair 代际标记的更早 sealed run
+- **则** 系统继续按快照中的 review/fix 状态机推进
+- **且** 恢复过程不得静默迁移或改写旧 state、artifact、prompt snapshot
+- **测试**：`go test ./internal/app -run 'Test(RepairWorkflowDAGResumeEvidence|ZeroRepairWorkflowDAGArchive|RepairLimitBlockedWorkflowEvidence|LegacyRepairWorkflowResumeEvidence)$' -count=1`
 
 #### 场景：阶段跳转规则由独立决策层表达
 
-- **当** sealed run 需要推进 execution、review、fix、QA 或 archive 阶段
+- **当** sealed run 需要推进 execution、audit、targeted repair、review、fix、QA 或 archive 阶段
 - **则** 系统必须通过独立 stage decision 层表达下一阶段、下一状态和阻断原因
 - **且** 该决策层必须可被 `internal/app` 的 Go 测试直接验证
 - **且** `state.go` 不得重新承载全部阶段跳转规则

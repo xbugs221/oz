@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证默认最大优化轮数为 5，且 oz flow graph 输出紧凑中文 Mermaid 图。
+# 文件功能目的：验证默认质量循环不设轮次上限，且 oz flow graph 输出紧凑中文 Mermaid 图。
+# Sources: 45-收敛全量自查与QA定向修复闭环
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -39,13 +40,15 @@ mkdir -p "$PROJECT"
   git commit -qm init
 )
 
-note "generate default oz-flow.yaml and verify iteration budget"
+note "generate default oz-flow.yaml without a fixed iteration budget"
 (
   cd "$PROJECT"
   "$OZ_BIN" flow config
 ) >"$RESULT_DIR/config.out" 2>"$RESULT_DIR/config.err"
 cp "$PROJECT/oz-flow.yaml" "$RESULT_DIR/oz-flow.yaml"
-grep -q 'max_repair_iterations: 5' "$PROJECT/oz-flow.yaml" || fail "default max_repair_iterations should be 5"
+if grep -q 'max_repair_iterations:' "$PROJECT/oz-flow.yaml"; then
+  fail "new default config should not emit deprecated max_repair_iterations"
+fi
 if grep -q 'max_review_iterations:' "$PROJECT/oz-flow.yaml"; then
   fail "new config should not emit legacy max_review_iterations"
 fi
@@ -60,16 +63,18 @@ note "render mermaid graph and verify it is compact"
 ) >"$RESULT_DIR/graph.mmd" 2>"$RESULT_DIR/graph.err"
 grep -q 'flowchart TD' "$RESULT_DIR/graph.mmd" || fail "mermaid graph should render a flowchart"
 
-if grep -Eq 'repair_2|qa_2|repair_5|qa_5|review_[1-9]|fix_[1-9]' "$RESULT_DIR/graph.mmd"; then
-  fail "mermaid graph should not repeat repair/qa nodes or expose legacy review/fix nodes"
+if grep -Eq 'repair_[1-9]|qa_[1-9]|review_[1-9]|fix_[1-9]|第[0-9]+轮|[0-9]+轮上限' "$RESULT_DIR/graph.mmd"; then
+  fail "mermaid graph should use an unbounded template without legacy finite stages"
 fi
 
 if grep -Eq 'subagent:|fan-in|planning_context|implementation_context|before_review|before_qa|before_execution' "$RESULT_DIR/graph.mmd"; then
   fail "mermaid visible labels should not mix internal English subagent/group names"
 fi
 
-grep -q '优化' "$RESULT_DIR/graph.mmd" || fail "graph should show the repair loop in Chinese"
+grep -q '全量自查 audit_N' "$RESULT_DIR/graph.mmd" || fail "graph should show the pre-QA full audit loop"
+grep -q '定向修复 targeted_repair_N' "$RESULT_DIR/graph.mmd" || fail "graph should show the QA-targeted repair loop"
 grep -Eq '独立(QA|测试)' "$RESULT_DIR/graph.mmd" || fail "graph should keep QA as an independent gate"
-grep -Eq '5|五' "$RESULT_DIR/graph.mmd" || fail "graph should communicate the 5-round repair budget"
+grep -q '环境阻塞' "$RESULT_DIR/graph.mmd" || fail "graph should show recoverable environment blocking"
+grep -q '停滞阻塞' "$RESULT_DIR/graph.mmd" || fail "graph should show recoverable stalled blocking"
 
-note "contract passed: default repair budget is 5 and graph is compact Chinese"
+note "contract passed: default quality loop is unbounded and graph is compact Chinese"

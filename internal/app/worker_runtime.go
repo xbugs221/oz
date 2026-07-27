@@ -3,6 +3,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -21,7 +22,32 @@ const (
 	workerHeartbeatStaleAfter = 5 * time.Minute
 )
 
-var workerDiagnosticStderr io.Writer = os.Stderr
+var (
+	workerDiagnosticStderr io.Writer = os.Stderr
+	releaseDetachedProcess           = func(process *os.Process) error { return process.Release() }
+)
+
+// detachedWorkerStartError records whether a detached process exists despite a handoff error.
+type detachedWorkerStartError struct {
+	Cause          error
+	ProcessStarted bool
+}
+
+// Error describes the detached worker handoff failure.
+func (e *detachedWorkerStartError) Error() string {
+	return e.Cause.Error()
+}
+
+// Unwrap exposes the underlying process error.
+func (e *detachedWorkerStartError) Unwrap() error {
+	return e.Cause
+}
+
+// detachedWorkerProcessStarted reports whether rollback would conflict with a launched worker.
+func detachedWorkerProcessStarted(err error) bool {
+	var target *detachedWorkerStartError
+	return errors.As(err, &target) && target.ProcessStarted
+}
 
 // startDetachedWorkerCommand starts cmd with stdout and stderr appended to logPath.
 func startDetachedWorkerCommand(cmd *exec.Cmd, logPath string) error {
@@ -35,7 +61,13 @@ func startDetachedWorkerCommand(cmd *exec.Cmd, logPath string) error {
 	}
 	fmt.Fprintf(logFile, "[%s] spawned pid=%d\n", time.Now().UTC().Format(time.RFC3339Nano), cmd.Process.Pid)
 	_ = logFile.Close()
-	return cmd.Process.Release()
+	if err := releaseDetachedProcess(cmd.Process); err != nil {
+		return &detachedWorkerStartError{
+			Cause:          fmt.Errorf("后台 worker 已启动但进程句柄交接失败：%w", err),
+			ProcessStarted: true,
+		}
+	}
+	return nil
 }
 
 // attachDetachedWorkerLog connects both worker output streams to one persistent log file.

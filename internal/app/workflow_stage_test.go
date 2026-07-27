@@ -15,6 +15,8 @@ func TestParseWorkflowStageCoversPublicStageStrings(t *testing.T) {
 	}{
 		{name: "planning", stage: "planning", kind: workflowStagePlanning},
 		{name: "execution", stage: "execution", kind: workflowStageExecution},
+		{name: "audit", stage: "audit_12", kind: workflowStageAudit, iteration: 12, iterable: true},
+		{name: "targeted repair", stage: "targeted_repair_13", kind: workflowStageTargetedRepair, iteration: 13, iterable: true},
 		{name: "repair", stage: "repair_3", kind: workflowStageRepair, iteration: 3, iterable: true},
 		{name: "review", stage: "review_2", kind: workflowStageReview, iteration: 2, iterable: true},
 		{name: "qa", stage: "qa_3", kind: workflowStageQA, iteration: 3, iterable: true},
@@ -59,6 +61,8 @@ func TestNormalizeRunStatusGroupsPublicStrings(t *testing.T) {
 		{status: "completed", want: runStatus(statusDone), done: true, terminal: true},
 		{status: statusDone, want: runStatus(statusDone), done: true, terminal: true},
 		{status: "validation_failed", want: runStatus(statusFailed), terminal: true},
+		{status: statusBlockedEnvironment, want: runStatus(statusBlockedEnvironment), terminal: true, blocked: true},
+		{status: statusBlockedStalled, want: runStatus(statusBlockedStalled), terminal: true, blocked: true},
 		{status: statusValidationBlocked, want: runStatus(statusValidationBlocked), terminal: true, blocked: true},
 		{status: statusAcceptanceContractBlocked, want: runStatus(statusAcceptanceContractBlocked), terminal: true, blocked: true},
 		{status: statusInterrupted, want: runStatus(statusInterrupted), terminal: true},

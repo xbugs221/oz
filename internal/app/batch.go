@@ -194,6 +194,8 @@ func (e *Engine) RunBatch(ctx context.Context, batchID string) error {
 					return err
 				}
 				batch.CurrentIndex++
+			} else if isRecoverableQualityLoopBlock(state) {
+				return nil
 			} else if isBatchTerminalState(state) {
 				return e.failBatch(batch.BatchID, changeName, runID, fmt.Errorf("run %s 已停止：%s/%s", runID, state.Status, state.Stage))
 			} else {
@@ -238,6 +240,15 @@ func (e *Engine) RunBatch(ctx context.Context, batchID string) error {
 			return nil
 		}
 	}
+}
+
+// isRecoverableQualityLoopBlock keeps a batch attached to the paused run for explicit restart.
+func isRecoverableQualityLoopBlock(state State) bool {
+	if !usesQualityLoop(state.Workflow) {
+		return false
+	}
+	return state.Status == statusBlockedEnvironment || state.Status == statusBlockedStalled ||
+		state.Stage == statusBlockedEnvironment || state.Stage == statusBlockedStalled
 }
 
 // AbortBatch marks a batch aborted and aborts its current run when present.
@@ -433,6 +444,7 @@ func batchStatusLines(repo string, batch *BatchState, batchAlias string, _ []Sta
 				for _, line := range compactStatusLines(view) {
 					lines = append(lines, fmt.Sprintf("  %s", line))
 				}
+				lines = append(lines, qualityLoopBatchRecoveryStatusLines(state, batchAlias)...)
 				if batch.Status == batchStatusRunning && isStaleRunningRun(repo, state) {
 					lines = append(lines, fmt.Sprintf("  提示: 当前 run 的 lock 已失效，可运行 oz flow restart -%s 重试当前批量阶段", batchAlias))
 				}

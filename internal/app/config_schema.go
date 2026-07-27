@@ -212,6 +212,7 @@ func mappingHasKey(node *yaml.Node, key string) bool {
 	return false
 }
 
+// workflowConfigFromInput migrates user YAML into a dynamic quality-loop snapshot.
 func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
 	if input.Defaults.hasValues() {
 		return WorkflowConfig{}, fmt.Errorf("defaults 是旧字段，已删除")
@@ -225,7 +226,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	if input.legacyParallelSet {
 		return WorkflowConfig{}, fmt.Errorf("parallel 是旧字段，已删除")
 	}
-	maxIterations := defaultMaxRepairIterations
+	maxIterations := 0
 	engine := "go-dag"
 	var basePrompts map[string]string
 	byKind := defaultStageOptionsByKind()
@@ -249,6 +250,10 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		if option, ok := baseConfig.Stages["repair_1"]; ok {
 			byKind["repair"] = option
+		} else if option, ok := baseConfig.Stages["audit_1"]; ok {
+			byKind["repair"] = option
+		} else if option, ok := baseConfig.Stages["targeted_repair_1"]; ok {
+			byKind["repair"] = option
 		}
 		if option, ok := baseConfig.Stages["review_1"]; ok {
 			byKind["review"] = option
@@ -264,13 +269,13 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		return WorkflowConfig{}, fmt.Errorf("max_repair_iterations 与弃用的 max_review_iterations 不能同时出现")
 	}
 	if input.MaxRepairIterations != nil {
-		if *input.MaxRepairIterations < 0 || *input.MaxRepairIterations > 10 {
-			return WorkflowConfig{}, fmt.Errorf("max_repair_iterations 必须在 0 到 10 之间")
+		if *input.MaxRepairIterations < 0 {
+			return WorkflowConfig{}, fmt.Errorf("max_repair_iterations 不能小于 0")
 		}
 		maxIterations = *input.MaxRepairIterations
 	} else if input.MaxReviewIterations != nil {
-		if *input.MaxReviewIterations < 0 || *input.MaxReviewIterations > 10 {
-			return WorkflowConfig{}, fmt.Errorf("max_review_iterations 必须在 0 到 10 之间")
+		if *input.MaxReviewIterations < 0 {
+			return WorkflowConfig{}, fmt.Errorf("max_review_iterations 不能小于 0")
 		}
 		maxIterations = *input.MaxReviewIterations
 	}
@@ -317,11 +322,17 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		byKind[kind] = base
 	}
-	config := WorkflowConfig{Engine: engine, Generation: repairWorkflowGeneration, MaxRepairIterations: maxIterations, Stages: map[string]StageOptions{
-		"planning":  byKind["planning"],
-		"execution": byKind["execution"],
-		"archive":   byKind["archive"],
+	config := WorkflowConfig{Engine: engine, Generation: qualityLoopWorkflowGeneration, MaxRepairIterations: maxIterations, Stages: map[string]StageOptions{
+		"planning":          byKind["planning"],
+		"execution":         byKind["execution"],
+		"audit_1":           byKind["repair"],
+		"qa_1":              byKind["qa"],
+		"targeted_repair_1": byKind["repair"],
+		"archive":           byKind["archive"],
 	}, Prompts: basePrompts}
+	if input.MaxRepairIterations != nil {
+		config.Warnings = append(config.Warnings, "max_repair_iterations 已弃用；quality-loop-v1 仅保留该值用于诊断，不作为终止上限")
+	}
 	if input.MaxReviewIterations != nil || input.Stages["review"].hasValues() || input.Stages["fix"].hasValues() {
 		config.Warnings = append(config.Warnings, "max_review_iterations 与 review/fix 配置已弃用并迁移为 repair")
 	}
@@ -330,13 +341,6 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		return WorkflowConfig{}, err
 	}
 	config.Validation = validation
-	for i := 1; i <= maxIterations; i++ {
-		config.Stages[fmt.Sprintf("repair_%d", i)] = byKind["repair"]
-		config.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]
-	}
-	if maxIterations == 0 {
-		config.Stages["qa_1"] = byKind["qa"]
-	}
 	for key, override := range input.Iterations {
 		if !iterationStage.MatchString(key) {
 			return WorkflowConfig{}, fmt.Errorf("未知轮次阶段 %q", key)

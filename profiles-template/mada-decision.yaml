@@ -1,4 +1,3 @@
-max_repair_iterations: 5
 stages:
   planning:
     agent: codex

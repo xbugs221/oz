@@ -113,7 +113,10 @@ if bad_artifacts:
     raise SystemExit(f"graph must not contain parallel artifacts: {bad_artifacts}")
 
 node_ids = {node.get("id") for node in nodes}
-required = {"execution", "repair_1", "qa_1", "archive", "gate_repair_1", "gate_qa_1", "gate_archive"}
+required = {
+    "execution", "audit_N", "qa_N", "targeted_repair_N", "archive",
+    "gate_audit_N", "gate_qa_N", "gate_targeted_repair_N", "gate_archive",
+}
 missing = sorted(required - node_ids)
 if missing:
     raise SystemExit(f"graph missing main workflow nodes: {missing}")

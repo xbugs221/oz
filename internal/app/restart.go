@@ -3,8 +3,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -76,19 +79,42 @@ func ResolveRestartTarget(repo string, args []string) (kind string, ref StatusRe
 
 // RestartRunDetached resets a recoverable run and starts a detached worker.
 func (e *Engine) RestartRunDetached(runID string, allowUnknownLock bool) error {
-	if _, err := e.prepareRestartRun(runID, allowUnknownLock); err != nil {
+	state, err := loadState(e.Repo, runID)
+	if err != nil {
 		return err
 	}
-	return startDetachedCommand(e.Repo, runID)
+	rollback, err := captureDetachedRunRollback(e.Repo, state)
+	if err != nil {
+		return err
+	}
+	if _, err := e.prepareRestartRun(runID, allowUnknownLock); err != nil {
+		return restoreStateAfterDetachedPreparationFailure(e.Repo, rollback, "restart", err)
+	}
+	preparedHash, err := detachedRunStateHash(e.Repo, runID)
+	if err != nil {
+		return restoreStateAfterDetachedPreparationFailure(e.Repo, rollback, "restart", err)
+	}
+	if err := startDetachedCommand(e.Repo, runID); err != nil {
+		return restoreStateAfterDetachedFailure(e.Repo, rollback, preparedHash, "restart", err)
+	}
+	return nil
 }
 
 // RestartRunJSON resets a recoverable run, emits its DTO, then continues inline.
 func (e *Engine) RestartRunJSON(ctx context.Context, runID string, stdout io.Writer) error {
+	rollback, err := loadState(e.Repo, runID)
+	if err != nil {
+		_ = writeFailedRunnerError(stdout, runID, err)
+		return err
+	}
 	if _, err := e.prepareRestartRun(runID, false); err != nil {
 		_ = writeFailedRunnerError(stdout, runID, err)
 		return err
 	}
-	if err := e.ResumeRunJSON(ctx, runID, stdout); err != nil {
+	if err := e.resumeRunWithRollback(ctx, runID, false, stdout, &rollback); err != nil {
+		if isRunnerStartupWriteError(err) {
+			return err
+		}
 		if state, loadErr := loadState(e.Repo, runID); loadErr == nil {
 			if isRunLockedError(err) {
 				state.Error = err.Error()
@@ -118,6 +144,14 @@ func (e *Engine) prepareRestartRun(runID string, allowUnknownLock bool) (State, 
 	if err := clearRestartLock(e.Repo, runID, allowUnknownLock); err != nil {
 		return State{}, err
 	}
+	if err := e.validateResumePrerequisites(&state); err != nil {
+		return State{}, err
+	}
+	if state.Status == statusBlockedEnvironment || state.Status == statusBlockedStalled {
+		if err := e.prepareQualityLoopResume(&state, true); err != nil {
+			return State{}, err
+		}
+	}
 	state.Status = statusRunning
 	state.Error = ""
 	if state.Stage == "" || state.Stage == statusInterrupted || state.Stage == statusAcceptanceContractBlocked {
@@ -125,13 +159,6 @@ func (e *Engine) prepareRestartRun(runID string, allowUnknownLock bool) (State, 
 	}
 	if state.Stages != nil && state.Stage != "" && state.Stages[state.Stage] == statusInterrupted {
 		delete(state.Stages, state.Stage)
-	}
-	if !hasWorkflowConfig(state) {
-		return State{}, fmt.Errorf("run %s 缺少 workflow_config 快照", runID)
-	}
-	normalizeWorkflowConfig(&state.Workflow)
-	if err := e.Registry.ResolveForWorkflow(state.Workflow); err != nil {
-		return State{}, err
 	}
 	if err := saveState(e.Repo, state); err != nil {
 		return State{}, err
@@ -141,10 +168,111 @@ func (e *Engine) prepareRestartRun(runID string, allowUnknownLock bool) (State, 
 
 // RestartBatchDetached resets a recoverable batch and starts a detached batch worker.
 func (e *Engine) RestartBatchDetached(batchID string) error {
-	if err := e.prepareRestartBatch(batchID, true); err != nil {
+	batchRollback, runRollback, err := e.detachedBatchRollback(batchID)
+	if err != nil {
 		return err
 	}
-	return startDetachedBatchCommand(e.Repo, batchID)
+	if err := e.prepareRestartBatch(batchID, true); err != nil {
+		batchHash, runHash, hashErr := detachedBatchPreparedHashes(e.Repo, batchRollback, runRollback)
+		if hashErr != nil {
+			return errors.Join(err, fmt.Errorf("读取 batch preparation 回滚代次失败：%w", hashErr))
+		}
+		return restoreDetachedBatchFailure(e.Repo, batchRollback, runRollback, batchHash, runHash, err)
+	}
+	batchHash, runHash, err := detachedBatchPreparedHashes(e.Repo, batchRollback, runRollback)
+	if err != nil {
+		return err
+	}
+	if err := startDetachedBatchCommand(e.Repo, batchID); err != nil {
+		return restoreDetachedBatchFailure(e.Repo, batchRollback, runRollback, batchHash, runHash, err)
+	}
+	return nil
+}
+
+// detachedBatchRollback snapshots the batch and its current run before restart preparation.
+func (e *Engine) detachedBatchRollback(batchID string) (BatchState, *detachedRunRollback, error) {
+	batch, err := loadBatchState(e.Repo, batchID)
+	if err != nil {
+		return BatchState{}, nil, err
+	}
+	runID := restartBatchCurrentRunID(batch)
+	if runID == "" {
+		return batch, nil, nil
+	}
+	state, err := loadState(e.Repo, runID)
+	if err != nil {
+		return BatchState{}, nil, err
+	}
+	rollback, err := captureDetachedRunRollback(e.Repo, state)
+	if err != nil {
+		return BatchState{}, nil, err
+	}
+	return batch, &rollback, nil
+}
+
+// detachedBatchPreparedHashes binds compensation to the exact prepared batch and run generations.
+func detachedBatchPreparedHashes(
+	repo string,
+	batch BatchState,
+	run *detachedRunRollback,
+) (string, string, error) {
+	batchData, err := os.ReadFile(filepath.Join(batchDir(repo, batch.BatchID), "state.json"))
+	if err != nil {
+		return "", "", err
+	}
+	runHash := ""
+	if run != nil {
+		runHash, err = detachedRunStateHash(repo, run.State.RunID)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	return qualityHashStrings(string(batchData)), runHash, nil
+}
+
+// restoreDetachedBatchFailure compensates batch/run state only when both prepared generations are unchanged.
+func restoreDetachedBatchFailure(
+	repo string,
+	batchRollback BatchState,
+	runRollback *detachedRunRollback,
+	expectedBatchHash string,
+	expectedRunHash string,
+	operationErr error,
+) error {
+	if detachedWorkerProcessStarted(operationErr) {
+		return operationErr
+	}
+	lockPath := batchDir(repo, batchRollback.BatchID) + ".lock"
+	batchUnlock, err := flockLock(lockPath)
+	if err != nil {
+		return errors.Join(operationErr, fmt.Errorf("获取 batch 回滚 lease 失败：%w", err))
+	}
+	defer func() { _ = batchUnlock() }()
+	currentBatch, err := os.ReadFile(filepath.Join(batchDir(repo, batchRollback.BatchID), "state.json"))
+	if err != nil {
+		return errors.Join(operationErr, fmt.Errorf("读取 batch 回滚代次失败：%w", err))
+	}
+	if expectedBatchHash == "" || qualityHashStrings(string(currentBatch)) != expectedBatchHash {
+		return errors.Join(operationErr, fmt.Errorf("batch 后台启动前状态代次已变化，拒绝陈旧回滚"))
+	}
+	if runRollback != nil {
+		runUnlock, lockErr := acquireLock(repo, runRollback.State.RunID)
+		if lockErr != nil {
+			return errors.Join(operationErr, fmt.Errorf("batch 当前 run 已有活动 lease，拒绝陈旧回滚：%w", lockErr))
+		}
+		defer runUnlock()
+		restored, restoreErr := restoreDetachedRunIfCurrent(repo, *runRollback, expectedRunHash)
+		if restoreErr != nil {
+			return errors.Join(operationErr, fmt.Errorf("恢复 batch 当前 run 失败：%w", restoreErr))
+		}
+		if !restored {
+			return errors.Join(operationErr, fmt.Errorf("batch 当前 run 状态代次已变化，拒绝陈旧回滚"))
+		}
+	}
+	if err := saveBatchState(repo, batchRollback); err != nil {
+		return errors.Join(operationErr, fmt.Errorf("恢复 batch 后台启动前状态失败：%w", err))
+	}
+	return operationErr
 }
 
 // RestartBatchJSON resets a recoverable batch and continues it inline.
@@ -230,7 +358,7 @@ func (e *Engine) prepareRestartBatch(batchID string, allowUnknownLock bool) erro
 // ensureRunRestartable rejects terminal states that require manual intervention.
 func ensureRunRestartable(state State) error {
 	switch state.Status {
-	case statusFailed, statusInterrupted, statusRunning, statusAcceptanceContractBlocked:
+	case statusFailed, statusInterrupted, statusRunning, statusAcceptanceContractBlocked, statusBlockedEnvironment, statusBlockedStalled:
 		return nil
 	case statusDone:
 		return fmt.Errorf("工作流 %s 已完成，不能重启", state.RunID)

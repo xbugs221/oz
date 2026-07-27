@@ -123,7 +123,7 @@ role = {
     "execution": "executor",
     "archive": "archiver",
 }.get(stage)
-if role is None and stage.startswith("repair_"):
+if role is None and (stage.startswith("audit_") or stage.startswith("targeted_repair_")):
     role = "repairer"
 elif role is None and stage.startswith("qa_"):
     role = "qa"
@@ -220,22 +220,55 @@ def qa_clean(path):
         ]
     }, ensure_ascii=False), encoding="utf-8")
 
+def qa_needs_fix(path):
+    """写入覆盖完整 acceptance matrix 的 QA 打回产物，驱动真实定向修复阶段。"""
+    path.write_text(json.dumps({
+        "summary": "QA 发现需要定向修复的运行时问题",
+        "decision": "needs_fix",
+        "findings": [{
+            "title": "修复定向运行时证据",
+            "severity": "major",
+            "scope": "current_change",
+            "evidence": "targeted runtime evidence is stale",
+            "recommendation": "更新证据并复跑完整验收"
+        }],
+        "acceptance_matrix": [
+            {
+                "id": "contract-demo",
+                "status": "failed",
+                "artifact": "docs/changes/1-stage-artifact-retry/tests/demo.sh",
+                "evidence": "contract requires one targeted repair"
+            },
+            {
+                "id": "runtime-demo",
+                "status": "passed",
+                "artifact": "test-results/demo.zip",
+                "evidence": "runtime trace remains available"
+            }
+        ],
+        "evidence": [
+            "runtime evidence: Playwright trace test-results/demo.zip"
+        ]
+    }, ensure_ascii=False), encoding="utf-8")
+
 def archive_change(write_delivery):
     archive = repo / "docs" / "changes" / "archive" / ("2026-06-09-" + change)
-    archive.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(acceptance_path, archive / "acceptance.json")
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    active = repo / "docs" / "changes" / change
+    if active.exists() and not archive.exists():
+        shutil.move(str(active), str(archive))
     if write_delivery:
         (run_dir / "delivery-summary.md").write_text("archive completed after artifact gate retry\n", encoding="utf-8")
 
 if stage == "execution":
     if attempt >= 2:
         mark_task_done()
-elif stage == "repair_1":
+elif stage == "audit_1":
     if attempt >= 2:
-        repair_needs_more(run_dir / "repair-1.json")
-elif stage == "repair_2":
+        repair_needs_more(run_dir / "audit-1.json")
+elif stage == "audit_2":
     if attempt == 1:
-        (run_dir / "repair-2.json").write_text(json.dumps({
+        (run_dir / "audit-2.json").write_text(json.dumps({
             "summary": "非法 severity",
             "decision": "needs_more",
             "findings": [{
@@ -250,10 +283,10 @@ elif stage == "repair_2":
             "checks": {}
         }, ensure_ascii=False), encoding="utf-8")
     else:
-        repair_clean(run_dir / "repair-2.json")
-elif stage == "qa_2":
+        repair_clean(run_dir / "audit-2.json")
+elif stage == "qa_1":
     if attempt == 1:
-        (run_dir / "qa-2.json").write_text(json.dumps({
+        (run_dir / "qa-1.json").write_text(json.dumps({
             "summary": "QA 缺少 acceptance matrix",
             "decision": "clean",
             "findings": [],
@@ -261,7 +294,13 @@ elif stage == "qa_2":
             "evidence": ["runtime evidence: Playwright trace test-results/demo.zip"]
         }, ensure_ascii=False), encoding="utf-8")
     else:
-        qa_clean(run_dir / "qa-2.json")
+        qa_needs_fix(run_dir / "qa-1.json")
+elif stage == "targeted_repair_1":
+    if attempt >= 2:
+        (repo / "README.md").write_text("targeted repair completed\n", encoding="utf-8")
+        repair_clean(run_dir / "targeted-repair-1.json")
+elif stage == "qa_2":
+    qa_clean(run_dir / "qa-2.json")
 elif stage == "archive":
     archive_change(write_delivery=attempt >= 2)
 
@@ -422,9 +461,10 @@ for record in records:
 
 required_retry = {
     "execution": "thread-executor",
-    "repair_1": "thread-repairer",
-    "repair_2": "thread-repairer",
-    "qa_2": "thread-qa",
+    "audit_1": "thread-repairer",
+    "audit_2": "thread-repairer",
+    "qa_1": "thread-qa",
+    "targeted_repair_1": "thread-repairer",
     "archive": "thread-archiver",
 }
 for stage, session in required_retry.items():
@@ -440,18 +480,28 @@ for stage, session in required_retry.items():
 repair_sessions = {
     record.get("session")
     for record in records
-    if record.get("stage") in {"repair_1", "repair_2"} and record.get("session")
+    if record.get("stage") in {"audit_1", "audit_2", "targeted_repair_1"} and record.get("session")
 }
 if repair_sessions != {"thread-repairer"}:
-    raise SystemExit(f"repair stages did not reuse one repairer session: {repair_sessions}")
-if not (run_dir / "repair-1.json").is_file() or not (run_dir / "repair-2.json").is_file():
-    raise SystemExit("missing durable repair-N.json checkpoints")
+    raise SystemExit(f"audit and targeted repair stages did not reuse one repairer session: {repair_sessions}")
+required_repair_artifacts = [
+    run_dir / "audit-1.json",
+    run_dir / "audit-2.json",
+    run_dir / "targeted-repair-1.json",
+]
+if not all(path.is_file() for path in required_repair_artifacts):
+    raise SystemExit(f"missing durable quality-loop repair checkpoints: {required_repair_artifacts}")
+qa_2_attempts = by_stage.get("qa_2", [])
+if len(qa_2_attempts) != 1:
+    raise SystemExit(f"qa_2 attempts = {len(qa_2_attempts)}, want one clean attempt")
+if qa_2_attempts[0].get("session"):
+    raise SystemExit("qa_2 must start in a fresh isolated QA session")
 if any((run_dir / name).exists() for name in ("review-1.json", "review-2.json", "fix-1-summary.md")):
     raise SystemExit("new repair run must not emit legacy review/fix artifacts")
 
 validation_files = sorted(run_dir.glob("validation-*.json"))
-if len(validation_files) < 5:
-    raise SystemExit(f"validation artifact count = {len(validation_files)}, want at least 5")
+if len(validation_files) < 6:
+    raise SystemExit(f"validation artifact count = {len(validation_files)}, want at least 6")
 print("stage artifact gate retry assertions passed")
 PY
 

@@ -56,6 +56,9 @@ func (e *Engine) runGoDAG(ctx context.Context, state State) error {
 
 // runGoDAGLocked executes ready graph nodes concurrently while the caller owns the run lock.
 func (e *Engine) runGoDAGLocked(ctx context.Context, state State) error {
+	if usesQualityLoop(state.Workflow) {
+		return e.runLoop(ctx, state)
+	}
 	spec := BuildWorkflowSpec(state.ChangeName, state.Workflow)
 	nodes := map[string]WorkflowNode{}
 	remainingDeps := map[string]int{}
@@ -160,6 +163,13 @@ func (e *Engine) runGoDAGNode(ctx context.Context, runID string, node WorkflowNo
 	if artifact := goDAGNodeArtifact(e.Repo, runID, node); artifact != "" && fileExists(artifact) {
 		next.Artifact = artifact
 	}
+	if err == nil {
+		if terminalStatus, ok := e.goDAGNodeReachedTerminalBlock(runID); ok {
+			next.Status = terminalStatus
+			e.recordGoDAGNode(runID, node.ID, next)
+			return nil
+		}
+	}
 	if err != nil {
 		next.Status = "failed"
 		next.Error = err.Error()
@@ -192,7 +202,7 @@ func (e *Engine) goDAGNodeReachedTerminalBlock(runID string) (string, bool) {
 		return "", false
 	}
 	switch state.Status {
-	case statusValidationBlocked, statusAcceptanceContractBlocked:
+	case statusBlockedEnvironment, statusBlockedStalled, statusValidationBlocked, statusAcceptanceContractBlocked:
 		return state.Status, true
 	default:
 		return "", false

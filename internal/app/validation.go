@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ const (
 	validationStatusFailed             = "failed"
 	validationKindCommands             = "commands"
 	validationKindArtifact             = "artifact"
+	validationKindQAReadOnly           = "qa_read_only"
 	validationKindChange               = "change"
 	validationKindAcceptancePreflight  = "acceptance_preflight"
 	artifactGateCommand                = "oz flow artifact gate"
@@ -28,18 +30,22 @@ const (
 
 // StageValidationState is persisted in state.json so failed validation reruns the same stage.
 type StageValidationState struct {
-	Attempts     int    `json:"attempts"`
-	Kind         string `json:"kind,omitempty"`
-	Status       string `json:"status"`
-	LastArtifact string `json:"last_artifact,omitempty"`
-	LastError    string `json:"last_error,omitempty"`
+	Attempts       int    `json:"attempts"`
+	Kind           string `json:"kind,omitempty"`
+	Status         string `json:"status"`
+	LastArtifact   string `json:"last_artifact,omitempty"`
+	LastError      string `json:"last_error,omitempty"`
+	DiffHash       string `json:"diff_hash,omitempty"`
+	CheckpointHash string `json:"checkpoint_hash,omitempty"`
 }
 
 // ValidationAttempt stores reproducible command output for one validation gate run.
 type ValidationAttempt struct {
 	Stage      string                    `json:"stage"`
+	Kind       string                    `json:"kind,omitempty"`
 	Attempt    int                       `json:"attempt"`
 	Status     string                    `json:"status"`
+	DiffHash   string                    `json:"diff_hash,omitempty"`
 	StartedAt  string                    `json:"started_at"`
 	FinishedAt string                    `json:"finished_at"`
 	Commands   []ValidationCommandResult `json:"commands"`
@@ -61,16 +67,22 @@ func shouldValidateStage(state State) bool {
 	if shouldRunChangeValidation(stage) {
 		return true
 	}
-	return len(state.Workflow.Validation.Commands) > 0 && (stage.isKind(workflowStageRepair) || stage.isKind(workflowStageFix))
+	return len(state.Workflow.Validation.Commands) > 0 && (stage.isKind(workflowStageRepair) || stage.isKind(workflowStageAudit) || stage.isKind(workflowStageTargetedRepair) || stage.isKind(workflowStageFix))
 }
 
 // shouldRunChangeValidation forces oz validate after stages that may rewrite the active change.
 func shouldRunChangeValidation(stage workflowStage) bool {
-	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageRepair) || stage.isKind(workflowStageFix)
+	return stage.isKind(workflowStageExecution) || stage.isKind(workflowStageRepair) || stage.isKind(workflowStageAudit) || stage.isKind(workflowStageTargetedRepair) || stage.isKind(workflowStageFix)
 }
 
 // shouldForceStageRerun reports whether a failed validation gate must re-enter the same stage.
 func shouldForceStageRerun(state State) bool {
+	if usesQualityLoop(state.Workflow) && state.QualityLoop.ResumeRerunPending {
+		return true
+	}
+	if usesQualityLoop(state.Workflow) && state.Stages[state.Stage] == "needs_more" {
+		return true
+	}
 	if state.ArtifactGates != nil && state.ArtifactGates[state.Stage].Status == validationStatusFailed {
 		return true
 	}
@@ -101,6 +113,9 @@ func clearStageArtifactGateFailure(state *State) {
 	}
 	current := state.ArtifactGates[state.Stage]
 	if current.Kind == "" && current.Status == "" {
+		return
+	}
+	if current.Kind == validationKindQAReadOnly || current.Kind == validationKindArchiveReadOnly {
 		return
 	}
 	current.Kind = validationKindArtifact
@@ -163,8 +178,18 @@ func recordStageArtifactGateFailure(repo string, state *State, failure error) er
 	if state.Stages == nil {
 		state.Stages = map[string]string{}
 	}
-	current := state.ArtifactGates[state.Stage]
-	current.Attempts++
+	current, err := reserveValidationAttempt(
+		repo,
+		state,
+		state.ArtifactGates[state.Stage],
+		validationKindArtifact,
+		func(reserved StageValidationState) {
+			state.ArtifactGates[state.Stage] = reserved
+		},
+	)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	attempt := ValidationAttempt{
 		Stage:      state.Stage,
@@ -178,6 +203,9 @@ func recordStageArtifactGateFailure(repo string, state *State, failure error) er
 			Output:   limitValidationOutput(failure.Error()),
 		}},
 	}
+	if usesQualityLoop(state.Workflow) {
+		attempt.Kind = validationKindArtifact
+	}
 	artifactPath, err := writeValidationAttempt(repo, state.RunID, attempt)
 	if err != nil {
 		return err
@@ -187,6 +215,13 @@ func recordStageArtifactGateFailure(repo string, state *State, failure error) er
 	current.Status = validationStatusFailed
 	current.LastError = failure.Error()
 	state.ArtifactGates[state.Stage] = current
+	if recordQualityGateFailure(state, validationKindArtifact, current.LastError) {
+		return nil
+	}
+	if isQualityLoopRepairStage(*state) {
+		state.Stages[state.Stage] = "validation_failed"
+		return nil
+	}
 	if current.Attempts >= state.Workflow.Validation.MaxAttemptsPerStage {
 		state.Status = statusValidationBlocked
 		state.Stage = statusValidationBlocked
@@ -197,9 +232,36 @@ func recordStageArtifactGateFailure(repo string, state *State, failure error) er
 	return nil
 }
 
-// validationArtifactPath returns directly accessible paths for one validation artifact.
-func validationArtifactPath(repo, runID, stage string, attempt int) (string, string, error) {
-	name := fmt.Sprintf("validation-%s-%d.json", strings.ReplaceAll(stage, "_", "-"), attempt)
+// reserveValidationAttempt durably claims a quality-loop namespace before work can emit evidence.
+func reserveValidationAttempt(
+	repo string,
+	state *State,
+	current StageValidationState,
+	kind string,
+	assign func(StageValidationState),
+) (StageValidationState, error) {
+	current.Attempts++
+	if state == nil || !usesQualityLoop(state.Workflow) {
+		return current, nil
+	}
+	current.Kind = kind
+	current.Status = statusRunning
+	current.LastError = ""
+	assign(current)
+	if err := saveState(repo, *state); err != nil {
+		return StageValidationState{}, err
+	}
+	return current, nil
+}
+
+// validationArtifactPath returns kind-isolated paths while preserving legacy empty-kind names.
+func validationArtifactPath(repo, runID, stage, kind string, attempt int) (string, string, error) {
+	stagePart := strings.ReplaceAll(stage, "_", "-")
+	name := fmt.Sprintf("validation-%s-%d.json", stagePart, attempt)
+	if strings.TrimSpace(kind) != "" {
+		kindPart := strings.ReplaceAll(strings.TrimSpace(kind), "_", "-")
+		name = fmt.Sprintf("validation-%s-%s-%d.json", stagePart, kindPart, attempt)
+	}
 	abs := filepath.Join(runDir(repo, runID), name)
 	return abs, abs, nil
 }
@@ -321,30 +383,118 @@ func validationCommandLabel(command ValidationCommand) string {
 	return strings.Join(append([]string{command.Executable}, command.Args...), " ")
 }
 
-// writeValidationAttempt persists one gate result and returns its accessible path.
+// writeValidationAttempt persists one redacted gate result and returns its accessible path.
 func writeValidationAttempt(repo, runID string, attempt ValidationAttempt) (string, error) {
-	abs, rel, err := validationArtifactPath(repo, runID, attempt.Stage, attempt.Attempt)
+	abs, rel, err := validationArtifactPath(repo, runID, attempt.Stage, attempt.Kind, attempt.Attempt)
 	if err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return "", err
 	}
-	data, err := json.MarshalIndent(attempt, "", "  ")
+	safeAttempt := redactValidationAttempt(attempt)
+	data, err := json.MarshalIndent(safeAttempt, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(abs, append(data, '\n'), 0o644); err != nil {
+	if err := atomicWriteFile(abs, append(data, '\n'), 0o644); err != nil {
 		return "", err
 	}
 	return rel, nil
+}
+
+// verifyQualityValidationCheckpoint replays trust checks for one passed validation artifact.
+func verifyQualityValidationCheckpoint(repo string, state State, stage string) (ValidationAttempt, error) {
+	checkpoint, ok := state.Validation[stage]
+	if !ok || checkpoint.Status != validationStatusPassed || checkpoint.Attempts < 1 ||
+		strings.TrimSpace(checkpoint.Kind) == "" || strings.TrimSpace(checkpoint.LastArtifact) == "" {
+		return ValidationAttempt{}, fmt.Errorf("阶段 %s 缺少最后通过的 validation checkpoint", stage)
+	}
+	expectedPath, _, err := validationArtifactPath(
+		repo,
+		state.RunID,
+		stage,
+		checkpoint.Kind,
+		checkpoint.Attempts,
+	)
+	if err != nil {
+		return ValidationAttempt{}, err
+	}
+	if filepath.Clean(checkpoint.LastArtifact) != filepath.Clean(expectedPath) {
+		return ValidationAttempt{}, fmt.Errorf(
+			"阶段 %s validation checkpoint 路径不一致：state=%s expected=%s",
+			stage,
+			checkpoint.LastArtifact,
+			expectedPath,
+		)
+	}
+	data, err := readQualityValidationArtifact(expectedPath)
+	if err != nil {
+		return ValidationAttempt{}, fmt.Errorf("读取 validation checkpoint 失败：%w", err)
+	}
+	var attempt ValidationAttempt
+	if err := decodeStrictArtifactJSON(data, &attempt); err != nil {
+		return ValidationAttempt{}, fmt.Errorf("解析 validation checkpoint 失败：%w", err)
+	}
+	switch {
+	case attempt.Stage != stage || attempt.Kind != checkpoint.Kind || attempt.Attempt != checkpoint.Attempts:
+		return ValidationAttempt{}, fmt.Errorf("阶段 %s validation stage/kind/attempt 绑定不一致", stage)
+	case attempt.Status != validationStatusPassed:
+		return ValidationAttempt{}, fmt.Errorf("阶段 %s validation checkpoint 不是通过结果", stage)
+	case checkpoint.DiffHash == "" || attempt.DiffHash != checkpoint.DiffHash ||
+		attempt.DiffHash != state.QualityLoop.DiffHash:
+		return ValidationAttempt{}, fmt.Errorf("阶段 %s validation diff 绑定不一致", stage)
+	case state.QualityLoop.ValidationHash == "" ||
+		qualityValidationProgressHash(attempt) != state.QualityLoop.ValidationHash:
+		return ValidationAttempt{}, fmt.Errorf("阶段 %s validation progress hash 不一致", stage)
+	default:
+		return attempt, nil
+	}
+}
+
+// readQualityValidationArtifact reads a checkpoint only through an opened regular file.
+func readQualityValidationArtifact(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("validation checkpoint 必须是普通文件：%s", path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !opened.Mode().IsRegular() {
+		return nil, fmt.Errorf("validation checkpoint 打开后不是普通文件：%s", path)
+	}
+	if !os.SameFile(info, opened) {
+		return nil, fmt.Errorf("validation checkpoint 检查期间被替换：%s", path)
+	}
+	return io.ReadAll(file)
+}
+
+// redactValidationAttempt removes environment marker values from every persisted command field.
+func redactValidationAttempt(attempt ValidationAttempt) ValidationAttempt {
+	safe := attempt
+	safe.Commands = append([]ValidationCommandResult(nil), attempt.Commands...)
+	for i := range safe.Commands {
+		safe.Commands[i].Command = redactQualityEnvironmentMarkers(safe.Commands[i].Command)
+		safe.Commands[i].Output = redactQualityEnvironmentMarkers(safe.Commands[i].Output)
+	}
+	return safe
 }
 
 // firstValidationError summarizes the failing command for state.json and progress output.
 func firstValidationError(attempt ValidationAttempt) string {
 	for _, command := range attempt.Commands {
 		if command.ExitCode != 0 {
-			return fmt.Sprintf("%s exited %d", command.Command, command.ExitCode)
+			return fmt.Sprintf("%s exited %d", redactQualityEnvironmentMarkers(command.Command), command.ExitCode)
 		}
 	}
 	return ""

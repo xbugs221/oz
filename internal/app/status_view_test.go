@@ -124,6 +124,8 @@ func TestStageDurationUsesUUIDv7SessionStart(t *testing.T) {
 func TestStageDurationUsesSessionStartOnlyOnce(t *testing.T) {
 	sessionStartedAt := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 	state := statusViewImplementationContextState()
+	state.Workflow.Generation = repairWorkflowGeneration
+	state.Workflow.MaxRepairIterations = 2
 	state.Status = statusDone
 	state.Stage = statusDone
 	state.Stages = map[string]string{
@@ -150,6 +152,33 @@ func TestStageDurationUsesSessionStartOnlyOnce(t *testing.T) {
 	}
 	if got, want := *row.DurationMinutes, 25.0; got != want {
 		t.Fatalf("repair duration = %.2f, want %.2f", got, want)
+	}
+}
+
+// TestVisibleSessionItemsDeduplicatesSharedRepairer verifies stage aliases do not duplicate one backend session row.
+func TestVisibleSessionItemsDeduplicatesSharedRepairer(t *testing.T) {
+	for _, generation := range []string{repairWorkflowGeneration, qualityLoopWorkflowGeneration} {
+		t.Run(generation, func(t *testing.T) {
+			state := statusViewImplementationContextState()
+			state.Workflow.Generation = generation
+			if generation == repairWorkflowGeneration {
+				state.Workflow.MaxRepairIterations = 1
+			}
+			state.Stages = map[string]string{"repair_1": "completed", "audit_1": "completed"}
+			state.Sessions = map[string]string{
+				sessionStateKey("codex", "repairer"): "shared-repairer",
+			}
+
+			count := 0
+			for _, item := range visibleSessionItems(state, nil) {
+				if item.role == "repairer" {
+					count++
+				}
+			}
+			if count != 1 {
+				t.Fatalf("repairer rows = %d, want 1", count)
+			}
+		})
 	}
 }
 
@@ -359,6 +388,8 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 // TestStatusViewSelectsRepairGeneration verifies a new run never exposes legacy review/fix rows.
 func TestStatusViewSelectsRepairGeneration(t *testing.T) {
 	state := statusViewImplementationContextState()
+	state.Workflow.Generation = repairWorkflowGeneration
+	state.Workflow.MaxRepairIterations = 1
 	view := buildStatusView(t.TempDir(), state, state.RunID, "")
 	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "优化", "测试阶段", "归档阶段"})
 }
@@ -375,6 +406,263 @@ func TestStatusViewSelectsLegacyGeneration(t *testing.T) {
 	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "审核阶段", "修正阶段", "测试阶段", "归档阶段"})
 }
 
+// TestStatusViewPreservesFiniteRoundTenArtifacts verifies sealed finite stages keep numeric workflow order.
+func TestStatusViewPreservesFiniteRoundTenArtifacts(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(*State)
+		rows      map[string]string
+	}{
+		{
+			name: "repair-v1",
+			configure: func(state *State) {
+				state.Workflow.Generation = repairWorkflowGeneration
+				state.Workflow.MaxRepairIterations = 10
+				for iteration := 1; iteration <= 10; iteration++ {
+					state.Stages[fmt.Sprintf("repair_%d", iteration)] = "completed"
+				}
+			},
+			rows: map[string]string{"优化": "repair-10.json"},
+		},
+		{
+			name: "legacy-review-fix",
+			configure: func(state *State) {
+				state.Workflow.Generation = ""
+				state.Workflow.MaxRepairIterations = 0
+				state.Workflow.MaxReviewIterations = 10
+				for iteration := 1; iteration <= 10; iteration++ {
+					state.Stages[fmt.Sprintf("review_%d", iteration)] = "completed"
+					state.Stages[fmt.Sprintf("fix_%d", iteration)] = "completed"
+				}
+			},
+			rows: map[string]string{
+				"审核阶段": "review-10.json",
+				"修正阶段": "fix-10-summary.md",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := statusViewImplementationContextState()
+			test.configure(&state)
+			view := buildStatusView(t.TempDir(), state, state.RunID, "")
+			for _, row := range view.Rows {
+				want, ok := test.rows[row.Name]
+				if !ok {
+					continue
+				}
+				if artifact := row.Artifacts["stage_artifact"]; !strings.HasSuffix(artifact, want) {
+					t.Fatalf("%s artifact = %q, want suffix %q", row.Name, artifact, want)
+				}
+				delete(test.rows, row.Name)
+			}
+			if len(test.rows) > 0 {
+				t.Fatalf("missing status rows: %#v", test.rows)
+			}
+		})
+	}
+}
+
+// TestStatusViewAggregatesDynamicQualityLoopStages verifies status discovers instances beyond sealed config.
+func TestStatusViewAggregatesDynamicQualityLoopStages(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.Workflow.Generation = qualityLoopWorkflowGeneration
+	state.Workflow.MaxRepairIterations = 1
+	state.Stage = "qa_12"
+	state.Stages = map[string]string{
+		"execution":          "completed",
+		"audit_1":            "completed",
+		"audit_2":            "completed",
+		"qa_1":               "completed",
+		"targeted_repair_1":  "completed",
+		"targeted_repair_11": "completed",
+		"qa_11":              "completed",
+		"qa_12":              statusRunning,
+	}
+
+	view := buildStatusView(t.TempDir(), state, state.RunID, "")
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "全量自查", "定向修复", "独立测试", "归档阶段"})
+	markers := map[string]string{}
+	artifacts := map[string]string{}
+	for _, row := range view.Rows {
+		markers[row.Name] = row.Marker
+		artifacts[row.Name] = row.Artifacts["stage_artifact"]
+	}
+	if markers["全量自查"] != "✓2" || markers["定向修复"] != "✓2" || markers["独立测试"] != "✓2→" {
+		t.Fatalf("dynamic quality-loop markers = %#v", markers)
+	}
+	if !strings.HasSuffix(artifacts["定向修复"], "targeted-repair-11.json") {
+		t.Fatalf("targeted repair artifact = %q", artifacts["定向修复"])
+	}
+	if !strings.HasSuffix(artifacts["独立测试"], "qa-12.json") {
+		t.Fatalf("QA artifact = %q", artifacts["独立测试"])
+	}
+}
+
+// TestStatusViewMarksRecoverableQualityLoopBlock verifies pause states point at the latest repair mode.
+func TestStatusViewMarksRecoverableQualityLoopBlock(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.Workflow.Generation = qualityLoopWorkflowGeneration
+	state.Status = statusBlockedEnvironment
+	state.Stage = statusBlockedEnvironment
+	state.QualityLoop.BlockedFromStage = "targeted_repair_1"
+	state.Stages = map[string]string{
+		"execution":         "completed",
+		"audit_1":           "completed",
+		"qa_1":              "completed",
+		"targeted_repair_1": statusRunning,
+	}
+	view := buildStatusView(t.TempDir(), state, state.RunID, "")
+	assertOnlyBlockedStatusRow(t, view, "定向修复")
+	if compactOverallMarker(view) != "x" {
+		t.Fatalf("blocked environment overall marker = %q, want x", compactOverallMarker(view))
+	}
+	lines := stageChecklistLines(state, nil)
+	if !strings.Contains(strings.Join(lines, "\n"), "blocked_environment") {
+		t.Fatalf("blocked environment checklist missing diagnostic: %#v", lines)
+	}
+}
+
+// TestStatusViewMapsEveryRecoverableQualityLoopSource marks the actual blocked stage family.
+func TestStatusViewMapsEveryRecoverableQualityLoopSource(t *testing.T) {
+	for _, test := range []struct {
+		stage string
+		row   string
+	}{
+		{stage: "audit_2", row: "全量自查"},
+		{stage: "targeted_repair_2", row: "定向修复"},
+		{stage: "qa_2", row: "独立测试"},
+		{stage: workflowStageArchive, row: "归档阶段"},
+	} {
+		t.Run(test.stage, func(t *testing.T) {
+			state := statusViewImplementationContextState()
+			state.Workflow.Generation = qualityLoopWorkflowGeneration
+			state.Status = statusBlockedEnvironment
+			state.Stage = statusBlockedEnvironment
+			state.QualityLoop.BlockedFromStage = test.stage
+			state.Stages = map[string]string{test.stage: statusBlockedEnvironment}
+			view := buildStatusView(t.TempDir(), state, state.RunID, "")
+			assertOnlyBlockedStatusRow(t, view, test.row)
+		})
+	}
+}
+
+// TestHumanStatusExplainsRecoverableQualityLoopBlocks verifies the public status path shows pause recovery.
+func TestHumanStatusExplainsRecoverableQualityLoopBlocks(t *testing.T) {
+	for _, status := range []string{statusBlockedEnvironment, statusBlockedStalled} {
+		t.Run(status, func(t *testing.T) {
+			state := statusViewImplementationContextState()
+			state.Workflow.Generation = qualityLoopWorkflowGeneration
+			state.Status = status
+			state.Stage = status
+			state.Error = "可恢复原因"
+			state.QualityLoop.BlockedFromStage = "targeted_repair_3"
+			if status == statusBlockedEnvironment {
+				state.QualityLoop.MissingEnvironmentNames = []string{"TEST_ACCOUNT"}
+			}
+
+			output := strings.Join(runProposalStatusLines(t.TempDir(), state, "w1", "→"), "\n")
+			for _, want := range []string{status + "（可恢复暂停）", "原阶段: targeted_repair_3", "原因: 可恢复原因", "oz flow resume", "oz flow restart"} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("human status missing %q:\n%s", want, output)
+				}
+			}
+		})
+	}
+}
+
+// TestBatchStatusExplainsRecoverableQualityLoopBlocks verifies normal and watch batch views retain pause guidance.
+func TestBatchStatusExplainsRecoverableQualityLoopBlocks(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	repo := t.TempDir()
+	for _, status := range []string{statusBlockedEnvironment, statusBlockedStalled} {
+		t.Run(status, func(t *testing.T) {
+			batchID := "20260727T130001.000000000Z"
+			state := statusViewImplementationContextState()
+			state.RunID = "20260727T130000.000000000Z"
+			state.ChangeName = "45-质量闭环"
+			state.BatchID = batchID
+			state.Workflow.Generation = qualityLoopWorkflowGeneration
+			state.Status = status
+			state.Stage = status
+			state.Error = "批量可恢复原因"
+			state.QualityLoop.BlockedFromStage = "targeted_repair_3"
+			if err := saveState(repo, state); err != nil {
+				t.Fatal(err)
+			}
+			batch := &BatchState{
+				BatchID:      batchID,
+				Status:       batchStatusRunning,
+				Changes:      []string{state.ChangeName},
+				CurrentIndex: 0,
+				RunIDs:       map[string]string{state.ChangeName: state.RunID},
+			}
+			if err := saveBatchState(repo, *batch); err != nil {
+				t.Fatal(err)
+			}
+			kind, ref, err := ResolveRestartTarget(repo, []string{"-b1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if kind != "batch" || ref.ID != batchID {
+				t.Fatalf("restart target = %s/%#v, want batch/%s", kind, ref, batchID)
+			}
+			outputs := []string{
+				strings.Join(batchStatusLines(repo, batch, "b1", nil), "\n"),
+				strings.Join(watchBatchStatusLines(repo, batch, "b1", "→"), "\n"),
+			}
+			for _, output := range outputs {
+				for _, want := range []string{
+					status + "（可恢复暂停）",
+					"原阶段: targeted_repair_3",
+					"原因: 批量可恢复原因",
+					"oz flow restart -b1",
+				} {
+					if !strings.Contains(output, want) {
+						t.Fatalf("batch status missing %q:\n%s", want, output)
+					}
+				}
+				if strings.Contains(output, "oz flow resume") {
+					t.Fatalf("batch status advertises unavailable single-run resume:\n%s", output)
+				}
+			}
+		})
+	}
+}
+
+// TestRunnerStateExposesQualityLoopRecovery verifies machine status carries the dynamic recovery contract.
+func TestRunnerStateExposesQualityLoopRecovery(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.Workflow.Generation = qualityLoopWorkflowGeneration
+	state.QualityLoop.Mode = "qa_targeted_repair"
+	state.QualityLoop.BlockedFromStage = "targeted_repair_3"
+
+	dto := runnerStateFromState(state)
+	if dto.WorkflowGeneration != qualityLoopWorkflowGeneration ||
+		dto.QualityMode != "qa_targeted_repair" ||
+		dto.BlockedFromStage != "targeted_repair_3" {
+		t.Fatalf("runner quality-loop contract = %#v", dto)
+	}
+}
+
+// TestRunnerContractAdvertisesGraph verifies capability discovery includes the public graph command.
+func TestRunnerContractAdvertisesGraph(t *testing.T) {
+	var stdout bytes.Buffer
+	if err := writeRunnerContract(&stdout); err != nil {
+		t.Fatal(err)
+	}
+	var contract runnerContract
+	if err := json.Unmarshal(stdout.Bytes(), &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, capability := range contract.Capabilities {
+		if capability == "graph" {
+			return
+		}
+	}
+	t.Fatalf("runner capabilities do not advertise graph: %#v", contract.Capabilities)
+}
+
 // TestBlockedWorkflowRoleLabels verifies markers and summaries name the actual failing generation role.
 func TestBlockedWorkflowRoleLabels(t *testing.T) {
 	tests := []struct {
@@ -386,6 +674,7 @@ func TestBlockedWorkflowRoleLabels(t *testing.T) {
 		{
 			name: "positive repair",
 			configure: func(state *State) {
+				state.Workflow.Generation = repairWorkflowGeneration
 				state.Workflow.MaxRepairIterations = 2
 			},
 			wantRow:     "优化",
@@ -394,6 +683,7 @@ func TestBlockedWorkflowRoleLabels(t *testing.T) {
 		{
 			name: "zero repair",
 			configure: func(state *State) {
+				state.Workflow.Generation = repairWorkflowGeneration
 				state.Workflow.MaxRepairIterations = 0
 			},
 			wantRow:     "测试阶段",

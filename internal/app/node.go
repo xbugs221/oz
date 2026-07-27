@@ -40,6 +40,12 @@ func (e *Engine) nodeRunStage(ctx context.Context, state State, args []string, s
 		if err := e.runStage(ctx, &state); err != nil {
 			return e.failNodeState(state, err)
 		}
+		if !normalizeRunStatus(state.Status).isRunning() {
+			if err := saveState(e.Repo, state); err != nil {
+				return err
+			}
+			return writeNodeResult(stdout, nodeResult{Status: state.Status, RunID: state.RunID, Stage: stage})
+		}
 	}
 	result, err := e.completeMainStage(ctx, &state, stageGatePipelineNode)
 	if err != nil {

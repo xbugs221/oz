@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -253,7 +255,7 @@ func drainCodexJSONLWithCaptureNotify(stdout io.Reader, progress io.Writer, capt
 		if readErr == nil {
 			continue
 		}
-		if readErr != io.EOF && err == nil {
+		if readErr != io.EOF && !errors.Is(readErr, os.ErrClosed) && err == nil {
 			err = readErr
 		}
 		return threadID, err

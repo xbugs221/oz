@@ -2,11 +2,18 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
+
+const sealedAcceptanceHashFile = "acceptance.sha256"
 
 // sessionStateKey isolates resumable sessions by backend and workflow role.
 func sessionStateKey(tool, role string) string {
@@ -20,6 +27,15 @@ func stageSessionRole(stage string) string {
 		return "executor"
 	}
 	return role.Session
+}
+
+// stageSessionRoleForState isolates each quality-loop QA while preserving shared repairer context.
+func stageSessionRoleForState(state State, stage string) string {
+	parsed, err := parseWorkflowStage(stage)
+	if err == nil && usesQualityLoop(state.Workflow) && parsed.isKind(workflowStageQA) {
+		return stage
+	}
+	return stageSessionRole(stage)
 }
 
 // workflowStagesForState returns the sealed stage list from the state snapshot.
@@ -103,7 +119,7 @@ func FindUnfinishedRun(repo string) (string, error) {
 			continue
 		}
 		state, err := loadState(repo, entry.Name())
-		if err == nil && state.BatchID == "" && state.Status == statusRunning {
+		if err == nil && state.BatchID == "" && (state.Status == statusRunning || state.Status == statusBlockedEnvironment || state.Status == statusBlockedStalled) {
 			return entry.Name(), nil
 		}
 	}
@@ -148,10 +164,10 @@ func FindStartupRuns(repo string) (string, []State, error) {
 // isStoppedRunState reports terminal states that should not be shown as running work.
 func isStoppedRunState(state State) bool {
 	switch state.Status {
-	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusAborted, "aborted":
+	case statusFailed, statusBlocked, statusBlockedEnvironment, statusBlockedStalled, statusValidationBlocked, statusAcceptanceContractBlocked, statusAborted, "aborted":
 		return true
 	default:
-		return state.Stage == statusBlocked || state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked
+		return state.Stage == statusBlocked || state.Stage == statusBlockedEnvironment || state.Stage == statusBlockedStalled || state.Stage == statusValidationBlocked || state.Stage == statusAcceptanceContractBlocked
 	}
 }
 
@@ -184,7 +200,7 @@ func FindCurrentRun(repo string) (string, error) {
 	return newest, nil
 }
 
-// snapshotRunAcceptance stores the sealed acceptance contract inside the run.
+// snapshotRunAcceptance stores the sealed acceptance contract and its integrity digest inside the run.
 func snapshotRunAcceptance(repo, runID, sourcePath string) error {
 	data, err := os.ReadFile(sourcePath)
 	if err != nil {
@@ -194,7 +210,27 @@ func snapshotRunAcceptance(repo, runID, sourcePath string) error {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(base, "acceptance.json"), data, 0o644)
+	if err := os.WriteFile(filepath.Join(base, "acceptance.json"), data, 0o644); err != nil {
+		return err
+	}
+	hash := acceptanceContentHash(data)
+	return os.WriteFile(filepath.Join(base, sealedAcceptanceHashFile), []byte(hash+"\n"), 0o644)
+}
+
+// snapshotQualityLoopAcceptance seals a contract and stores its trust-root digest in run state.
+func snapshotQualityLoopAcceptance(repo string, state *State, sourcePath string) error {
+	if state == nil {
+		return fmt.Errorf("quality loop acceptance snapshot 缺少 state")
+	}
+	if err := snapshotRunAcceptance(repo, state.RunID, sourcePath); err != nil {
+		return err
+	}
+	hash, err := acceptanceFileHash(filepath.Join(runDir(repo, state.RunID), "acceptance.json"))
+	if err != nil {
+		return err
+	}
+	state.AcceptanceHash = hash
+	return nil
 }
 
 // readAcceptanceForState reads the immutable run contract, with legacy fallbacks.
@@ -203,6 +239,13 @@ func readAcceptanceForState(repo string, state State) (Acceptance, error) {
 		return Acceptance{}, err
 	}
 	runPath := filepath.Join(runDir(repo, state.RunID), "acceptance.json")
+	if usesQualityLoop(state.Workflow) {
+		contract, _, err := readVerifiedRunAcceptance(repo, state)
+		if err != nil {
+			return Acceptance{}, fmt.Errorf("quality loop 缺少有效的封存 acceptance %s: %w", runPath, err)
+		}
+		return contract, nil
+	}
 	if acceptance, err := ReadAcceptance(runPath); err == nil {
 		return acceptance, nil
 	} else if !os.IsNotExist(err) {
@@ -221,6 +264,55 @@ func readAcceptanceForState(repo string, state State) (Acceptance, error) {
 		return Acceptance{}, err
 	}
 	return ReadAcceptance(archivedPath)
+}
+
+// readVerifiedRunAcceptance hashes and parses one sealed contract from the same byte snapshot.
+func readVerifiedRunAcceptance(repo string, state State) (Acceptance, string, error) {
+	runPath := filepath.Join(runDir(repo, state.RunID), "acceptance.json")
+	data, err := os.ReadFile(runPath)
+	if err != nil {
+		return Acceptance{}, "", err
+	}
+	actual := acceptanceContentHash(data)
+	expected := strings.TrimSpace(state.AcceptanceHash)
+	if expected == "" && !state.Sealed {
+		// Unsealed in-memory fixtures preserve the pre-existing preflight unit-test contract.
+		expected = actual
+	} else if !validAcceptanceHash(expected) {
+		return Acceptance{}, "", fmt.Errorf("封存 acceptance 缺少有效的 state 完整性哈希")
+	}
+	if actual != expected {
+		return Acceptance{}, "", fmt.Errorf("封存 acceptance 完整性校验失败：expected=%s actual=%s", expected, actual)
+	}
+	contract, err := acceptance.Parse(data)
+	if err != nil {
+		return Acceptance{}, "", ReviewArtifactError{Path: runPath, Code: reviewArtifactParseError, Reason: err.Error()}
+	}
+	return contract, actual, nil
+}
+
+// acceptanceContentHash returns the stable SHA-256 digest persisted with a sealed contract.
+func acceptanceContentHash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// acceptanceFileHash hashes a contract file before its digest is sealed into state.json.
+func acceptanceFileHash(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return acceptanceContentHash(data), nil
+}
+
+// validAcceptanceHash rejects missing or malformed integrity metadata.
+func validAcceptanceHash(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha256.Size
 }
 
 // archivedAcceptancePath locates acceptance.json after oz archive moves a change.

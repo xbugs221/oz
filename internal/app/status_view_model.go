@@ -3,6 +3,7 @@ package app
 
 import (
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,12 @@ var compactStageSpecs = []compactStageSpec{
 	{role: "fixer", stage: "fix_1", name: "修正阶段", prefix: "fix_"},
 	{role: "qa", stage: "qa_1", name: "测试阶段", prefix: "qa_"},
 	{role: "archiver", stage: "archive", name: "归档阶段", prefix: "archive"},
+}
+
+var qualityLoopCompactStageSpecs = []compactStageSpec{
+	{role: "repairer", stage: "audit_1", name: "全量自查", prefix: "audit_"},
+	{role: "repairer", stage: "targeted_repair_1", name: "定向修复", prefix: "targeted_repair_"},
+	{role: "qa", stage: "qa_1", name: "独立测试", prefix: "qa_"},
 }
 
 // buildStatusView converts durable workflow state into one reusable compact view.
@@ -104,6 +111,10 @@ func buildHumanStatusView(repo string, state State, displayID, runningMarker str
 // statusStageSpecs selects only the stage generation sealed into the run snapshot.
 func statusStageSpecs(state State) []compactStageSpec {
 	specs := append([]compactStageSpec(nil), compactStageSpecs[:2]...)
+	if state.Workflow.Generation == qualityLoopWorkflowGeneration {
+		specs = append(specs, qualityLoopCompactStageSpecs...)
+		return append(specs, compactStageSpecs[6])
+	}
 	if usesRepairWorkflow(state.Workflow) {
 		if state.Workflow.MaxRepairIterations > 0 {
 			specs = append(specs, compactStageSpecs[2])
@@ -132,7 +143,11 @@ func statusStageRow(repo string, state State, spec compactStageSpec, now time.Ti
 		Marker:    statusStageMarker(state, stages),
 		Artifacts: map[string]string{"stage_artifact": statusStageArtifact(repo, state, statusStageArtifactStage(state, spec, stages))},
 	}
-	if state.Status == statusBlocked && spec.role == blockedWorkflowRole(state) {
+	if state.Workflow.Generation == qualityLoopWorkflowGeneration && isQualityLoopBlockedState(state) {
+		if qualityLoopBlockedSpec(state).prefix == spec.prefix {
+			row.Marker = "x"
+		}
+	} else if state.Status == statusBlocked && spec.role == blockedWorkflowRole(state) {
 		row.Marker = "x"
 	}
 	if state.Status == statusValidationBlocked && spec.role == "qa" {
@@ -145,6 +160,71 @@ func statusStageRow(repo string, state State, spec compactStageSpec, now time.Ti
 		row.DurationMinutes = &minutes
 	}
 	return row
+}
+
+// isQualityLoopBlockedState reports the two recoverable quality-loop pause states.
+func isQualityLoopBlockedState(state State) bool {
+	return state.Status == statusBlockedEnvironment || state.Stage == statusBlockedEnvironment ||
+		state.Status == statusBlockedStalled || state.Stage == statusBlockedStalled
+}
+
+// qualityLoopBlockedSpec identifies the most recently active repair mode for a blocked loop.
+func qualityLoopBlockedSpec(state State) compactStageSpec {
+	targeted := qualityLoopCompactStageSpecs[1]
+	audit := qualityLoopCompactStageSpecs[0]
+	qa := qualityLoopCompactStageSpecs[2]
+	archive := compactStageSpecs[6]
+	switch {
+	case strings.HasPrefix(state.QualityLoop.BlockedFromStage, targeted.prefix):
+		return targeted
+	case strings.HasPrefix(state.QualityLoop.BlockedFromStage, audit.prefix):
+		return audit
+	case strings.HasPrefix(state.QualityLoop.BlockedFromStage, qa.prefix):
+		return qa
+	case state.QualityLoop.BlockedFromStage == archive.stage:
+		return archive
+	}
+	var latestTargeted, latestAudit, latestQA, latestArchive time.Time
+	for stage, timing := range state.StageTimings {
+		startedAt, err := time.Parse(time.RFC3339Nano, timing.StartedAt)
+		if err != nil {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(stage, targeted.prefix) && startedAt.After(latestTargeted):
+			latestTargeted = startedAt
+		case strings.HasPrefix(stage, audit.prefix) && startedAt.After(latestAudit):
+			latestAudit = startedAt
+		case strings.HasPrefix(stage, qa.prefix) && startedAt.After(latestQA):
+			latestQA = startedAt
+		case stage == archive.stage && startedAt.After(latestArchive):
+			latestArchive = startedAt
+		}
+	}
+	latest := latestAudit
+	spec := audit
+	for _, candidate := range []struct {
+		started time.Time
+		spec    compactStageSpec
+	}{
+		{started: latestTargeted, spec: targeted},
+		{started: latestQA, spec: qa},
+		{started: latestArchive, spec: archive},
+	} {
+		if candidate.started.After(latest) {
+			latest = candidate.started
+			spec = candidate.spec
+		}
+	}
+	if !latest.IsZero() {
+		return spec
+	}
+	for stage := range state.Stages {
+		if strings.HasPrefix(stage, targeted.prefix) {
+			return targeted
+		}
+	}
+	return audit
 }
 
 // statusStageArtifactStage chooses the concrete iteration represented by a compact row artifact.
@@ -166,7 +246,7 @@ func matchingStatusStages(state State, spec compactStageSpec) []string {
 	if spec.prefix == spec.stage {
 		return []string{spec.stage}
 	}
-	stages := workflowStagesForState(state)
+	stages := observedStatusStages(state)
 	var out []string
 	for _, stage := range stages {
 		if strings.HasPrefix(stage, spec.prefix) && statusStageReached(state, stage) {
@@ -201,7 +281,7 @@ func statusRoleSessionID(state State, role string) string {
 	if role == "planner" {
 		return plannerSessionID(state)
 	}
-	stages := workflowStagesForState(state)
+	stages := observedStatusStages(state)
 	if id := sessionRoleID(state, role, stages, nil); id != "" {
 		return id
 	}
@@ -216,6 +296,77 @@ func statusRoleSessionID(state State, role string) string {
 		}
 	}
 	return ""
+}
+
+// observedStatusStages preserves finite snapshots and merges only dynamic quality-loop instances.
+func observedStatusStages(state State) []string {
+	stages := append([]string(nil), workflowStagesForState(state)...)
+	if !usesQualityLoop(state.Workflow) {
+		return stages
+	}
+	seen := make(map[string]bool, len(stages))
+	for _, stage := range stages {
+		seen[stage] = true
+	}
+	add := func(stage string) {
+		if stage == "" || seen[stage] || !isDynamicQualityLoopStage(stage) {
+			return
+		}
+		seen[stage] = true
+		stages = append(stages, stage)
+	}
+	add(state.Stage)
+	for stage := range state.Stages {
+		add(stage)
+	}
+	for stage := range state.StageTimings {
+		add(stage)
+	}
+	for stage := range state.DAGNodes {
+		add(stage)
+	}
+	sort.SliceStable(stages, func(i, j int) bool {
+		leftRank, leftIteration := qualityLoopStageOrder(stages[i])
+		rightRank, rightIteration := qualityLoopStageOrder(stages[j])
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		if leftIteration != rightIteration {
+			return leftIteration < rightIteration
+		}
+		return stages[i] < stages[j]
+	})
+	return stages
+}
+
+// isDynamicQualityLoopStage recognizes persisted audit, QA, and targeted-repair instances.
+func isDynamicQualityLoopStage(stage string) bool {
+	rank, iteration := qualityLoopStageOrder(stage)
+	return rank >= 1 && rank <= 3 && iteration > 0
+}
+
+// qualityLoopStageOrder returns display phase and numeric iteration for a stage.
+func qualityLoopStageOrder(stage string) (int, int) {
+	prefixes := []string{"audit_", "qa_", "targeted_repair_"}
+	for index, prefix := range prefixes {
+		if !strings.HasPrefix(stage, prefix) {
+			continue
+		}
+		iteration, err := strconv.Atoi(strings.TrimPrefix(stage, prefix))
+		if err == nil {
+			return index + 1, iteration
+		}
+	}
+	switch stage {
+	case "planning":
+		return -2, 0
+	case "execution":
+		return -1, 0
+	case "archive":
+		return 4, 0
+	default:
+		return 0, 0
+	}
 }
 
 // statusStageMarker converts durable stage state into the compact progress marker.
@@ -348,6 +499,12 @@ func statusStageArtifact(repo string, state State, stage string) string {
 	}
 	if strings.HasPrefix(stage, "repair_") {
 		return filepath.Join(base, "repair-"+strings.TrimPrefix(stage, "repair_")+".json")
+	}
+	if strings.HasPrefix(stage, "audit_") {
+		return filepath.Join(base, "audit-"+strings.TrimPrefix(stage, "audit_")+".json")
+	}
+	if strings.HasPrefix(stage, "targeted_repair_") {
+		return filepath.Join(base, "targeted-repair-"+strings.TrimPrefix(stage, "targeted_repair_")+".json")
 	}
 	if strings.HasPrefix(stage, "fix_") {
 		return filepath.Join(base, "fix-"+strings.TrimPrefix(stage, "fix_")+"-summary.md")

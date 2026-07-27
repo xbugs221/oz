@@ -41,6 +41,18 @@ func (e *Engine) stageArtifactExpectation(state State) stageArtifactExpectation 
 			Path:        filepath.Join(base, "repair-"+n+".json"),
 			Description: "repair JSON schema、修正证据和 repair decision 合同",
 		}
+	case strings.HasPrefix(state.Stage, "audit_"):
+		n := strings.TrimPrefix(state.Stage, "audit_")
+		return stageArtifactExpectation{
+			Path:        filepath.Join(base, "audit-"+n+".json"),
+			Description: "pre_qa_audit JSON schema、全量自查证据和 decision 合同",
+		}
+	case strings.HasPrefix(state.Stage, "targeted_repair_"):
+		n := strings.TrimPrefix(state.Stage, "targeted_repair_")
+		return stageArtifactExpectation{
+			Path:        filepath.Join(base, "targeted-repair-"+n+".json"),
+			Description: "qa_targeted_repair JSON schema、QA findings 修复证据和 decision 合同",
+		}
 	case strings.HasPrefix(state.Stage, "fix_"):
 		n := strings.TrimPrefix(state.Stage, "fix_")
 		return stageArtifactExpectation{
@@ -89,6 +101,32 @@ func (e *Engine) validateStageArtifact(state State) (stageArtifactResult, bool, 
 			return stageArtifactResult{}, false, err
 		}
 		repair, err := ReadRepair(filepath.Join(base, "repair-"+strconv.Itoa(iteration)+".json"))
+		if os.IsNotExist(err) {
+			return stageArtifactResult{}, false, nil
+		}
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{Repair: repair}, true, nil
+	case strings.HasPrefix(state.Stage, "audit_"):
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		audit, err := ReadRepair(filepath.Join(base, "audit-"+strconv.Itoa(iteration)+".json"))
+		if os.IsNotExist(err) {
+			return stageArtifactResult{}, false, nil
+		}
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		return stageArtifactResult{Repair: audit}, true, nil
+	case strings.HasPrefix(state.Stage, "targeted_repair_"):
+		iteration, err := stageIteration(state.Stage)
+		if err != nil {
+			return stageArtifactResult{}, false, err
+		}
+		repair, err := ReadRepair(filepath.Join(base, "targeted-repair-"+strconv.Itoa(iteration)+".json"))
 		if os.IsNotExist(err) {
 			return stageArtifactResult{}, false, nil
 		}

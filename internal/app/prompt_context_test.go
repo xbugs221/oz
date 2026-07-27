@@ -154,6 +154,7 @@ func TestRepairPromptCarriesLatestFailedQA(t *testing.T) {
 			"qa_1":     "completed",
 		},
 	}
+	state.Workflow.Generation = repairWorkflowGeneration
 	context, err := promptContext(repo, state)
 	if err != nil {
 		t.Fatal(err)
@@ -194,6 +195,7 @@ func TestRepairPromptMarksForcedConfirmation(t *testing.T) {
 			"repair_1": "completed",
 		},
 	}
+	state.Workflow.Generation = repairWorkflowGeneration
 	context, err := promptContext(repo, state)
 	if err != nil {
 		t.Fatal(err)

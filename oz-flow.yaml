@@ -1,0 +1,110 @@
+max_repair_iterations: 9
+stages:
+  planning:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: xhigh
+  execution:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: medium
+  repair:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: high
+  qa:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: high
+  archive:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: low
+validation:
+  limit: 3
+  commands: []
+prompts:
+  planning: |
+      调用 `oz-plan` 技能开始讨论规划阶段
+  execution: |
+      读取:
+
+      - `{{.StatePath}}`
+      - 以 `state.json.change_name` 为准识别当前 oz change，不要超出当前提案范围
+      - acceptance.json：`{{.AcceptancePath}}`
+
+      调用 oz-exec 技能执行当前 oz change: `{{.ChangePath}}/`
+  repair: |
+      读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、当前完整变更 `{{.ChangePath}}/`、当前 diff baseline `{{.BaselineHead}}`
+
+      任务：
+
+      - 只处理当前提案范围：检查实现、修正发现的问题并运行确定性验证。
+      - 每轮重新核对 state、acceptance、完整 diff 与验证结果；不得仅依赖会话记忆。
+      - 当前提案问题写 `findings`；历史债务写 `non_blocking_findings`。
+      {{if .HasPreviousRepair}}
+      - 上一轮检查点：`{{.LatestPreviousRepairPath}}`。
+      {{end}}
+      {{if .HasPreviousQA}}
+      - 触发本轮的上一轮独立 QA：`{{.LatestPreviousQAPath}}`；必须逐项复核并处理其中的 findings。
+      {{end}}
+      {{if .IsRepairConfirmation}}
+      - 本轮是上一轮 `clean` 后的强制重审确认。必须重新从 state、acceptance、完整 diff 和验证结果开始审查，不得直接复述上一轮结论。
+      - 发现任何问题时先修复并使用 `needs_more`；只有本轮未发现新问题、无需新增修改且验证仍通过时才能再次使用 `clean`。
+      {{end}}
+
+      写入：`{{.RepairPath}}`
+
+      写入后运行：`oz flow validate-repair --artifact "{{.RepairPath}}" --json`
+
+      严格 JSON：字段为 `summary`、`decision`、`evidence[]`、`findings[]`、`checks`、`non_blocking_findings[]`。
+      `decision` 只能是 `clean` 或 `needs_more`。发现并修正问题、仍需下一轮确认时用 `needs_more`；确认当前范围无已知问题时用 `clean`。
+      每个 finding 使用 `{title,severity,scope,evidence,recommendation}`。
+
+      同一角色续轮必须复用 backend-scoped 会话 `{{.RoleSessionKey}}`；repairer 不能自行归档，clean 后仍须独立 QA 放行。
+  qa: |
+      读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、{{if .HasRepairCheckpoint}}`{{.RepairPath}}`、{{else}}本轮未配置 repair 检查点、{{end}}当前完整 diff baseline `{{.BaselineHead}}`、当前变更 `{{.ChangePath}}/`
+
+      任务：
+
+      - 只验收当前提案范围，不修改源码或 `{{.AcceptancePath}}`。
+      - 使用独立 QA 会话核对{{if .HasRepairCheckpoint}}最新 repair 检查点{{else}}执行结果（零轮 repair 模式无 repair 检查点）{{end}}；不得继承 repairer 的自我判断。
+      - `acceptance_matrix[].id` 必须逐字来自 `{{.AcceptancePath}}` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
+      - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
+      - blocking scope 只允许 `current_change` 或 `introduced_regression`；required_evidence 只要求可复核，不要求运行产物进 git。
+
+      写入：`{{.QAPath}}`
+
+      写入后运行：`oz flow validate-qa --artifact "{{.QAPath}}" --acceptance "{{.AcceptancePath}}" --json`
+
+      {{if .IsFirstRoleTurn}}
+      只写一个 JSON object。
+
+      字段：`summary`、`decision`(0=clean,1=needs_fix)、`evidence[]`、`acceptance_matrix[]`、`findings[]`、`non_blocking_findings[]`。
+
+      `acceptance_matrix[]`: `{id,status,artifact,evidence}`，`status`: 0=passed, 1=failed。`findings[]`: `{title,severity,scope,evidence,recommendation}`；`severity`: 1=blocker, 2=major, 3=minor；`scope`: 1=current_change, 2=introduced_regression, 0=out_of_scope_existing。`evidence[]` 每项必须是字符串，写可复核测试、截图、trace、控制台、网络或运行时证据。
+
+      clean：`decision=0`、`findings=[]`、`evidence` 非空、`acceptance_matrix` 覆盖 required_tests/required_evidence。needs_fix：`decision=1` 且 `findings` 非空。
+      {{else}}
+      续轮：复用当前角色会话 `{{.RoleSessionKey}}`，按同 schema 重写 `{{.QAPath}}`。
+      {{end}}
+  archive: |
+      读取：
+
+      - `{{.StatePath}}`
+      - `{{.AcceptancePath}}`
+      - `{{.PreviousRepairPaths}}`
+      - `{{.PreviousQAPaths}}`（如存在）
+
+      执行：
+
+      - 调用 `oz-archive` skill 归档，change-name 见 `state.json.change_name`。
+
+      写入：
+
+      ```text
+      {{.DeliverySummaryPath}}
+      ```
+
+      该路径是当前 run 的 `delivery-summary.md`。
+      summary 包含 `最终审核` 小节。

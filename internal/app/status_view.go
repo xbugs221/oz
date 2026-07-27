@@ -54,6 +54,22 @@ func stageChecklistLinesForRepo(repo string, state State, runtime map[string]sta
 		}
 		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", statusAcceptanceContractBlocked, reason))
 	}
+	for _, blocked := range []struct {
+		status string
+		reason string
+	}{
+		{status: statusBlockedEnvironment, reason: "运行环境前置条件缺失，工作流可在补齐后恢复"},
+		{status: statusBlockedStalled, reason: "相同失败下没有可证明进展，工作流等待新信息"},
+	} {
+		if state.Status != blocked.status && state.Stage != blocked.status {
+			continue
+		}
+		reason := state.Error
+		if reason == "" {
+			reason = blocked.reason
+		}
+		lines = append(lines, fmt.Sprintf("- 状态 %s x %s", blocked.status, reason))
+	}
 	if len(lines) == 0 {
 		return []string{"- 写 未知 →"}
 	}
@@ -64,7 +80,7 @@ func stageChecklistLinesForRepo(repo string, state State, runtime map[string]sta
 // stageTool returns the configured backend name for session lookup.
 func stageTool(state State, stage string) string {
 	ensureWorkflowConfig(&state)
-	if options, ok := state.Workflow.Stages[stage]; ok && options.Tool != "" {
+	if options, err := state.Workflow.StageOption(stage); err == nil && options.Tool != "" {
 		return options.Tool
 	}
 	return "codex"
@@ -96,7 +112,7 @@ const preWorkflowCompletedLabel = "工作流开始之前就已完成"
 
 // visibleSessionItems groups launched workflow stages by human session role.
 func visibleSessionItems(state State, runtime map[string]stageRuntime) []visibleSessionItem {
-	stages := workflowStagesForState(state)
+	stages := observedStatusStages(state)
 	var items []visibleSessionItem
 	for _, workflowRole := range statusRoles() {
 		role := workflowRole.Session
@@ -153,7 +169,8 @@ func plannerSessionID(state State) string {
 
 // sessionRoleID returns the public session id for a grouped role line.
 func sessionRoleID(state State, role string, stages []string, runtime map[string]stageRuntime) string {
-	for _, stage := range stages {
+	for index := len(stages) - 1; index >= 0; index-- {
+		stage := stages[index]
 		if stageSessionRole(stage) != role {
 			continue
 		}
@@ -166,11 +183,13 @@ func sessionRoleID(state State, role string, stages []string, runtime map[string
 			}
 		}
 	}
-	for _, stage := range stages {
+	for index := len(stages) - 1; index >= 0; index-- {
+		stage := stages[index]
 		if stageSessionRole(stage) != role {
 			continue
 		}
-		if id := state.Sessions[sessionStateKey(stageTool(state, stage), role)]; id != "" {
+		sessionRole := stageSessionRoleForState(state, stage)
+		if id := state.Sessions[sessionStateKey(stageTool(state, stage), sessionRole)]; id != "" {
 			return id
 		}
 	}

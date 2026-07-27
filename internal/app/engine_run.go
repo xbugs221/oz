@@ -123,7 +123,7 @@ func (e *Engine) createRun(changeName string) (State, error) {
 	if err := snapshotRunPrompts(e.Repo, state.RunID); err != nil {
 		return State{}, err
 	}
-	if err := snapshotRunAcceptance(e.Repo, state.RunID, acceptanceSource); err != nil {
+	if err := snapshotQualityLoopAcceptance(e.Repo, &state, acceptanceSource); err != nil {
 		return State{}, err
 	}
 	if err := saveState(e.Repo, state); err != nil {
@@ -154,6 +154,12 @@ func (e *Engine) run(ctx context.Context, state State) error {
 func (e *Engine) runLoop(ctx context.Context, state State) error {
 	e.printProgress(state, "resuming")
 	for normalizeRunStatus(state.Status).isRunning() {
+		if e.routeUntrustedQualityLoopTargetedRepair(&state) {
+			if err := saveState(e.Repo, state); err != nil {
+				return err
+			}
+			continue
+		}
 		forceRun := shouldForceStageRerun(state)
 		done := false
 		var err error
@@ -175,6 +181,13 @@ func (e *Engine) runLoop(ctx context.Context, state State) error {
 			}
 			if err := e.runStage(ctx, &state); err != nil {
 				return err
+			}
+			if !normalizeRunStatus(state.Status).isRunning() {
+				if err := saveState(e.Repo, state); err != nil {
+					return err
+				}
+				e.printProgress(state, "blocked")
+				continue
 			}
 		} else {
 			e.printProgress(state, "skipped")
@@ -210,7 +223,7 @@ func (e *Engine) handleStageArtifactGateFailure(state *State, failure error) (bo
 	if err := saveState(e.Repo, *state); err != nil {
 		return true, err
 	}
-	if state.Status == statusValidationBlocked {
+	if normalizeRunStatus(state.Status).isBlocked() {
 		e.printProgress(*state, "blocked")
 	} else {
 		e.printProgress(*state, "validation_failed")

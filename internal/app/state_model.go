@@ -17,6 +17,8 @@ const (
 	statusArchived                  = "archived_superseded"
 	statusInterrupted               = "interrupted"
 	statusBlocked                   = "blocked_review_limit"
+	statusBlockedEnvironment        = "blocked_environment"
+	statusBlockedStalled            = "blocked_stalled"
 	statusValidationBlocked         = "blocked_validation_limit"
 	statusAcceptanceContractBlocked = "blocked_acceptance_contract"
 	errNoInitialCommit              = "首次 git commit 前不能启动 oz flow run，请创建初始提交后重试"
@@ -49,6 +51,7 @@ type State struct {
 	BatchTotal                int                             `json:"batch_total,omitempty"`
 	BaselineHead              string                          `json:"baseline_head"`
 	BaselineDiff              string                          `json:"baseline_diff"`
+	AcceptanceHash            string                          `json:"acceptance_hash,omitempty"`
 	Sessions                  map[string]string               `json:"sessions"`
 	Stages                    map[string]string               `json:"stages"`
 	StageTimings              map[string]StageTiming          `json:"stage_timings,omitempty"`
@@ -60,8 +63,35 @@ type State struct {
 	AcceptanceRun             map[string]StageValidationState `json:"acceptance_run,omitempty"`
 	AcceptancePreflight       AcceptancePreflightState        `json:"acceptance_preflight,omitempty"`
 	RepairConfirmationPending bool                            `json:"repair_confirmation_pending,omitempty"`
+	QualityLoop               QualityLoopState                `json:"quality_loop,omitempty"`
 	Worker                    *WorkerRuntimeState             `json:"worker,omitempty"`
 	Workflow                  WorkflowConfig                  `json:"workflow_config"`
+}
+
+// QualityLoopState records dynamic quality-loop context without storing secret values.
+type QualityLoopState struct {
+	Mode                    string   `json:"mode,omitempty"`
+	SourceQAArtifact        string   `json:"source_qa_artifact,omitempty"`
+	SourceQAHash            string   `json:"source_qa_hash,omitempty"`
+	FindingFingerprint      string   `json:"finding_fingerprint,omitempty"`
+	ProgressHash            string   `json:"progress_hash,omitempty"`
+	RerunFindingFingerprint string   `json:"rerun_finding_fingerprint,omitempty"`
+	RerunProgressHash       string   `json:"rerun_progress_hash,omitempty"`
+	GateFailureFingerprint  string   `json:"gate_failure_fingerprint,omitempty"`
+	GateProgressHash        string   `json:"gate_progress_hash,omitempty"`
+	DiffHash                string   `json:"diff_hash,omitempty"`
+	TestsHash               string   `json:"tests_hash,omitempty"`
+	ValidationHash          string   `json:"validation_hash,omitempty"`
+	EvidenceHash            string   `json:"evidence_hash,omitempty"`
+	TestsProgressHash       string   `json:"tests_progress_hash,omitempty"`
+	ValidationProgressHash  string   `json:"validation_progress_hash,omitempty"`
+	EvidenceProgressHash    string   `json:"evidence_progress_hash,omitempty"`
+	RequiredTestsPassed     bool     `json:"required_tests_passed,omitempty"`
+	FailedTestsReplayed     bool     `json:"failed_tests_replayed,omitempty"`
+	BlockedFromStage        string   `json:"blocked_from_stage,omitempty"`
+	MissingEnvironmentNames []string `json:"missing_environment_names,omitempty"`
+	EnvironmentContent      string   `json:"environment_content,omitempty"`
+	ResumeRerunPending      bool     `json:"resume_rerun_pending,omitempty"`
 }
 
 // WorkerRuntimeState records one oz worker process for post-mortem diagnosis.

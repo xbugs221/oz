@@ -4,6 +4,7 @@
 
 - 只验收当前提案范围，不修改源码或 `{{.AcceptancePath}}`。
 - 使用独立 QA 会话核对{{if .HasRepairCheckpoint}}最新 repair 检查点{{else}}执行结果（零轮 repair 模式无 repair 检查点）{{end}}；不得继承 repairer 的自我判断。
+- QA 打回时必须在 findings 和 acceptance_matrix 中给出可复现的失败证据；下一阶段只会据此进行定向修复。
 - `acceptance_matrix[].id` 必须逐字来自 `{{.AcceptancePath}}` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
 - blocking scope 只允许 `current_change` 或 `introduced_regression`；required_evidence 只要求可复核，不要求运行产物进 git。

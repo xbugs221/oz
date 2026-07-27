@@ -1,4 +1,4 @@
-// Package app tests repair-loop workflow configuration migration and limits.
+// Package app tests quality-loop configuration migration and sealed repair compatibility.
 package app
 
 import (
@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// TestRepairLimitConfiguration verifies the documented 0..10 range.
+// TestRepairLimitConfiguration verifies the old limit remains diagnostic without bounding new runs.
 func TestRepairLimitConfiguration(t *testing.T) {
-	for _, value := range []int{0, 10} {
+	for _, value := range []int{0, 12} {
 		body := []byte(fmt.Sprintf("max_repair_iterations: %d\n", value))
 		config, err := workflowConfigFromYAML(body, "test.yaml", nil)
 		if err != nil {
@@ -18,14 +18,72 @@ func TestRepairLimitConfiguration(t *testing.T) {
 		if config.MaxRepairIterations != value {
 			t.Fatalf("MaxRepairIterations = %d, want %d", config.MaxRepairIterations, value)
 		}
-		if value == 0 {
-			if _, ok := config.Stages["qa_1"]; !ok {
-				t.Fatal("max_repair_iterations=0 must retain independent qa_1")
+		if config.Generation != qualityLoopWorkflowGeneration {
+			t.Fatalf("generation = %q, want %q", config.Generation, qualityLoopWorkflowGeneration)
+		}
+		for _, stage := range []string{"audit_1", "qa_1", "targeted_repair_1"} {
+			if _, ok := config.Stages[stage]; !ok {
+				t.Fatalf("quality loop must retain %s template", stage)
 			}
 		}
 	}
-	if _, err := workflowConfigFromYAML([]byte("max_repair_iterations: 11\n"), "test.yaml", nil); err == nil {
-		t.Fatal("max_repair_iterations=11 should fail")
+	if _, err := workflowConfigFromYAML([]byte("max_repair_iterations: -1\n"), "test.yaml", nil); err == nil {
+		t.Fatal("negative max_repair_iterations should fail")
+	}
+}
+
+// TestQualityLoopDynamicStageOptions verifies later stages inherit sealed first-stage templates.
+func TestQualityLoopDynamicStageOptions(t *testing.T) {
+	config, err := workflowConfigFromYAML([]byte("stages:\n  repair:\n    reasoning: high\n"), "test.yaml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stage := range []string{"audit_14", "targeted_repair_13", "qa_14"} {
+		if _, err := config.StageOption(stage); err != nil {
+			t.Fatalf("StageOption(%q): %v", stage, err)
+		}
+	}
+	if got, _ := config.StageOption("targeted_repair_13"); got.Reasoning != "high" {
+		t.Fatalf("targeted repair reasoning = %q, want high", got.Reasoning)
+	}
+}
+
+// TestQualityLoopPartialConfigInheritsRepairTemplate preserves profile defaults on partial overrides.
+func TestQualityLoopPartialConfigInheritsRepairTemplate(t *testing.T) {
+	base := DefaultWorkflowConfig()
+	config, err := workflowConfigFromYAML([]byte("validation:\n  limit: 4\n"), "partial.yaml", &base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stage := range []string{"audit_1", "targeted_repair_1"} {
+		option, err := config.StageOption(stage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if option.Reasoning != "high" {
+			t.Fatalf("%s reasoning = %q, want inherited high", stage, option.Reasoning)
+		}
+	}
+}
+
+// TestSealedRepairV1Compatibility verifies old finite snapshots keep expanded stages and limits.
+func TestSealedRepairV1Compatibility(t *testing.T) {
+	config := WorkflowConfig{
+		Generation:          repairWorkflowGeneration,
+		MaxRepairIterations: 2,
+		Stages: map[string]StageOptions{
+			"execution": {},
+			"repair_1":  {},
+			"qa_1":      {},
+			"repair_2":  {},
+			"qa_2":      {},
+			"archive":   {},
+		},
+	}
+	got := workflowStagesForConfig(config)
+	want := []string{"execution", "repair_1", "qa_1", "repair_2", "qa_2", "archive"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("sealed repair-v1 stages = %v, want %v", got, want)
 	}
 }
 

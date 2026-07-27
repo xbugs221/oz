@@ -88,7 +88,84 @@ func ReadQA(path string) (QA, error) {
 	if err := ValidateQA(qa); err != nil {
 		return QA{}, ReviewArtifactError{Path: path, Code: reviewArtifactValidationError, Reason: err.Error()}
 	}
+	safeQA, redacted := redactQAEnvironmentMarkers(qa)
+	if redacted {
+		data, err := marshalQAArtifact(safeQA)
+		if err != nil {
+			return QA{}, err
+		}
+		mode := os.FileMode(0o644)
+		if info, statErr := os.Stat(path); statErr == nil {
+			mode = info.Mode().Perm()
+		}
+		if err := atomicWriteFile(path, append(data, '\n'), mode); err != nil {
+			return QA{}, err
+		}
+		qa = safeQA
+	}
 	return qa, nil
+}
+
+// redactQAEnvironmentMarkers removes marker values from every free-text QA field.
+func redactQAEnvironmentMarkers(qa QA) (QA, bool) {
+	safe := qa
+	changed := false
+	redact := func(text string) string {
+		result := redactQualityEnvironmentMarkers(text)
+		if result != text {
+			changed = true
+		}
+		return result
+	}
+	safe.Summary = redact(safe.Summary)
+	safe.Evidence = append([]string(nil), safe.Evidence...)
+	for i := range safe.Evidence {
+		safe.Evidence[i] = redact(safe.Evidence[i])
+	}
+	safe.Findings = append([]Finding(nil), safe.Findings...)
+	for i := range safe.Findings {
+		safe.Findings[i].Title = redact(safe.Findings[i].Title)
+		safe.Findings[i].Evidence = redact(safe.Findings[i].Evidence)
+		safe.Findings[i].Recommendation = redact(safe.Findings[i].Recommendation)
+	}
+	safe.NonBlockingFindings = append([]Finding(nil), safe.NonBlockingFindings...)
+	for i := range safe.NonBlockingFindings {
+		safe.NonBlockingFindings[i].Title = redact(safe.NonBlockingFindings[i].Title)
+		safe.NonBlockingFindings[i].Evidence = redact(safe.NonBlockingFindings[i].Evidence)
+		safe.NonBlockingFindings[i].Recommendation = redact(safe.NonBlockingFindings[i].Recommendation)
+	}
+	safe.AcceptanceMatrix = append([]AcceptanceResult(nil), safe.AcceptanceMatrix...)
+	for i := range safe.AcceptanceMatrix {
+		safe.AcceptanceMatrix[i].Artifact = redact(safe.AcceptanceMatrix[i].Artifact)
+		safe.AcceptanceMatrix[i].Evidence = redact(safe.AcceptanceMatrix[i].Evidence)
+	}
+	return safe, changed
+}
+
+// marshalQAArtifact preserves the strict QA shape when writing a redacted checkpoint.
+func marshalQAArtifact(qa QA) ([]byte, error) {
+	if qa.Evidence == nil {
+		qa.Evidence = []string{}
+	}
+	if qa.Findings == nil {
+		qa.Findings = []Finding{}
+	}
+	return json.MarshalIndent(qa, "", "  ")
+}
+
+// qualityEnvironmentNamesFromQA extracts safe environment identifiers from QA diagnostics.
+func qualityEnvironmentNamesFromQA(qa QA) []string {
+	parts := append([]string{qa.Summary}, qa.Evidence...)
+	for _, finding := range qa.Findings {
+		parts = append(parts, finding.Title, finding.Evidence, finding.Recommendation)
+	}
+	for _, finding := range qa.NonBlockingFindings {
+		parts = append(parts, finding.Title, finding.Evidence, finding.Recommendation)
+	}
+	for _, result := range qa.AcceptanceMatrix {
+		parts = append(parts, result.Artifact, result.Evidence)
+	}
+	return qualityEnvironmentNamesFromText(strings.Join(parts, "\n"))
 }
 
 // ValidateQA enforces the QA JSON schema used by the workflow.
@@ -123,13 +200,10 @@ func ValidateQA(qa QA) error {
 	return nil
 }
 
-// ValidateQAAgainstAcceptance ensures clean QA covers every acceptance item.
+// ValidateQAAgainstAcceptance ensures every QA decision uses a complete, contract-owned matrix.
 func ValidateQAAgainstAcceptance(qa QA, contract Acceptance) error {
 	if err := ValidateQA(qa); err != nil {
 		return err
-	}
-	if qa.Decision != "clean" {
-		return nil
 	}
 	required := acceptance.RequiredItems(contract)
 	if len(required.Tests) == 0 && len(required.Evidence) == 0 {
@@ -145,7 +219,10 @@ func ValidateQAAgainstAcceptance(qa QA, contract Acceptance) error {
 		if !testOK && !evidenceOK {
 			return fmt.Errorf("acceptance_matrix[%d].id 未在 acceptance 合同中定义：%q", i, result.ID)
 		}
-		if result.Status != "passed" {
+		if result.Status != "passed" && result.Status != "failed" {
+			return fmt.Errorf("acceptance_matrix[%d].status 无效：%s", i, result.Status)
+		}
+		if qa.Decision == "clean" && result.Status != "passed" {
 			return fmt.Errorf("acceptance_matrix[%d] 未通过：%s", i, result.ID)
 		}
 		seen[result.ID] = true
@@ -208,4 +285,13 @@ func parseQAArtifact(path string, data []byte) (QA, error) {
 // QANeedsFix reports whether a valid QA artifact requires another fix round.
 func QANeedsFix(qa QA) bool {
 	return qa.Decision == "needs_fix" || len(qa.Findings) > 0
+}
+
+// qaArtifactContentHash binds targeted repair to every normalized source QA field.
+func qaArtifactContentHash(qa QA) string {
+	data, err := json.Marshal(normalizeQA(qa))
+	if err != nil {
+		return ""
+	}
+	return qualityHashStrings(string(data))
 }

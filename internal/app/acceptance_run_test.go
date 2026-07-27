@@ -4,10 +4,12 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/xbugs221/oz/internal/acceptance"
@@ -28,6 +30,13 @@ func TestRunAcceptanceCommandPassesAndWritesResult(t *testing.T) {
 	if !fileExists(filepath.Join(repo, filepath.FromSlash(result.ResultPath))) {
 		t.Fatalf("missing result file %s", result.ResultPath)
 	}
+	wantLogPath := "test-results/acceptance-run/1-demo/pass-test.log"
+	if len(result.Tests) != 1 || result.Tests[0].LogPath != wantLogPath {
+		t.Fatalf("public acceptance log path = %#v, want %q", result.Tests, wantLogPath)
+	}
+	if len(result.Tests[0].LogHash) != sha256.Size*2 {
+		t.Fatalf("public acceptance log hash = %q", result.Tests[0].LogHash)
+	}
 	if len(result.Diagnostics) != 0 {
 		t.Fatalf("passing acceptance run should not report diagnostics: %#v", result.Diagnostics)
 	}
@@ -36,6 +45,210 @@ func TestRunAcceptanceCommandPassesAndWritesResult(t *testing.T) {
 	}
 	if len(result.Producers) != 1 || result.Producers[0].EvidenceID != "evidence-a" || !result.Producers[0].Verified {
 		t.Fatalf("passing acceptance run should expose verified producer trace: %#v", result.Producers)
+	}
+}
+
+// TestRunAcceptanceLogWriteFailureFailsGate verifies command success cannot hide missing durable logs.
+func TestRunAcceptanceLogWriteFailureFailsGate(t *testing.T) {
+	repo := acceptanceRunRepo(
+		t,
+		"1-demo",
+		"pass-test",
+		`mkdir -p test-results/demo && printf ok > test-results/demo/runtime.log`,
+		"test-results/demo/runtime.log",
+	)
+	logPath := filepath.Join(repo, "test-results", "acceptance-run", "1-demo", "pass-test.log")
+	if err := os.MkdirAll(logPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	result, err := runAcceptanceRequiredTests(context.Background(), repo, "1-demo")
+	if err == nil {
+		t.Fatal("acceptance run should fail when its required-test log cannot be written")
+	}
+	if result.Valid || result.Summary.Failed != 1 || len(result.Tests) != 1 ||
+		result.Tests[0].Status != validationStatusFailed || result.Tests[0].ExitCode != 0 {
+		t.Fatalf("log persistence failure result = %#v", result)
+	}
+	if !hasAcceptanceDiagnostic(result.Diagnostics, "required_test_log_write_failed") {
+		t.Fatalf("missing log persistence diagnostic: %#v", result.Diagnostics)
+	}
+}
+
+// TestRunAcceptanceLogWriteReplacesLinks verifies logs never overwrite symbolic or hard-link targets.
+func TestRunAcceptanceLogWriteReplacesLinks(t *testing.T) {
+	for _, linkKind := range []string{"symlink", "hardlink"} {
+		t.Run(linkKind, func(t *testing.T) {
+			repo := t.TempDir()
+			resultDirRel := "test-results/acceptance-run/1-demo/run/audit_1/attempt-1"
+			resultDir, err := ensureAcceptanceArtifactDirectory(repo, resultDirRel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			logRel := filepath.ToSlash(filepath.Join(resultDirRel, acceptanceLogName(0, "pass-test")))
+			logPath := filepath.Join(repo, filepath.FromSlash(logRel))
+			outside := filepath.Join(t.TempDir(), "outside.log")
+			const sentinel = "outside sentinel\n"
+			if err := os.WriteFile(outside, []byte(sentinel), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if linkKind == "symlink" {
+				if err := os.Symlink(outside, logPath); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Link(outside, logPath); err != nil {
+				t.Skipf("hard links unavailable: %v", err)
+			}
+
+			results, diagnostics := runAcceptanceTests(
+				context.Background(),
+				repo,
+				resultDir,
+				resultDirRel,
+				true,
+				[]AcceptanceTest{{ID: "pass-test", Command: "printf 'runner output\\n'"}},
+			)
+			if len(diagnostics) != 0 || len(results) != 1 || results[0].Status != validationStatusPassed {
+				t.Fatalf("linked log persistence result=%#v diagnostics=%#v", results, diagnostics)
+			}
+			outsideData, err := os.ReadFile(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(outsideData) != sentinel {
+				t.Fatalf("%s target was overwritten: %q", linkKind, outsideData)
+			}
+			info, err := os.Lstat(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+				t.Fatalf("final log is not a regular file: %s", info.Mode())
+			}
+		})
+	}
+}
+
+// TestWriteAcceptanceRunResultReplacesLinks verifies result JSON never follows an attacker-planted link.
+func TestWriteAcceptanceRunResultReplacesLinks(t *testing.T) {
+	for _, linkKind := range []string{"symlink", "hardlink"} {
+		t.Run(linkKind, func(t *testing.T) {
+			repo := t.TempDir()
+			result := AcceptanceRunResult{
+				Change:     "1-demo",
+				Valid:      true,
+				Status:     validationStatusPassed,
+				ResultPath: "test-results/acceptance-run/1-demo/result.json",
+			}
+			resultPath, err := acceptanceArtifactFilePath(repo, result.ResultPath, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outside := filepath.Join(t.TempDir(), "outside.json")
+			const sentinel = "outside sentinel\n"
+			if err := os.WriteFile(outside, []byte(sentinel), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if linkKind == "symlink" {
+				if err := os.Symlink(outside, resultPath); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Link(outside, resultPath); err != nil {
+				t.Skipf("hard links unavailable: %v", err)
+			}
+
+			if err := writeAcceptanceRunResult(repo, result); err != nil {
+				t.Fatal(err)
+			}
+			outsideData, err := os.ReadFile(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(outsideData) != sentinel {
+				t.Fatalf("%s target was overwritten: %q", linkKind, outsideData)
+			}
+			info, err := os.Lstat(resultPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+				t.Fatalf("final result is not a regular file: %s", info.Mode())
+			}
+		})
+	}
+}
+
+// TestAcceptanceArtifactWriteRejectsLinkedParent keeps the entire result namespace inside the repository.
+func TestAcceptanceArtifactWriteRejectsLinkedParent(t *testing.T) {
+	repo := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(repo, "test-results")); err != nil {
+		t.Fatal(err)
+	}
+	relative := "test-results/acceptance-run/1-demo/result.json"
+	if err := writeAcceptanceArtifactFile(repo, relative, []byte("{}\n")); err == nil {
+		t.Fatal("acceptance artifact write followed a linked parent")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "acceptance-run", "1-demo", "result.json")); !os.IsNotExist(err) {
+		t.Fatalf("linked parent received an artifact: %v", err)
+	}
+}
+
+// TestRunAcceptanceRejectsUnsafeEvidenceTypes verifies only safe readable regular files satisfy evidence.
+func TestRunAcceptanceRejectsUnsafeEvidenceTypes(t *testing.T) {
+	const evidencePath = "test-results/demo/runtime.log"
+	t.Run("repository escape symlink", func(t *testing.T) {
+		repo := acceptanceRunRepo(
+			t,
+			"1-demo",
+			"pass-test",
+			`printf '%s\n' test-results/demo/runtime.log >/dev/null`,
+			evidencePath,
+		)
+		outside := filepath.Join(t.TempDir(), "external.log")
+		if err := os.WriteFile(outside, []byte("external\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(repo, filepath.FromSlash(evidencePath))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, path); err != nil {
+			t.Fatal(err)
+		}
+		assertUnsafeAcceptanceEvidence(t, repo, "1-demo")
+	})
+	t.Run("fifo", func(t *testing.T) {
+		repo := acceptanceRunRepo(
+			t,
+			"1-demo",
+			"pass-test",
+			`printf '%s\n' test-results/demo/runtime.log >/dev/null`,
+			evidencePath,
+		)
+		path := filepath.Join(repo, filepath.FromSlash(evidencePath))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		assertUnsafeAcceptanceEvidence(t, repo, "1-demo")
+	})
+}
+
+// assertUnsafeAcceptanceEvidence checks that unsafe evidence reaches the persisted result diagnostics.
+func assertUnsafeAcceptanceEvidence(t *testing.T, repo, changeName string) {
+	t.Helper()
+	result, err := runAcceptanceRequiredTests(context.Background(), repo, changeName)
+	if err == nil {
+		t.Fatal("acceptance run should fail for unsafe required evidence")
+	}
+	if result.Valid || result.Summary.EvidenceMissing != 1 || len(result.Evidence) != 1 ||
+		result.Evidence[0].Status != "unsafe" {
+		t.Fatalf("unsafe evidence result = %#v", result)
+	}
+	if !hasAcceptanceDiagnostic(result.Diagnostics, "required_evidence_runtime_unsafe") {
+		t.Fatalf("missing unsafe evidence diagnostic: %#v", result.Diagnostics)
 	}
 }
 

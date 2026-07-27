@@ -44,6 +44,7 @@ func parallelTopologyForStage(stage string) (stageParallelTopology, bool) {
 	return stageParallelTopology{}, false
 }
 
+// parallelGroupForCompactStage maps concrete legacy and quality-loop stages to display groups.
 func parallelGroupForCompactStage(stage string) []string {
 	if stage == "planning" {
 		return []string{parallelGroupPlanning}
@@ -51,7 +52,7 @@ func parallelGroupForCompactStage(stage string) []string {
 	if stage == "execution" {
 		return []string{parallelGroupImplementation}
 	}
-	if strings.HasPrefix(stage, "review_") {
+	if strings.HasPrefix(stage, "review_") || strings.HasPrefix(stage, "audit_") || strings.HasPrefix(stage, "targeted_repair_") {
 		return []string{parallelGroupReview}
 	}
 	if strings.HasPrefix(stage, "qa_") {
@@ -110,14 +111,17 @@ func allowedStagesForParallelGroup(groupName string) (map[string]bool, bool) {
 	return nil, false
 }
 
+// stageAtLeastKind compares business stage kinds across legacy and quality-loop generations.
 func stageAtLeastKind(kind string, minimum string) bool {
 	order := map[string]int{
-		"planning":  1,
-		"execution": 2,
-		"review":    3,
-		"qa":        4,
-		"archive":   5,
-		"done":      6,
+		"planning":        1,
+		"execution":       2,
+		"audit":           3,
+		"review":          3,
+		"targeted_repair": 3,
+		"qa":              4,
+		"archive":         5,
+		"done":            6,
 	}
 	return order[kind] >= order[minimum]
 }

@@ -134,6 +134,7 @@ func TestStageDecisionReviewNeedsFix(t *testing.T) {
 // stageDecisionState returns the minimal durable state needed by the pure decision function.
 func stageDecisionState(stage string, maxReviewIterations int) State {
 	workflow := DefaultWorkflowConfig()
+	workflow.Generation = repairWorkflowGeneration
 	workflow.MaxRepairIterations = maxReviewIterations
 	workflow.MaxReviewIterations = 0
 	return State{Status: statusRunning, Stage: stage, Workflow: workflow}
@@ -142,6 +143,7 @@ func stageDecisionState(stage string, maxReviewIterations int) State {
 // legacyStageDecisionState returns a sealed review/fix snapshot for migration regression coverage.
 func legacyStageDecisionState(stage string, maxReviewIterations int) State {
 	workflow := DefaultWorkflowConfig()
+	workflow.Generation = ""
 	workflow.MaxRepairIterations = 0
 	workflow.MaxReviewIterations = maxReviewIterations
 	return State{Status: statusRunning, Stage: stage, Workflow: workflow}

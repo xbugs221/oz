@@ -48,7 +48,7 @@ func stageDurationItems(state State, now time.Time) []stageDurationItem {
 	}
 	var order []string
 	buckets := map[string]*stageDurationBucket{}
-	for _, stage := range workflowStagesForState(state) {
+	for _, stage := range observedStatusStages(state) {
 		timing, ok := state.StageTimings[stage]
 		if !ok || timing.StartedAt == "" {
 			continue

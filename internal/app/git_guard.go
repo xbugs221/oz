@@ -38,7 +38,12 @@ func gitSnapshot(repo string) (string, string, error) {
 		}
 		return "", "", err
 	}
-	statusCmd := commandContext(context.Background(), gitPath, "-c", "core.quotePath=false", "status", "--porcelain")
+	statusCmd := commandContext(
+		context.Background(),
+		gitPath,
+		"-c", "core.quotePath=false",
+		"status", "--porcelain", "--untracked-files=all",
+	)
 	statusCmd.Dir = repo
 	status, err := statusCmd.CombinedOutput()
 	if err != nil {
@@ -125,40 +130,71 @@ func classifyGitSnapshotChangeWithAllowed(repo, changeName, beforeHead, beforeDi
 	return gitSnapshotGuard{Blocked: len(blocked) > 0, Paths: blocked, Allowed: allowed}, nil
 }
 
-// gitChangeContentSnapshot captures the actual repository change content, ignoring index-only churn.
+// gitChangeContentSnapshot captures all effective tracked and untracked worktree content.
 func gitChangeContentSnapshot(repo string) (string, error) {
+	return gitChangeContentSnapshotForChange(repo, "")
+}
+
+// gitChangeContentSnapshotForChange captures source content while ignoring unrelated active proposals.
+func gitChangeContentSnapshotForChange(repo, changeName string) (string, error) {
 	gitPath, err := resolveCommand("git")
 	if err != nil {
 		return "", err
 	}
-	diffCmd := commandContext(
+	listCmd := commandContext(
 		context.Background(),
 		gitPath,
 		"-c", "core.quotePath=false",
-		"diff", "--no-ext-diff", "--binary", "HEAD", "--",
-		".",
-		":(exclude).wo",
-		":(exclude).wo/**",
-		":(exclude)test-results",
-		":(exclude)test-results/**",
+		"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ".",
 	)
-	diffCmd.Dir = repo
-	diff, err := diffCmd.CombinedOutput()
+	listCmd.Dir = repo
+	output, err := listCmd.CombinedOutput()
 	if err != nil {
-		detail := strings.TrimSpace(string(diff))
+		detail := strings.TrimSpace(string(output))
 		if detail != "" {
-			return "", fmt.Errorf("git diff HEAD 失败：%s", detail)
+			return "", fmt.Errorf("git ls-files 失败：%s", detail)
 		}
 		return "", err
 	}
-	untracked, err := untrackedContentSnapshot(repo, gitPath)
-	if err != nil {
-		return "", err
+	var entries []string
+	seen := map[string]bool{}
+	for _, rawPath := range strings.Split(string(output), "\x00") {
+		path := filepath.ToSlash(rawPath)
+		if path == "" || seen[path] || isRuntimeGitPath(path) || isOtherActiveChangePath(path, changeName) {
+			continue
+		}
+		seen[path] = true
+		entry, present, err := gitWorktreeContentEntry(repo, path)
+		if err != nil {
+			return "", err
+		}
+		if present {
+			entries = append(entries, entry)
+		}
 	}
-	if len(untracked) == 0 {
-		return string(diff), nil
+	sort.Strings(entries)
+	return strings.Join(entries, "\n"), nil
+}
+
+// gitStatusContentSnapshot hashes the effective content of every path already present in a status snapshot.
+func gitStatusContentSnapshot(repo, status string) (string, error) {
+	paths := make([]string, 0, len(statusLineByPath(status)))
+	for path := range statusLineByPath(status) {
+		paths = append(paths, path)
 	}
-	return string(diff) + "\n-- oz untracked content --\n" + strings.Join(untracked, "\n"), nil
+	var entries []string
+	for _, path := range uniqueSortedPaths(paths) {
+		entry, present, err := gitWorktreeContentEntry(repo, path)
+		if err != nil {
+			return "", err
+		}
+		if !present {
+			entry = fmt.Sprintf("CONTENT\t%s\tmissing", hex.EncodeToString([]byte(path)))
+		}
+		entries = append(entries, entry)
+	}
+	sort.Strings(entries)
+	return strings.Join(entries, "\n"), nil
 }
 
 // classifyGitContentSnapshotChange reports paths whose actual repository change content changed.
@@ -180,44 +216,85 @@ func classifyGitContentSnapshotChange(repo, before, after string, allowedDirs []
 	return gitSnapshotGuard{Blocked: len(blocked) > 0, Paths: blocked, Allowed: allowed}
 }
 
-// untrackedContentSnapshot records untracked file contents without considering generated runtime paths.
-func untrackedContentSnapshot(repo, gitPath string) ([]string, error) {
-	cmd := commandContext(context.Background(), gitPath, "-c", "core.quotePath=false", "ls-files", "-z", "--others", "--exclude-standard", "--", ".")
-	cmd.Dir = repo
-	out, err := cmd.CombinedOutput()
+// gitWorktreeContentEntry hashes one effective path independently from HEAD and index state.
+func gitWorktreeContentEntry(repo, path string) (string, bool, error) {
+	full := filepath.Join(repo, filepath.FromSlash(path))
+	info, err := os.Lstat(full)
 	if err != nil {
-		detail := strings.TrimSpace(string(out))
-		if detail != "" {
-			return nil, fmt.Errorf("git ls-files --others 失败：%s", detail)
+		if os.IsNotExist(err) {
+			return "", false, nil
 		}
+		return "", false, err
+	}
+	kind := "file"
+	var data []byte
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		kind = "symlink"
+		target, err := os.Readlink(full)
+		if err != nil {
+			return "", false, err
+		}
+		data = []byte(target)
+	case info.Mode().IsRegular():
+		data, err = os.ReadFile(full)
+		if err != nil {
+			return "", false, err
+		}
+	case info.IsDir():
+		// A directory returned by git ls-files is a gitlink; its checked-out HEAD is content.
+		kind = "gitlink"
+		data, err = gitlinkContent(repo, full)
+		if err != nil {
+			return "", false, err
+		}
+	default:
+		return "", false, fmt.Errorf("无法快照非常规仓库路径 %q", path)
+	}
+	sum := sha256.Sum256(data)
+	executable := info.Mode().Perm()&0o111 != 0
+	fingerprint := fmt.Sprintf("%s:%t:%d:%s", kind, executable, len(data), hex.EncodeToString(sum[:]))
+	return fmt.Sprintf("CONTENT\t%s\t%s", hex.EncodeToString([]byte(path)), fingerprint), true, nil
+}
+
+// gitlinkContent binds a submodule commit and its recursive effective worktree content.
+func gitlinkContent(repo, full string) ([]byte, error) {
+	gitPath, err := resolveCommand("git")
+	if err != nil {
 		return nil, err
 	}
-	var entries []string
-	for _, rawPath := range strings.Split(string(out), "\x00") {
-		path := filepath.ToSlash(strings.TrimSpace(rawPath))
-		if path == "" || isRuntimeGitPath(path) {
-			continue
-		}
-		full := filepath.Join(repo, filepath.FromSlash(path))
-		info, err := os.Lstat(full)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, err
-		}
-		if info.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(full)
-		if err != nil {
-			return nil, err
-		}
-		sum := sha256.Sum256(data)
-		entries = append(entries, fmt.Sprintf("UNTRACKED\t%s\t%d:%s", path, len(data), hex.EncodeToString(sum[:])))
+	cmd := commandContext(context.Background(), gitPath, "-C", full, "rev-parse", "--verify", "HEAD^{commit}")
+	cmd.Dir = repo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("读取 gitlink %q 失败：%s", full, strings.TrimSpace(string(output)))
 	}
-	sort.Strings(entries)
-	return entries, nil
+	content, err := gitChangeContentSnapshotForChange(full, "")
+	if err != nil {
+		return nil, fmt.Errorf("读取 gitlink %q 工作树失败：%w", full, err)
+	}
+	return []byte(strings.TrimSpace(string(output)) + "\x00" + content), nil
+}
+
+// isOtherActiveChangePath excludes only sibling active proposals from one run's source identity.
+func isOtherActiveChangePath(path, changeName string) bool {
+	if strings.TrimSpace(changeName) == "" {
+		return false
+	}
+	path = strings.TrimPrefix(filepath.ToSlash(path), "./")
+	const prefix = "docs/changes/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	if rest == "" || strings.HasPrefix(rest, "archive/") || strings.HasPrefix(rest, ".") {
+		return false
+	}
+	slash := strings.IndexByte(rest, '/')
+	if slash < 0 {
+		return false
+	}
+	return rest[:slash] != changeName
 }
 
 // gitContentSnapshotChangedPaths extracts affected paths from two content snapshots.
@@ -248,6 +325,18 @@ func gitContentSnapshotPathMap(snapshot string) map[string]string {
 	paths := map[string][]string{}
 	var current string
 	for _, line := range strings.Split(snapshot, "\n") {
+		if strings.HasPrefix(line, "CONTENT\t") {
+			fields := strings.SplitN(line, "\t", 3)
+			if len(fields) == 3 {
+				decoded, err := hex.DecodeString(fields[1])
+				if err == nil {
+					path := filepath.ToSlash(string(decoded))
+					paths[path] = append(paths[path], fields[2])
+				}
+			}
+			current = ""
+			continue
+		}
 		if path, ok := diffGitLinePath(line); ok {
 			current = path
 			paths[current] = append(paths[current], line)

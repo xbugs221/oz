@@ -8,14 +8,16 @@ import (
 )
 
 const (
-	workflowStageExecution = "execution"
-	workflowStagePlanning  = "planning"
-	workflowStageRepair    = "repair"
-	workflowStageReview    = "review"
-	workflowStageFix       = "fix"
-	workflowStageQA        = "qa"
-	workflowStageArchive   = "archive"
-	workflowStageDone      = "done"
+	workflowStageExecution      = "execution"
+	workflowStagePlanning       = "planning"
+	workflowStageAudit          = "audit"
+	workflowStageTargetedRepair = "targeted_repair"
+	workflowStageRepair         = "repair"
+	workflowStageReview         = "review"
+	workflowStageFix            = "fix"
+	workflowStageQA             = "qa"
+	workflowStageArchive        = "archive"
+	workflowStageDone           = "done"
 )
 
 // workflowStage is the single parsed representation of a durable stage string.
@@ -36,6 +38,8 @@ func parseWorkflowStage(stage string) (workflowStage, error) {
 		prefix string
 		kind   string
 	}{
+		{prefix: "targeted_repair_", kind: workflowStageTargetedRepair},
+		{prefix: "audit_", kind: workflowStageAudit},
 		{prefix: "repair_", kind: workflowStageRepair},
 		{prefix: "review_", kind: workflowStageReview},
 		{prefix: "fix_", kind: workflowStageFix},
@@ -93,7 +97,7 @@ func (s runStatus) isTerminal() bool {
 // isBlocked reports whether this status represents a deliberate workflow gate stop.
 func (s runStatus) isBlocked() bool {
 	switch string(s) {
-	case statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked:
+	case statusBlocked, statusBlockedEnvironment, statusBlockedStalled, statusValidationBlocked, statusAcceptanceContractBlocked:
 		return true
 	default:
 		return false

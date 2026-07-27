@@ -216,8 +216,14 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	fixture.git("commit", "-q", "-m", "add repair DAG fixture")
 
 	workflow := DefaultWorkflowConfig()
+	workflow.Generation = repairWorkflowGeneration
 	workflow.MaxRepairIterations = 3
 	workflow.MaxReviewIterations = 0
+	byKind := defaultStageOptionsByKind()
+	for i := 1; i <= workflow.MaxRepairIterations; i++ {
+		workflow.Stages[fmt.Sprintf("repair_%d", i)] = byKind["repair"]
+		workflow.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]
+	}
 	head, diff, err := gitSnapshot(repo)
 	if err != nil {
 		t.Fatal(err)
@@ -256,6 +262,10 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	qa := cleanQAForStageDecision()
 	qa.Decision = "needs_fix"
 	qa.Findings = []Finding{blockingFindingForStageDecision()}
+	qa.AcceptanceMatrix = []AcceptanceResult{
+		{ID: "repair-dag-contract", Status: "failed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "integration contract failed"},
+		{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "runtime evidence exists"},
+	}
 	if err := writeJSONFile(filepath.Join(runDir(repo, runID), "qa-1.json"), qa); err != nil {
 		t.Fatal(err)
 	}
@@ -335,6 +345,7 @@ func (r *zeroRepairWorkflowRunner) Run(_ context.Context, _ string, prompt strin
 func TestZeroRepairWorkflowDAGArchive(t *testing.T) {
 	repo, changeName, acceptanceSource, head, diff := newRepairEvidenceFixture(t)
 	workflow := DefaultWorkflowConfig()
+	workflow.Generation = repairWorkflowGeneration
 	workflow.MaxRepairIterations = 0
 	workflow.MaxReviewIterations = 0
 	runID := newRunID()
@@ -385,8 +396,14 @@ func TestRepairLimitBlockedWorkflowEvidence(t *testing.T) {
 	t.Setenv("REPAIR_LIMIT_STATE_EVIDENCE", "")
 	repo, changeName, acceptanceSource, head, diff := newRepairEvidenceFixture(t)
 	workflow := DefaultWorkflowConfig()
+	workflow.Generation = repairWorkflowGeneration
 	workflow.MaxRepairIterations = 2
 	workflow.MaxReviewIterations = 0
+	byKind := defaultStageOptionsByKind()
+	for i := 1; i <= workflow.MaxRepairIterations; i++ {
+		workflow.Stages[fmt.Sprintf("repair_%d", i)] = byKind["repair"]
+		workflow.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]
+	}
 	runID := newRunID()
 	state := State{
 		RunID:        runID,
@@ -482,12 +499,14 @@ func TestLegacyRepairWorkflowResumeEvidence(t *testing.T) {
 	t.Setenv("REPAIR_LEGACY_STATE_EVIDENCE", "")
 	repo, changeName, acceptanceSource, head, diff := newRepairEvidenceFixture(t)
 	workflow := DefaultWorkflowConfig()
+	workflow.Generation = ""
 	workflow.MaxRepairIterations = 0
 	workflow.MaxReviewIterations = 2
 	byKind := defaultStageOptionsByKind()
 	for i := 1; i <= 2; i++ {
 		workflow.Stages[fmt.Sprintf("review_%d", i)] = byKind["review"]
 		workflow.Stages[fmt.Sprintf("fix_%d", i)] = byKind["fix"]
+		workflow.Stages[fmt.Sprintf("qa_%d", i)] = byKind["qa"]
 	}
 	runID := newRunID()
 	state := State{

@@ -21,6 +21,37 @@ import (
 	"testing"
 )
 
+// sealChangeEightAcceptance writes the immutable contract required by quality-loop prompts.
+func sealChangeEightAcceptance(t *testing.T, repo string, state *State) {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(repo, "state"))
+	source := filepath.Join(repo, "acceptance.json")
+	body := `{
+  "summary": "change eight execution prompt contract",
+  "coverage": [{
+    "spec": "需求：执行提示词聚焦硬合同 / 场景：渲染封存运行提示词",
+    "tests": ["prompt-contract"],
+    "evidence": [],
+    "risk": "只验证提示词结构"
+  }],
+  "required_tests": [{
+    "id": "prompt-contract",
+    "source": "change_contract",
+    "path": "tests/prompt-contract.sh",
+    "command": "bash tests/prompt-contract.sh",
+    "purpose": "验证 execution prompt 聚焦硬合同",
+    "assertions": ["执行提示词使用封存验收且不重复长文档策略"]
+  }],
+  "required_evidence": []
+}`
+	if err := os.WriteFile(source, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := snapshotQualityLoopAcceptance(repo, state, source); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // renderChangeEightPrompt renders a bundled prompt with realistic state fields.
 func renderChangeEightPrompt(t *testing.T) string {
 	t.Helper()
@@ -31,10 +62,13 @@ func renderChangeEightPrompt(t *testing.T) string {
 	state := State{
 		RunID:      "change-eight-hard-contract",
 		ChangeName: "8-强化验收硬合同并精简执行上下文",
+		Sealed:     true,
 		Stage:      "execution",
 		Workflow:   DefaultWorkflowConfig(),
 	}
-	context, err := promptContext(t.TempDir(), state)
+	repo := t.TempDir()
+	sealChangeEightAcceptance(t, repo, &state)
+	context, err := promptContext(repo, state)
 	if err != nil {
 		t.Fatal(err)
 	}

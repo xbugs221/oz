@@ -1,0 +1,102 @@
+{
+  "summary": "验证 oz flow 以 QA 前全量自查、QA 后定向修复和强制自测实现无固定轮次上限的高效低缺陷交付闭环。",
+  "coverage": [
+    {
+      "spec": "需求：QA 前完成当前提案的全量自查 / 场景：全量自查修复后再次确认再进入 QA",
+      "tests": ["quality-delivery-loop"],
+      "evidence": ["quality-loop-runtime", "quality-loop-state"],
+      "risk": "模型发现问题的能力不由状态机测试证明，仍需独立 QA。"
+    },
+    {
+      "spec": "需求：QA 打回后只进行有证据的定向修复 / 场景：定向修复复跑失败测试和完整验收后移交 QA",
+      "tests": ["quality-delivery-loop", "app-regression"],
+      "evidence": ["targeted-repair-state", "quality-loop-runtime"],
+      "risk": "QA findings 的业务准确性由实际 acceptance 合同决定。"
+    },
+    {
+      "spec": "需求：质量循环不因固定轮次终止 / 场景：超过历史十轮限制后仍能完成交付",
+      "tests": ["quality-delivery-loop"],
+      "evidence": ["unbounded-loop-state"],
+      "risk": "长运行的资源占用只验证状态正确性，不做性能压测。"
+    },
+    {
+      "spec": "需求：环境问题与无进展从代码质量循环分离 / 场景：缺失环境补齐后从原阶段恢复",
+      "tests": ["quality-delivery-loop"],
+      "evidence": ["environment-resume-state"],
+      "risk": "第三方服务能否恢复仍由服务自身可用性决定。"
+    },
+    {
+      "spec": "需求：环境问题与无进展从代码质量循环分离 / 场景：相同失败且无任何变化时暂停等待新信息",
+      "tests": ["quality-delivery-loop"],
+      "evidence": ["stalled-state"],
+      "risk": "finding 指纹归一化需通过后续真实运行持续校准。"
+    }
+  ],
+  "required_tests": [
+    {
+      "id": "quality-delivery-loop",
+      "source": "change_contract",
+      "path": "docs/changes/archive/2026-07-27-45-收敛全量自查与QA定向修复闭环/tests/test_quality_delivery_loop.sh",
+      "command": "bash docs/changes/archive/2026-07-27-45-收敛全量自查与QA定向修复闭环/tests/test_quality_delivery_loop.sh",
+      "purpose": "通过真实 internal/app 引擎和持久状态验证全量自查、QA 定向修复、强制自测、无固定上限及可恢复阻塞。",
+      "assertions": [
+        "execution 后先完成全量自查，修复后再次 clean 才进入独立 QA",
+        "QA needs_fix 后只按最新 findings 定向修复，失败测试与全部 required tests 通过后才再次 QA",
+        "连续 12 次 QA 打回后仍可继续，并在最终 QA clean 后归档",
+        "环境缺失与无进展分别进入可恢复阻塞，不泄漏密钥值且不使用轮次上限"
+      ],
+      "expected_initial_failure": "当前新运行仍使用 0 到 10 的 max_repair_iterations 和 blocked_review_limit，且没有独立的环境/停滞阻塞状态。"
+    },
+    {
+      "id": "app-regression",
+      "source": "existing_regression",
+      "path": "internal/app/repair_workflow_integration_test.go",
+      "command": "go test ./internal/app -count=1 # covers internal/app/repair_workflow_integration_test.go",
+      "purpose": "确保新动态循环不破坏既有命令、artifact 校验、旧 sealed run 恢复和独立 QA 放行。",
+      "assertions": [
+        "internal/app 全量测试通过",
+        "旧 repair-v1 与 legacy review/fix sealed run 仍按快照恢复",
+        "QA clean 仍是 archive 的必要条件"
+      ],
+      "expected_initial_failure": "基线应通过；实现阶段若失败必须修复引入的回归。"
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "quality-loop-runtime",
+      "kind": "runtime_log",
+      "path": "test-results/45-quality-delivery-loop/runtime.log",
+      "purpose": "记录真实 internal/app 定向测试的执行与通过结果。"
+    },
+    {
+      "id": "quality-loop-state",
+      "kind": "state_snapshot",
+      "path": "test-results/45-quality-delivery-loop/pre-qa-state.json",
+      "purpose": "证明全量自查 clean 且自测通过后才进入 QA。"
+    },
+    {
+      "id": "targeted-repair-state",
+      "kind": "state_snapshot",
+      "path": "test-results/45-quality-delivery-loop/targeted-repair-state.json",
+      "purpose": "证明 QA findings 驱动定向修复且测试门禁通过后再次进入独立 QA。"
+    },
+    {
+      "id": "unbounded-loop-state",
+      "kind": "state_snapshot",
+      "path": "test-results/45-quality-delivery-loop/unbounded-state.json",
+      "purpose": "证明超过历史十轮限制后仍可最终完成归档。"
+    },
+    {
+      "id": "environment-resume-state",
+      "kind": "state_snapshot",
+      "path": "test-results/45-quality-delivery-loop/environment-resume-state.json",
+      "purpose": "证明缺失环境进入可恢复阻塞并在补齐后从原阶段继续。"
+    },
+    {
+      "id": "stalled-state",
+      "kind": "state_snapshot",
+      "path": "test-results/45-quality-delivery-loop/stalled-state.json",
+      "purpose": "证明相同失败且无变化时按进展条件暂停，而不是按固定轮次失败。"
+    }
+  ]
+}

@@ -2,9 +2,12 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -18,6 +21,7 @@ type StageDecision struct {
 	NeedsRerun                bool
 	UpdateRepairConfirmation  bool
 	RepairConfirmationPending bool
+	QualityLoop               *QualityLoopState
 }
 
 // DecideNextStage returns the next durable stage/status for pure stage transitions.
@@ -26,6 +30,9 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 	stage, err := parseWorkflowStage(state.Stage)
 	if err != nil {
 		return StageDecision{}, err
+	}
+	if usesQualityLoop(state.Workflow) {
+		return decideQualityLoopStage(state, stage, review, qa)
 	}
 	switch stage.Kind {
 	case workflowStageExecution:
@@ -103,6 +110,240 @@ func DecideNextStage(state State, review Review, qa QA) (StageDecision, error) {
 	default:
 		return StageDecision{}, fmt.Errorf("未知阶段 %q", state.Stage)
 	}
+}
+
+// decideQualityLoopStage drives new runs by quality outcomes instead of a round budget.
+func decideQualityLoopStage(state State, stage workflowStage, repair Review, qa QA) (StageDecision, error) {
+	nextStatus := state.Status
+	if nextStatus == "" {
+		nextStatus = statusRunning
+	}
+	switch stage.Kind {
+	case workflowStageExecution:
+		quality := state.QualityLoop
+		quality.Mode = "pre_qa_audit"
+		return StageDecision{NextStage: "audit_1", NextStatus: nextStatus, QualityLoop: &quality}, nil
+	case workflowStageAudit:
+		quality := state.QualityLoop
+		quality.Mode = "pre_qa_audit"
+		quality.SourceQAArtifact = ""
+		quality.SourceQAHash = ""
+		quality.RequiredTestsPassed = qualityStageTestsPassed(state, state.Stage)
+		if RepairNeedsMore(repair) {
+			fingerprint := reviewFindingFingerprint(repair)
+			progress := qualityProgressHash(state)
+			if quality.FindingFingerprint == fingerprint && quality.ProgressHash == progress {
+				return qualityStalledDecision(state, quality), nil
+			}
+			quality.FindingFingerprint = fingerprint
+			quality.ProgressHash = progress
+			return StageDecision{NextStage: fmt.Sprintf("audit_%d", stage.Iteration+1), NextStatus: nextStatus, QualityLoop: &quality}, nil
+		}
+		quality.FindingFingerprint = ""
+		quality.ProgressHash = ""
+		return StageDecision{
+			NextStage:   fmt.Sprintf("qa_%d", nextQualityLoopQAIteration(state)),
+			NextStatus:  nextStatus,
+			QualityLoop: &quality,
+		}, nil
+	case workflowStageQA:
+		quality := state.QualityLoop
+		quality.SourceQAArtifact = fmt.Sprintf("qa-%d.json", stage.Iteration)
+		quality.SourceQAHash = qaArtifactContentHash(qa)
+		if !QANeedsFix(qa) {
+			quality.FindingFingerprint = ""
+			return StageDecision{
+				NextStage: workflowStageArchive, NextStatus: nextStatus, QualityLoop: &quality,
+			}, nil
+		}
+		quality.Mode = "qa_targeted_repair"
+		fingerprint := qaFindingFingerprint(qa)
+		progress := qualityProgressHash(state)
+		if quality.FindingFingerprint == fingerprint && quality.ProgressHash == progress {
+			return qualityStalledDecision(state, quality), nil
+		}
+		quality.FindingFingerprint = fingerprint
+		quality.ProgressHash = progress
+		quality.RerunFindingFingerprint = ""
+		quality.RerunProgressHash = ""
+		quality.RequiredTestsPassed = false
+		quality.FailedTestsReplayed = false
+		return StageDecision{
+			NextStage: fmt.Sprintf("targeted_repair_%d", stage.Iteration), NextStatus: nextStatus,
+			QualityLoop: &quality,
+		}, nil
+	case workflowStageTargetedRepair:
+		quality := state.QualityLoop
+		quality.Mode = "qa_targeted_repair"
+		quality.RequiredTestsPassed = qualityStageTestsPassed(state, state.Stage)
+		quality.FailedTestsReplayed = quality.RequiredTestsPassed
+		if RepairNeedsMore(repair) {
+			fingerprint := reviewFindingFingerprint(repair)
+			progress := qualityProgressHash(state)
+			if quality.RerunFindingFingerprint == fingerprint && quality.RerunProgressHash == progress {
+				return qualityStalledDecision(state, quality), nil
+			}
+			quality.RerunFindingFingerprint = fingerprint
+			quality.RerunProgressHash = progress
+			return StageDecision{
+				NextStage: state.Stage, NextStatus: nextStatus, NeedsRerun: true, QualityLoop: &quality,
+			}, nil
+		}
+		quality.RerunFindingFingerprint = ""
+		quality.RerunProgressHash = ""
+		return StageDecision{
+			NextStage: fmt.Sprintf("qa_%d", stage.Iteration+1), NextStatus: nextStatus, QualityLoop: &quality,
+		}, nil
+	case workflowStageArchive:
+		return StageDecision{NextStage: workflowStageDone, NextStatus: statusDone}, nil
+	default:
+		return StageDecision{}, fmt.Errorf("quality loop 未知阶段 %q", state.Stage)
+	}
+}
+
+// nextQualityLoopQAIteration allocates a fresh QA artifact after any re-audit.
+func nextQualityLoopQAIteration(state State) int {
+	latest := 0
+	for name := range state.Stages {
+		stage, err := parseWorkflowStage(name)
+		if err == nil && stage.isKind(workflowStageQA) && stage.Iteration > latest {
+			latest = stage.Iteration
+		}
+	}
+	return latest + 1
+}
+
+// qualityStageTestsPassed checks that required tests completed for the current source snapshot.
+func qualityStageTestsPassed(state State, stage string) bool {
+	run := state.AcceptanceRun[stage]
+	return run.Status == validationStatusPassed
+}
+
+// qualityStalledDecision pauses the exact active stage until its progress inputs change.
+func qualityStalledDecision(state State, quality QualityLoopState) StageDecision {
+	quality.BlockedFromStage = state.Stage
+	return StageDecision{
+		NextStage: statusBlockedStalled, NextStatus: statusBlockedStalled,
+		BlockedReason: "相同 findings 下源码、测试、验证与 evidence 均无变化；请提供新代码、证据、配置或人工指令后恢复",
+		QualityLoop:   &quality,
+	}
+}
+
+// isQualityLoopRepairStage limits unbounded quality-gate retries to dynamic repair stages.
+func isQualityLoopRepairStage(state State) bool {
+	if !usesQualityLoop(state.Workflow) {
+		return false
+	}
+	stage, err := parseWorkflowStage(state.Stage)
+	return err == nil && (stage.isKind(workflowStageAudit) || stage.isKind(workflowStageTargetedRepair))
+}
+
+// recordQualityGateFailure pauses adjacent identical gate failures only when no progress changed.
+func recordQualityGateFailure(state *State, kind, failure string) bool {
+	if state == nil || !isQualityLoopRepairStage(*state) {
+		return false
+	}
+	fingerprint := qualityHashStrings(kind, strings.TrimSpace(failure))
+	progress := qualityProgressHash(*state)
+	if state.QualityLoop.GateFailureFingerprint == fingerprint &&
+		state.QualityLoop.GateProgressHash == progress {
+		quality := state.QualityLoop
+		decision := qualityStalledDecision(*state, quality)
+		state.QualityLoop = *decision.QualityLoop
+		state.Status = decision.NextStatus
+		state.Stage = decision.NextStage
+		state.Error = decision.BlockedReason
+		return true
+	}
+	state.QualityLoop.GateFailureFingerprint = fingerprint
+	state.QualityLoop.GateProgressHash = progress
+	return false
+}
+
+// clearQualityGateFailure forgets a transient gate baseline after every deterministic gate passes.
+func clearQualityGateFailure(state *State) {
+	if state == nil || !usesQualityLoop(state.Workflow) {
+		return
+	}
+	state.QualityLoop.GateFailureFingerprint = ""
+	state.QualityLoop.GateProgressHash = ""
+}
+
+// qaFindingFingerprint normalizes QA findings and failed acceptance IDs into one stable key.
+func qaFindingFingerprint(qa QA) string {
+	var failed []string
+	for _, result := range qa.AcceptanceMatrix {
+		if normalizeAcceptanceStatus(result.Status) != "passed" {
+			failed = append(failed, result.ID)
+		}
+	}
+	return findingFingerprint(qa.Findings, failed)
+}
+
+// reviewFindingFingerprint normalizes self-review findings for audit and rerun stalls.
+func reviewFindingFingerprint(review Review) string {
+	return findingFingerprint(review.Findings, nil)
+}
+
+// findingFingerprint makes finding order and cosmetic punctuation irrelevant to progress checks.
+func findingFingerprint(findings []Finding, extra []string) string {
+	parts := make([]string, 0, len(findings)+len(extra))
+	for _, finding := range findings {
+		parts = append(parts, fmt.Sprintf("%s\x00%s\x00%s", findingKey(finding.Title), finding.Severity, finding.Scope))
+	}
+	for _, item := range extra {
+		parts = append(parts, "acceptance\x00"+strings.TrimSpace(item))
+	}
+	sort.Strings(parts)
+	return qualityHashStrings(parts...)
+}
+
+// qualityProgressHash binds progress to source and semantic gate outcomes, not volatile logs.
+func qualityProgressHash(state State) string {
+	diffHash := state.QualityLoop.DiffHash
+	if diffHash == "" {
+		diffHash = qualityHashStrings(state.BaselineDiff)
+	}
+	testsHash := state.QualityLoop.TestsProgressHash
+	if testsHash == "" {
+		testsHash = state.QualityLoop.TestsHash
+	}
+	validationHash := state.QualityLoop.ValidationProgressHash
+	if validationHash == "" {
+		validationHash = state.QualityLoop.ValidationHash
+	}
+	evidenceHash := state.QualityLoop.EvidenceProgressHash
+	if evidenceHash == "" {
+		evidenceHash = state.QualityLoop.EvidenceHash
+	}
+	return qualityHashStrings(
+		diffHash,
+		testsHash,
+		validationHash,
+		evidenceHash,
+	)
+}
+
+// qualityBlockedProgressHash selects the baseline that caused the active stalled block.
+func qualityBlockedProgressHash(state State) string {
+	if state.QualityLoop.GateFailureFingerprint != "" &&
+		state.QualityLoop.GateProgressHash != "" {
+		return state.QualityLoop.GateProgressHash
+	}
+	if strings.HasPrefix(state.QualityLoop.BlockedFromStage, "targeted_repair_") &&
+		state.QualityLoop.RerunProgressHash != "" {
+		return state.QualityLoop.RerunProgressHash
+	}
+	return state.QualityLoop.ProgressHash
+}
+
+// qualityHashStrings hashes stable progress components with unambiguous separators.
+func qualityHashStrings(parts ...string) string {
+	hash := sha256.New()
+	for _, part := range parts {
+		fmt.Fprintf(hash, "%s\x00", part)
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // stageKind collapses iteration stages to their shared prompt and config kind.
@@ -261,8 +502,11 @@ func (e *Engine) advance(state *State) error {
 		return e.stageArtifactGateError(*state, fmt.Errorf("%s 阶段 artifact 未完成", state.Stage))
 	}
 	review := result.Review
-	if stage, parseErr := parseWorkflowStage(state.Stage); parseErr == nil && stage.isKind(workflowStageRepair) {
-		review = result.Repair
+	if stage, parseErr := parseWorkflowStage(state.Stage); parseErr == nil {
+		switch stage.Kind {
+		case workflowStageRepair, workflowStageAudit, workflowStageTargetedRepair:
+			review = result.Repair
+		}
 	}
 	qa := result.QA
 	stage, err := parseWorkflowStage(state.Stage)
@@ -272,6 +516,8 @@ func (e *Engine) advance(state *State) error {
 	switch stage.Kind {
 	case workflowStageExecution:
 	case workflowStageRepair:
+		clearStageValidationFailure(state)
+	case workflowStageAudit, workflowStageTargetedRepair:
 		clearStageValidationFailure(state)
 	case workflowStageReview:
 		clearStageValidationFailure(state)
@@ -289,6 +535,12 @@ func (e *Engine) advance(state *State) error {
 	if decision.UpdateRepairConfirmation {
 		state.RepairConfirmationPending = decision.RepairConfirmationPending
 	}
+	if decision.QualityLoop != nil {
+		state.QualityLoop = *decision.QualityLoop
+	}
+	if decision.NeedsRerun {
+		state.Stages[state.Stage] = "needs_more"
+	}
 	state.Stage = decision.NextStage
 	state.Status = decision.NextStatus
 	if decision.BlockedReason != "" {
@@ -302,11 +554,14 @@ func (e *Engine) validateArchiveReadiness(state State) error {
 	if !fileExists(filepath.Join(runDir(e.Repo, state.RunID), "delivery-summary.md")) || !archiveExists(e.Repo, state.ChangeName) {
 		return fmt.Errorf("archive 阶段缺少 delivery summary 或归档目录")
 	}
+	if err := e.verifyQualityLoopArchivedAcceptance(state); err != nil {
+		return err
+	}
 	iteration := latestCompletedQAIteration(state)
 	if iteration == 0 {
 		return fmt.Errorf("archive 阶段缺少 clean QA artifact")
 	}
-	if state.Workflow.MaxRepairIterations > 0 {
+	if usesRepairWorkflow(state.Workflow) && state.Workflow.MaxRepairIterations > 0 {
 		repair, err := ReadRepair(filepath.Join(runDir(e.Repo, state.RunID), fmt.Sprintf("repair-%d.json", iteration)))
 		if err != nil {
 			return err
@@ -314,7 +569,7 @@ func (e *Engine) validateArchiveReadiness(state State) error {
 		if RepairNeedsMore(repair) {
 			return fmt.Errorf("archive 阶段发现 repair-%d 仍需继续", iteration)
 		}
-	} else if state.Workflow.MaxReviewIterations > 0 {
+	} else if !usesQualityLoop(state.Workflow) && state.Workflow.MaxReviewIterations > 0 {
 		review, err := ReadReview(filepath.Join(runDir(e.Repo, state.RunID), fmt.Sprintf("review-%d.json", iteration)))
 		if err != nil {
 			return err
@@ -343,8 +598,21 @@ func (e *Engine) validateArchiveReadiness(state State) error {
 	return nil
 }
 
+// latestCompletedQAIteration derives the latest durable QA from stage records for dynamic runs.
 func latestCompletedQAIteration(state State) int {
 	latest := 0
+	if usesQualityLoop(state.Workflow) {
+		for name, status := range state.Stages {
+			if status != "completed" || !strings.HasPrefix(name, "qa_") {
+				continue
+			}
+			iteration, err := stageIteration(name)
+			if err == nil && iteration > latest {
+				latest = iteration
+			}
+		}
+		return latest
+	}
 	limit := state.Workflow.MaxRepairIterations
 	if limit == 0 {
 		limit = state.Workflow.MaxReviewIterations
@@ -360,12 +628,14 @@ func latestCompletedQAIteration(state State) int {
 	return latest
 }
 
+// validateArchiveValidationEvidence checks every implementation stage that required validation.
 func validateArchiveValidationEvidence(state State) error {
 	for stage, status := range state.Stages {
 		if status == "" {
 			continue
 		}
-		if stage != "execution" && !strings.HasPrefix(stage, "repair_") && !strings.HasPrefix(stage, "fix_") {
+		if stage != "execution" && !strings.HasPrefix(stage, "repair_") && !strings.HasPrefix(stage, "audit_") &&
+			!strings.HasPrefix(stage, "targeted_repair_") && !strings.HasPrefix(stage, "fix_") {
 			continue
 		}
 		if state.Validation[stage].Status != validationStatusPassed {

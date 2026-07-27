@@ -60,8 +60,30 @@ func recordAcceptancePreflightFailure(repo string, state *State, message string,
 	if state.Stages == nil {
 		state.Stages = map[string]string{}
 	}
+	currentState, err := reserveValidationAttempt(
+		repo,
+		state,
+		StageValidationState{
+			Attempts:     state.AcceptancePreflight.Attempts,
+			Kind:         state.AcceptancePreflight.Kind,
+			Status:       state.AcceptancePreflight.Status,
+			LastArtifact: state.AcceptancePreflight.LastArtifact,
+			LastError:    state.AcceptancePreflight.LastError,
+		},
+		validationKindAcceptancePreflight,
+		func(reserved StageValidationState) {
+			state.AcceptancePreflight.Attempts = reserved.Attempts
+			state.AcceptancePreflight.Kind = reserved.Kind
+			state.AcceptancePreflight.Status = reserved.Status
+			state.AcceptancePreflight.LastArtifact = reserved.LastArtifact
+			state.AcceptancePreflight.LastError = reserved.LastError
+		},
+	)
+	if err != nil {
+		return err
+	}
 	current := state.AcceptancePreflight
-	current.Attempts++
+	current.Attempts = currentState.Attempts
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	attempt := ValidationAttempt{
 		Stage:      state.Stage,
@@ -74,6 +96,9 @@ func recordAcceptancePreflightFailure(repo string, state *State, message string,
 			ExitCode: 1,
 			Output:   limitValidationOutput(preflightFailureOutput(message, findings)),
 		}},
+	}
+	if usesQualityLoop(state.Workflow) {
+		attempt.Kind = validationKindAcceptancePreflight
 	}
 	artifactPath, err := writeValidationAttempt(repo, state.RunID, attempt)
 	if err != nil {

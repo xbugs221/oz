@@ -135,7 +135,8 @@ func compactOverallMarker(view statusView) string {
 	switch view.RunStatus {
 	case statusDone:
 		return "✓"
-	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked, statusInterrupted, statusStale:
+	case statusFailed, statusBlocked, statusValidationBlocked, statusAcceptanceContractBlocked,
+		statusBlockedEnvironment, statusBlockedStalled, statusInterrupted, statusStale:
 		return "x"
 	case statusRunning:
 		if view.Indicator != "" {

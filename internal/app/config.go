@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	defaultMaxReviewIterations = 5
-	defaultMaxRepairIterations = 5
-	repairWorkflowGeneration   = "repair-v1"
+	defaultMaxReviewIterations    = 5
+	defaultMaxRepairIterations    = 5
+	repairWorkflowGeneration      = "repair-v1"
+	qualityLoopWorkflowGeneration = "quality-loop-v1"
 )
 
 var (
@@ -126,18 +127,36 @@ func DefaultWorkflowConfig() WorkflowConfig {
 	return config
 }
 
-// StageOption returns the effective Codex options for a stage.
+// StageOption returns the effective agent options for a concrete or dynamically appended stage.
 func (c WorkflowConfig) StageOption(stage string) (StageOptions, error) {
 	option, ok := c.Stages[stage]
-	if !ok {
-		return StageOptions{}, fmt.Errorf("workflow config 缺少阶段 %q", stage)
+	if ok {
+		return option, nil
 	}
-	return option, nil
+	if usesQualityLoop(c) {
+		parsed, err := parseWorkflowStage(stage)
+		if err == nil {
+			template := map[string]string{
+				workflowStageAudit:          "audit_1",
+				workflowStageTargetedRepair: "targeted_repair_1",
+				workflowStageQA:             "qa_1",
+			}[parsed.Kind]
+			if template != "" {
+				if option, ok := c.Stages[template]; ok {
+					return option, nil
+				}
+			}
+		}
+	}
+	return StageOptions{}, fmt.Errorf("workflow config 缺少阶段 %q", stage)
 }
 
-// workflowStagesForConfig expands either the new repair loop or a legacy review/fix snapshot.
+// workflowStagesForConfig returns the initial quality-loop stages or expands a sealed finite snapshot.
 func workflowStagesForConfig(config WorkflowConfig) []string {
 	stages := []string{"execution"}
+	if usesQualityLoop(config) {
+		return append(stages, "audit_1", "qa_1", "archive")
+	}
 	if usesRepairWorkflow(config) {
 		if config.MaxRepairIterations == 0 {
 			return append(stages, "qa_1", "archive")
@@ -153,8 +172,16 @@ func workflowStagesForConfig(config WorkflowConfig) []string {
 	return append(stages, "archive")
 }
 
-// usesRepairWorkflow distinguishes new repair runs from legacy review/fix snapshots, including zero-round snapshots.
+// usesQualityLoop reports whether a snapshot uses dynamic quality-driven stages.
+func usesQualityLoop(config WorkflowConfig) bool {
+	return config.Generation == qualityLoopWorkflowGeneration
+}
+
+// usesRepairWorkflow distinguishes sealed finite repair runs from legacy review/fix snapshots.
 func usesRepairWorkflow(config WorkflowConfig) bool {
+	if usesQualityLoop(config) {
+		return false
+	}
 	if config.MaxReviewIterations > 0 {
 		return false
 	}
