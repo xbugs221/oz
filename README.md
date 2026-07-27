@@ -119,10 +119,10 @@ validation:
 
 ```mermaid
 flowchart LR
-    E["执行实现"] --> U["全量自查 audit-N"]
+    E["执行"] --> U["自查"]
     U -->|"needs_more：修复后再查"| U
-    U -->|"clean 且自测通过"| Q["独立 QA qa-N"]
-    Q -->|"needs_fix"| T["定向修复 targeted-repair-N"]
+    U -->|"clean 且自测通过"| Q["测试"]
+    Q -->|"needs_fix"| T["修复"]
     T -->|"失败测试与完整验收通过"| Q
     T -->|"自测失败"| T
     Q -->|"clean"| A["归档"]
@@ -131,6 +131,8 @@ flowchart LR
     U -->|"相同失败且无进展"| BS["停滞阻塞"]
     T -->|"相同失败且无进展"| BS
 ```
+
+`status`、`watch`、JSON 的人类名称和 graph 可见节点统一显示“执行、自查、修复、测试、归档”。持久状态仍使用 `execution`、`audit_N`、`targeted_repair_N`、`qa_N`、`archive`，恢复与流转协议不变。
 
 | 决策 | 原因 |
 | --- | --- |

@@ -378,7 +378,7 @@ func TestRunnerStatusViewSerializesObservability(t *testing.T) {
 		t.Fatalf("observability must not expose internal engine: %s", data)
 	}
 	for _, row := range payload.Observability.Rows {
-		if row.Kind == "stage" && row.Name == "执行阶段" && row.Marker == "→" {
+		if row.Kind == "stage" && row.Name == "执行" && row.Marker == "→" {
 			return
 		}
 	}
@@ -412,7 +412,7 @@ func TestStatusViewSelectsRepairGeneration(t *testing.T) {
 	state.Workflow.Generation = repairWorkflowGeneration
 	state.Workflow.MaxRepairIterations = 1
 	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "优化", "测试阶段", "归档阶段"})
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行", "优化", "测试", "归档"})
 }
 
 // TestStatusViewSelectsLegacyGeneration verifies an old sealed run never gains a synthetic repair row.
@@ -424,7 +424,7 @@ func TestStatusViewSelectsLegacyGeneration(t *testing.T) {
 	state.Stage = "fix_1"
 	state.Stages = map[string]string{"execution": "completed", "review_1": "completed", "fix_1": statusRunning}
 	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "审核阶段", "修正阶段", "测试阶段", "归档阶段"})
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行", "审核阶段", "修正阶段", "测试", "归档"})
 }
 
 // TestStatusViewPreservesFiniteRoundTenArtifacts verifies sealed finite stages keep numeric workflow order.
@@ -502,21 +502,28 @@ func TestStatusViewAggregatesDynamicQualityLoopStages(t *testing.T) {
 	}
 
 	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	assertStatusStageNames(t, view, []string{"规划阶段", "执行阶段", "全量自查", "定向修复", "独立测试", "归档阶段"})
+	assertStatusStageNames(t, view, []string{"规划阶段", "执行", "自查", "修复", "测试", "归档"})
 	markers := map[string]string{}
 	artifacts := map[string]string{}
+	stages := map[string]string{}
 	for _, row := range view.Rows {
 		markers[row.Name] = row.Marker
 		artifacts[row.Name] = row.Artifacts["stage_artifact"]
+		stages[row.Name] = row.Stage
 	}
-	if markers["全量自查"] != "✓2" || markers["定向修复"] != "✓2" || markers["独立测试"] != "✓2→" {
+	if markers["自查"] != "✓2" || markers["修复"] != "✓2" || markers["测试"] != "✓2→" {
 		t.Fatalf("dynamic quality-loop markers = %#v", markers)
 	}
-	if !strings.HasSuffix(artifacts["定向修复"], "targeted-repair-11.json") {
-		t.Fatalf("targeted repair artifact = %q", artifacts["定向修复"])
+	if stages["执行"] != "execution" || stages["自查"] != "audit_1" ||
+		stages["修复"] != "targeted_repair_1" || stages["测试"] != "qa_1" ||
+		stages["归档"] != "archive" {
+		t.Fatalf("human labels changed durable stages: %#v", stages)
 	}
-	if !strings.HasSuffix(artifacts["独立测试"], "qa-12.json") {
-		t.Fatalf("QA artifact = %q", artifacts["独立测试"])
+	if !strings.HasSuffix(artifacts["修复"], "targeted-repair-11.json") {
+		t.Fatalf("targeted repair artifact = %q", artifacts["修复"])
+	}
+	if !strings.HasSuffix(artifacts["测试"], "qa-12.json") {
+		t.Fatalf("QA artifact = %q", artifacts["测试"])
 	}
 }
 
@@ -534,7 +541,7 @@ func TestStatusViewMarksRecoverableQualityLoopBlock(t *testing.T) {
 		"targeted_repair_1": statusRunning,
 	}
 	view := buildStatusView(t.TempDir(), state, state.RunID, "")
-	assertOnlyBlockedStatusRow(t, view, "定向修复")
+	assertOnlyBlockedStatusRow(t, view, "修复")
 	if compactOverallMarker(view) != "x" {
 		t.Fatalf("blocked environment overall marker = %q, want x", compactOverallMarker(view))
 	}
@@ -550,10 +557,10 @@ func TestStatusViewMapsEveryRecoverableQualityLoopSource(t *testing.T) {
 		stage string
 		row   string
 	}{
-		{stage: "audit_2", row: "全量自查"},
-		{stage: "targeted_repair_2", row: "定向修复"},
-		{stage: "qa_2", row: "独立测试"},
-		{stage: workflowStageArchive, row: "归档阶段"},
+		{stage: "audit_2", row: "自查"},
+		{stage: "targeted_repair_2", row: "修复"},
+		{stage: "qa_2", row: "测试"},
+		{stage: workflowStageArchive, row: "归档"},
 	} {
 		t.Run(test.stage, func(t *testing.T) {
 			state := statusViewImplementationContextState()
@@ -707,7 +714,7 @@ func TestBlockedWorkflowRoleLabels(t *testing.T) {
 				state.Workflow.Generation = repairWorkflowGeneration
 				state.Workflow.MaxRepairIterations = 0
 			},
-			wantRow:     "测试阶段",
+			wantRow:     "测试",
 			wantSummary: "独立测试阶段失败",
 		},
 		{

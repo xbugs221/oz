@@ -128,7 +128,9 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		Gates:      []WorkflowGate{},
 		Display:    WorkflowDisplay{Title: "oz flow workflow: " + changeName},
 	}
-	spec.addNode(WorkflowNode{ID: "execution", Name: "execution", Type: "main_stage", Stage: "execution"})
+	spec.addNode(WorkflowNode{
+		ID: "execution", Name: humanWorkflowStageName("execution"), Type: "main_stage", Stage: "execution",
+	})
 	previous := "execution"
 	if workflow.Generation == qualityLoopWorkflowGeneration {
 		return buildQualityLoopWorkflowSpec(spec)
@@ -144,7 +146,9 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 			repairGate := fmt.Sprintf("gate_repair_%d", i)
 			spec.addGate(repairGate, "repair gate", repair, i)
 			spec.addEdge(repair, repairGate, "")
-			spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: i})
+			spec.addNode(WorkflowNode{
+				ID: qa, Name: humanWorkflowStageName(qa), Type: "main_stage", Stage: qa, Iteration: i,
+			})
 			spec.addEdge(repairGate, qa, "repair confirmation clean")
 			qaGate := fmt.Sprintf("gate_qa_%d", i)
 			spec.addGate(qaGate, "QA gate", qa, i)
@@ -163,12 +167,16 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 				ID: statusBlocked, Name: "blocked", Type: "terminal", Stage: statusBlocked, DecisionOnly: true,
 			})
 		}
-		spec.addNode(WorkflowNode{ID: "archive", Name: "archive", Type: "main_stage", Stage: "archive"})
+		spec.addNode(WorkflowNode{
+			ID: "archive", Name: humanWorkflowStageName("archive"), Type: "main_stage", Stage: "archive",
+		})
 		archiveGate := "gate_archive"
 		spec.addGate(archiveGate, "archive gate", "archive", 0)
 		if workflow.MaxRepairIterations == 0 {
 			qa := "qa_1"
-			spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: 1})
+			spec.addNode(WorkflowNode{
+				ID: qa, Name: humanWorkflowStageName(qa), Type: "main_stage", Stage: qa, Iteration: 1,
+			})
 			spec.addEdge("execution", qa, "")
 			qaGate := "gate_qa_1"
 			spec.addGate(qaGate, "QA gate", qa, 1)
@@ -193,7 +201,9 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		reviewGate := fmt.Sprintf("gate_review_%d", i)
 		spec.addGate(reviewGate, "review gate", review, i)
 		spec.addEdge(review, reviewGate, "")
-		spec.addNode(WorkflowNode{ID: qa, Name: qa, Type: "main_stage", Stage: qa, Iteration: i})
+		spec.addNode(WorkflowNode{
+			ID: qa, Name: humanWorkflowStageName(qa), Type: "main_stage", Stage: qa, Iteration: i,
+		})
 		spec.addEdge(reviewGate, qa, "review clean")
 		qaGate := fmt.Sprintf("gate_qa_%d", i)
 		spec.addGate(qaGate, "QA gate", qa, i)
@@ -203,7 +213,9 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 		spec.addEdge(qaGate, fix, "QA needs_fix")
 		previous = fix
 	}
-	spec.addNode(WorkflowNode{ID: "archive", Name: "archive", Type: "main_stage", Stage: "archive"})
+	spec.addNode(WorkflowNode{
+		ID: "archive", Name: humanWorkflowStageName("archive"), Type: "main_stage", Stage: "archive",
+	})
 	archiveGate := "gate_archive"
 	spec.addGate(archiveGate, "archive gate", "archive", 0)
 	if workflow.MaxReviewIterations == 0 {
@@ -218,7 +230,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 // buildQualityLoopWorkflowSpec adds the unbounded audit, QA, and targeted-repair template.
 func buildQualityLoopWorkflowSpec(spec WorkflowSpec) WorkflowSpec {
 	spec.addNode(WorkflowNode{
-		ID: "audit_N", Name: "audit_N", Type: "loop_template", Stage: "audit_N",
+		ID: "audit_N", Name: humanWorkflowStageName("audit_N"), Type: "loop_template", Stage: "audit_N",
 		Mode: "pre_qa_audit",
 	})
 	spec.addEdge("execution", "audit_N", "")
@@ -227,14 +239,14 @@ func buildQualityLoopWorkflowSpec(spec WorkflowSpec) WorkflowSpec {
 	spec.addDecisionEdge("gate_audit_N", "audit_N", "needs_more / self-tests failed")
 
 	spec.addNode(WorkflowNode{
-		ID: "qa_N", Name: "qa_N", Type: "loop_template", Stage: "qa_N",
+		ID: "qa_N", Name: humanWorkflowStageName("qa_N"), Type: "loop_template", Stage: "qa_N",
 	})
 	spec.addEdge("gate_audit_N", "qa_N", "clean + self-tests passed")
 	spec.addGate("gate_qa_N", "QA gate", "qa_N", 0)
 	spec.addEdge("qa_N", "gate_qa_N", "")
 
 	spec.addNode(WorkflowNode{
-		ID: "targeted_repair_N", Name: "targeted_repair_N", Type: "loop_template", Stage: "targeted_repair_N",
+		ID: "targeted_repair_N", Name: humanWorkflowStageName("targeted_repair_N"), Type: "loop_template", Stage: "targeted_repair_N",
 		Mode: "qa_targeted_repair",
 	})
 	spec.addEdge("gate_qa_N", "targeted_repair_N", "QA needs_fix")
@@ -258,7 +270,9 @@ func buildQualityLoopWorkflowSpec(spec WorkflowSpec) WorkflowSpec {
 		spec.addDecisionEdge(blocked, "targeted_repair_N", "resume/restart → blocked_from_stage")
 	}
 
-	spec.addNode(WorkflowNode{ID: "archive", Name: "archive", Type: "main_stage", Stage: "archive"})
+	spec.addNode(WorkflowNode{
+		ID: "archive", Name: humanWorkflowStageName("archive"), Type: "main_stage", Stage: "archive",
+	})
 	spec.addGate("gate_archive", "archive gate", "archive", 0)
 	spec.addDecisionEdge("gate_qa_N", "gate_archive", "QA clean")
 	spec.addEdge("gate_archive", "archive", "")
@@ -272,9 +286,9 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 	out.WriteString("  execution[执行]\n")
 
 	if workflow.Generation == qualityLoopWorkflowGeneration {
-		out.WriteString("  audit[全量自查 audit_N]\n")
-		out.WriteString("  qa[独立测试 qa_N]\n")
-		out.WriteString("  targeted_repair[定向修复 targeted_repair_N]\n")
+		out.WriteString("  audit[自查]\n")
+		out.WriteString("  qa[测试]\n")
+		out.WriteString("  targeted_repair[修复]\n")
 		out.WriteString("  blocked_environment[环境阻塞]\n")
 		out.WriteString("  blocked_stalled[停滞阻塞]\n")
 		out.WriteString("  archive[归档]\n")
@@ -297,7 +311,7 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 	}
 	if usesRepairWorkflow(workflow) {
 		if workflow.MaxRepairIterations == 0 {
-			out.WriteString("  qa[独立测试]\n")
+			out.WriteString("  qa[测试]\n")
 			out.WriteString("  archive[归档]\n")
 			out.WriteString("  blocked[阻塞]\n")
 			out.WriteString("  execution --> qa\n")
@@ -306,7 +320,7 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 			return out.String()
 		}
 		out.WriteString("  repair[优化]\n")
-		out.WriteString("  qa[独立测试]\n")
+		out.WriteString("  qa[测试]\n")
 		out.WriteString("  archive[归档]\n")
 		out.WriteString("  blocked[阻塞]\n")
 		out.WriteString("  execution --> repair\n")
@@ -387,7 +401,7 @@ func appendQualityLoopGraphInstances(spec WorkflowSpec, state State) WorkflowSpe
 			mode = "qa_targeted_repair"
 		}
 		spec.addNode(WorkflowNode{
-			ID: stageName, Name: stageName, Type: "loop_instance", Stage: stageName,
+			ID: stageName, Name: humanWorkflowStageName(stageName), Type: "loop_instance", Stage: stageName,
 			Mode: mode, Status: qualityLoopGraphStageStatus(state, stageName), Iteration: stage.Iteration,
 		})
 	}
@@ -501,7 +515,12 @@ func appendQualityLoopMermaidInstances(graph string, state State) string {
 	out.WriteString("\n  subgraph current_instances[当前运行实例]\n")
 	for _, stage := range stages {
 		status := qualityLoopGraphStageStatus(state, stage)
-		fmt.Fprintf(&out, "    %s[%s · %s]\n", mermaidID(stage), stage, nonEmpty(status, "unknown"))
+		parsed, err := parseWorkflowStage(stage)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(&out, "    %s[%s %d · %s]\n",
+			mermaidID(stage), humanWorkflowStageName(stage), parsed.Iteration, nonEmpty(status, "unknown"))
 	}
 	out.WriteString("  end\n")
 	fmt.Fprintf(&out, "  execution -.-> %s\n", mermaidID(stages[0]))

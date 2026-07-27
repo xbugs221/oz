@@ -87,9 +87,9 @@ if grep -Eq 'subagent:|fan-in|planning_context|implementation_context|before_rev
   fail "mermaid visible labels should not mix internal English subagent/group names"
 fi
 
-grep -q '全量自查 audit_N' "$RESULT_DIR/graph.mmd" || fail "graph should show the pre-QA full audit loop"
-grep -q '定向修复 targeted_repair_N' "$RESULT_DIR/graph.mmd" || fail "graph should show the QA-targeted repair loop"
-grep -Eq '独立(QA|测试)' "$RESULT_DIR/graph.mmd" || fail "graph should keep QA as an independent gate"
+grep -q 'audit\[自查\]' "$RESULT_DIR/graph.mmd" || fail "graph should show the two-character audit label"
+grep -q 'targeted_repair\[修复\]' "$RESULT_DIR/graph.mmd" || fail "graph should show the two-character repair label"
+grep -q 'qa\[测试\]' "$RESULT_DIR/graph.mmd" || fail "graph should show the two-character QA label"
 grep -q '环境阻塞' "$RESULT_DIR/graph.mmd" || fail "graph should show recoverable environment blocking"
 grep -q '停滞阻塞' "$RESULT_DIR/graph.mmd" || fail "graph should show recoverable stalled blocking"
 

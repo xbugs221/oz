@@ -57,6 +57,36 @@ func parseWorkflowStage(stage string) (workflowStage, error) {
 	return workflowStage{}, fmt.Errorf("未知阶段 %q", stage)
 }
 
+// humanWorkflowStageName maps current durable stages to their two-character display labels.
+func humanWorkflowStageName(stage string) string {
+	switch stage {
+	case "audit_N":
+		return "自查"
+	case "targeted_repair_N":
+		return "修复"
+	case "qa_N":
+		return "测试"
+	}
+	parsed, err := parseWorkflowStage(stage)
+	if err != nil {
+		return stage
+	}
+	switch parsed.Kind {
+	case workflowStageExecution:
+		return "执行"
+	case workflowStageAudit:
+		return "自查"
+	case workflowStageTargetedRepair:
+		return "修复"
+	case workflowStageQA:
+		return "测试"
+	case workflowStageArchive:
+		return "归档"
+	default:
+		return stage
+	}
+}
+
 // isKind reports whether this parsed stage belongs to the requested stage kind.
 func (s workflowStage) isKind(kind string) bool {
 	return s.Kind == kind

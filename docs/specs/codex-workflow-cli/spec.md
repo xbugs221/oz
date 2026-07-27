@@ -158,6 +158,15 @@
 - **且** 每轮 QA 使用隔离会话；QA `clean` 才能归档
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
 
+#### 场景：质量循环阶段使用统一两字展示名
+
+- **给定** 新 sealed run 使用 `quality-loop-v1`
+- **当** 用户查看 `status`、`watch`、runner JSON observability 或 graph
+- **则** `execution`、`audit_N`、`targeted_repair_N`、`qa_N`、`archive` 的人类名称必须依次为“执行、自查、修复、测试、归档”
+- **且** status/watch 行、JSON `rows[].name`、graph JSON `nodes[].name` 和 Mermaid 节点必须使用同一组名称
+- **且** 内部 stage、state、节点 ID、轮次编号与流转协议必须保持不变
+- **测试**：`internal/app/status_view_test.go`、`internal/app/graph_repair_test.go`
+
 #### 场景：QA 打回后定向修复
 
 // Sources: 45-收敛全量自查与QA定向修复闭环
@@ -1414,7 +1423,7 @@
 - **给定** 当前 run 已完成 planning，正在 execution
 - **当** 调用 `oz flow status -w1`
 - **则** stdout 第一行必须是提案列表项，例如 `- 7-统一输出`
-- **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `  规划阶段 planner-session ✓ 2.00` 和 `  执行阶段 writer-session → 6.50`
+- **且** 主阶段行必须按 `阶段中文名 session-id marker 耗时分钟` 四列输出，例如 `  规划 planner-session ✓ 2.00` 和 `  执行 writer-session → 6.50`
 - **且** marker 只使用 `-`、`→`、`✓` 或 `x`
 - **且** 耗时必须格式化为两位小数分钟，不追加单位
 - **且** 输出不得包含 `工作流`、状态英文单词、workflow 短编号 header、`引擎`、并行 group 汇总行或总耗时行
@@ -1424,7 +1433,7 @@
 - **给定** 当前 run 已完成 planning 且正在 execution
 - **当** 用户运行 `oz flow watch -w1`
 - **则** stdout 第一行必须仍是提案列表项
-- **且** spinner 帧必须替换 `执行阶段` 行的 running marker
+- **且** spinner 帧必须替换 `执行` 行的 running marker
 - **且** stdout 不得显示 spinner workflow header，例如 `| w1`
 
 #### 场景：状态文本渲染从 app.go 迁出
@@ -1472,36 +1481,36 @@
 
 - **给定** 当前 run 的 sessions 中记录了 planning 会话 id
 - **当** 调用 `oz flow status -w1`
-- **则** stdout 包含 `规划阶段` 行
-- **且** `规划阶段` 行显示 planning 会话 id
-- **且** `规划阶段` 行排在执行、审核、修正、测试和归档阶段之前
+- **则** stdout 包含 `规划` 行
+- **且** `规划` 行显示 planning 会话 id
+- **且** `规划` 行排在执行、审核、修正、测试和归档之前
 
 #### 场景：归档会话独立展示
 
 - **给定** 当前 run 已进入 archive 阶段
 - **当** 调用 `oz flow status -w1`
-- **则** stdout 包含 `归档阶段` 行
-- **且** `归档阶段` 行显示 archiver session id
-- **且** `归档阶段` 行不得复用 executor session id
+- **则** stdout 包含 `归档` 行
+- **且** `归档` 行显示 archiver session id
+- **且** `归档` 行不得复用 executor session id
 
 #### 场景：当前正在修复
 
 - **给定** run 当前 stage 为 `fix_2`
 - **且** execution 和 fix_1 已完成
 - **当** 调用 `oz flow status -w1`
-- **则** `执行阶段` 行显示 executor session id 和 `✓`
-- **且** `修正阶段` 行显示 fixer session id 和 `✓→`
-- **且** `执行阶段` 行不得显示 `→`
-- **且** `审核阶段` 行不得显示 `→`
+- **则** `执行` 行显示 executor session id 和 `✓`
+- **且** `修正` 行显示 fixer session id 和 `✓→`
+- **且** `执行` 行不得显示 `→`
+- **且** `审核` 行不得显示 `→`
 
 #### 场景：多轮修复只展示一条 fixer 行
 
 - **给定** run 已完成 `fix_1` 和 `fix_2`
 - **且** `state.json.sessions` 存在 `<tool>:fixer`
 - **当** 调用 `oz flow status -w1`
-- **则** stdout 必须只包含一条聚合后的 `修正阶段` 行
-- **且** `修正阶段` 行显示 `<tool>:fixer` 对应 session id
-- **且** `修正阶段` 行 marker 保留历史轮次状态，显示 `✓✓`
+- **则** stdout 必须只包含一条聚合后的 `修正` 行
+- **且** `修正` 行显示 `<tool>:fixer` 对应 session id
+- **且** `修正` 行 marker 保留历史轮次状态，显示 `✓✓`
 
 #### 场景：历史修复缺少 fixer session
 
@@ -1509,18 +1518,18 @@
 - **且** `state.json.sessions` 没有任何 `<tool>:fixer`
 - **且** `state.json.sessions` 存在 `<tool>:executor`
 - **当** 调用 `oz flow status -w1`
-- **则** `修正阶段` 行必须显示 `未知`
-- **且** `修正阶段` 行不得展示 executor session id
+- **则** `修正` 行必须显示 `未知`
+- **且** `修正` 行不得展示 executor session id
 
 #### 场景：当前正在审核
 
 - **给定** run 当前 stage 为 `review_3`
 - **且** review_1 和 review_2 已完成
 - **当** 调用 `oz flow status -w1`
-- **则** `审核阶段` 行显示 reviewer session id
-- **且** `审核阶段` 行 marker 保留历史轮次状态，显示 `✓✓→`
-- **且** `执行阶段` 行不得显示 `→`
-- **且** `修正阶段` 行不得显示 `→`
+- **则** `审核` 行显示 reviewer session id
+- **且** `审核` 行 marker 保留历史轮次状态，显示 `✓✓→`
+- **且** `执行` 行不得显示 `→`
+- **且** `修正` 行不得显示 `→`
 
 #### 场景：已发生阶段缺少会话 id
 
@@ -1528,16 +1537,16 @@
 - **且** run 已进入或完成 execution 阶段
 - **且** run 状态中没有 executor session id
 - **当** 调用 `oz flow status -w1`
-- **则** `执行阶段` 行必须显示 `未知`
-- **且** `执行阶段` 行不得包含 run id `20260512T051106.925886354Z`
+- **则** `执行` 行必须显示 `未知`
+- **且** `执行` 行不得包含 run id `20260512T051106.925886354Z`
 
 #### 场景：归档完成
 
 - **给定** run 已完成 archive 阶段
 - **当** 调用 `oz flow status -w1`
-- **则** stdout 包含 `归档阶段` 行
-- **且** `归档阶段` 行显示 archiver session id
-- **且** `归档阶段` 行显示 `✓`
+- **则** stdout 包含 `归档` 行
+- **且** `归档` 行显示 archiver session id
+- **且** `归档` 行显示 `✓`
 
 ### 需求：status 默认目标和短编号
 
@@ -1677,7 +1686,7 @@
 - **给定** 当前仓库存在一个已完成 workflow
 - **且** 该 workflow 的 `execution`、`review_1`、`archive` 阶段都有开始和结束时间
 - **当** 用户运行 `oz flow status -w1`
-- **则** `执行阶段`、`审核阶段` 和 `归档阶段` 行必须分别在第四列显示两位小数分钟
+- **则** `执行`、`审核` 和 `归档` 行必须分别在第四列显示两位小数分钟
 - **且** 输出不得包含 `耗时`、`分钟` 或总耗时公式
 
 ### 需求：跳过阶段不进入耗时统计

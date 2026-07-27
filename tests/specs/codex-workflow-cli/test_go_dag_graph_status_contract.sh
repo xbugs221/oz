@@ -42,8 +42,13 @@ fi
 note "oz flow graph mermaid 应展示当前动态质量循环"
 (cd "$project" && "$wo" flow graph --change demo --format mermaid) >"$tmp/graph.mmd"
 cat "$tmp/graph.mmd" >>"$log"
-for want in "执行" "全量自查" "独立测试" "定向修复" "环境阻塞" "停滞阻塞" "归档"; do
+for want in "执行" "自查" "测试" "修复" "环境阻塞" "停滞阻塞" "归档"; do
   grep -qF "$want" "$tmp/graph.mmd" || fail "Mermaid graph 缺少 $want"
+done
+for old_label in "全量自查" "独立测试" "定向修复"; do
+  if grep -qF "$old_label" "$tmp/graph.mmd"; then
+    fail "Mermaid graph 仍显示旧阶段名 $old_label"
+  fi
 done
 for forbidden in "planning_context" "implementation_context" "fan-in" "subagent" "review_2" "fix_2" "最多5轮"; do
   if grep -qF "$forbidden" "$tmp/graph.mmd"; then
@@ -52,6 +57,8 @@ for forbidden in "planning_context" "implementation_context" "fan-in" "subagent"
 done
 
 note "用长期 Go 测试验证 status 使用当前紧凑阶段视图"
-go test ./internal/app -run TestGoDAGHumanStatusContract -count=1 -v 2>&1 | tee -a "$log"
+go test ./internal/app \
+  -run 'TestStatusViewAggregatesDynamicQualityLoopStages|TestRunnerStatusViewSerializesObservability' \
+  -count=1 -v 2>&1 | tee -a "$log"
 
 note "PASS"

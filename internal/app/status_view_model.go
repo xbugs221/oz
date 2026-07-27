@@ -42,18 +42,18 @@ type compactStageSpec struct {
 
 var compactStageSpecs = []compactStageSpec{
 	{role: "planner", stage: "planning", name: "规划阶段", prefix: "planning"},
-	{role: "executor", stage: "execution", name: "执行阶段", prefix: "execution"},
+	{role: "executor", stage: "execution", name: humanWorkflowStageName("execution"), prefix: "execution"},
 	{role: "repairer", stage: "repair_1", name: "优化", prefix: "repair_"},
 	{role: "reviewer", stage: "review_1", name: "审核阶段", prefix: "review_"},
 	{role: "fixer", stage: "fix_1", name: "修正阶段", prefix: "fix_"},
-	{role: "qa", stage: "qa_1", name: "测试阶段", prefix: "qa_"},
-	{role: "archiver", stage: "archive", name: "归档阶段", prefix: "archive"},
+	{role: "qa", stage: "qa_1", name: humanWorkflowStageName("qa_1"), prefix: "qa_"},
+	{role: "archiver", stage: "archive", name: humanWorkflowStageName("archive"), prefix: "archive"},
 }
 
 var qualityLoopCompactStageSpecs = []compactStageSpec{
-	{role: "repairer", stage: "audit_1", name: "全量自查", prefix: "audit_"},
-	{role: "repairer", stage: "targeted_repair_1", name: "定向修复", prefix: "targeted_repair_"},
-	{role: "qa", stage: "qa_1", name: "独立测试", prefix: "qa_"},
+	{role: "repairer", stage: "audit_1", name: humanWorkflowStageName("audit_1"), prefix: "audit_"},
+	{role: "repairer", stage: "targeted_repair_1", name: humanWorkflowStageName("targeted_repair_1"), prefix: "targeted_repair_"},
+	{role: "qa", stage: "qa_1", name: humanWorkflowStageName("qa_1"), prefix: "qa_"},
 }
 
 // buildStatusView converts durable workflow state into one reusable compact view.

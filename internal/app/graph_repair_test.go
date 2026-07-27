@@ -133,6 +133,7 @@ func TestPositiveRepairCompactMermaidShowsFinalBlock(t *testing.T) {
 
 	for _, want := range []string{
 		"blocked[阻塞]",
+		"qa[测试]",
 		"repair -->|确认 clean| qa",
 		"repair -->|needs_more 或首次 clean，未达第2轮| repair",
 		"repair -->|needs_more 或首次 clean，第2轮| blocked",
@@ -152,7 +153,7 @@ func TestZeroRepairCompactMermaidMatchesStateMachine(t *testing.T) {
 	workflow.MaxReviewIterations = 0
 	graph := buildCompactMermaid("1-演示", workflow)
 
-	for _, want := range []string{"execution --> qa", "qa -->|clean| archive", "qa -->|needs_fix，无修正轮次| blocked"} {
+	for _, want := range []string{"qa[测试]", "execution --> qa", "qa -->|clean| archive", "qa -->|needs_fix，无修正轮次| blocked"} {
 		if !strings.Contains(graph, want) {
 			t.Fatalf("zero-repair graph missing %q:\n%s", want, graph)
 		}
@@ -180,6 +181,17 @@ func TestQualityLoopWorkflowSpecShowsUnboundedTemplate(t *testing.T) {
 		node, ok := nodes[id]
 		if !ok || node.Type != "loop_template" || node.Mode != mode {
 			t.Fatalf("quality-loop node %s = %#v, want loop template mode %s", id, node, mode)
+		}
+	}
+	for id, name := range map[string]string{
+		"execution":         "执行",
+		"audit_N":           "自查",
+		"targeted_repair_N": "修复",
+		"qa_N":              "测试",
+		"archive":           "归档",
+	} {
+		if node := nodes[id]; node.Name != name || node.Stage != id {
+			t.Fatalf("quality-loop node %s = %#v, want name %q with unchanged stage", id, node, name)
 		}
 	}
 	for _, id := range []string{"qa_N", "blocked_environment", "blocked_stalled", "archive"} {
@@ -211,8 +223,11 @@ func TestQualityLoopCompactMermaidShowsQualityDecisions(t *testing.T) {
 	graph := buildCompactMermaid("45-质量闭环", workflow)
 
 	for _, want := range []string{
-		"audit[全量自查 audit_N]",
-		"targeted_repair[定向修复 targeted_repair_N]",
+		"execution[执行]",
+		"audit[自查]",
+		"qa[测试]",
+		"targeted_repair[修复]",
+		"archive[归档]",
 		"audit -->|clean 且自测通过| qa",
 		"qa -->|needs_fix| targeted_repair",
 		"targeted_repair -->|失败测试与 required tests 通过| qa",
@@ -266,12 +281,23 @@ func TestQualityLoopGraphAppendsDurableInstances(t *testing.T) {
 	if nodes["qa_13"].Type != "loop_instance" || nodes["qa_13"].Status != statusRunning {
 		t.Fatalf("qa_13 node = %#v", nodes["qa_13"])
 	}
+	if nodes["audit_1"].Name != "自查" || nodes["targeted_repair_12"].Name != "修复" ||
+		nodes["qa_13"].Name != "测试" {
+		t.Fatalf("dynamic graph names = audit:%#v repair:%#v qa:%#v",
+			nodes["audit_1"], nodes["targeted_repair_12"], nodes["qa_13"])
+	}
 	if !workflowSpecHasEdge(spec, "qa_12", "targeted_repair_12", "durable instance") ||
 		!workflowSpecHasEdge(spec, "targeted_repair_12", "qa_13", "durable instance") {
 		t.Fatalf("dynamic graph does not preserve QA → targeted repair → QA order")
 	}
 	graph := appendQualityLoopMermaidInstances(buildCompactMermaid(state.ChangeName, workflow), state)
-	for _, want := range []string{"current_instances[当前运行实例]", "execution -.-> audit_1", "targeted_repair_12", "qa_13"} {
+	for _, want := range []string{
+		"current_instances[当前运行实例]",
+		"audit_1[自查 1 · completed]",
+		"targeted_repair_12[修复 12 · completed]",
+		"qa_13[测试 13 · running]",
+		"execution -.-> audit_1",
+	} {
 		if !strings.Contains(graph, want) {
 			t.Fatalf("dynamic Mermaid graph missing %q:\n%s", want, graph)
 		}
