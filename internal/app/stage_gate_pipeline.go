@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type stageGatePipelineMode string
@@ -571,18 +573,20 @@ func qualityLoopArchiveInvariantSnapshot(repo string, state State) (string, erro
 	prefix := strings.TrimPrefix(filepath.ToSlash(relative), "./")
 	paths := gitContentSnapshotPathMap(content)
 	entries := make([]string, 0, len(paths))
-	payloadEntries := 0
 	for path, fingerprint := range paths {
-		canonical := path
 		if path == prefix || strings.HasPrefix(path, strings.TrimSuffix(prefix, "/")+"/") {
-			canonical = "@current-change" + strings.TrimPrefix(path, prefix)
-			payloadEntries++
+			continue
 		}
-		entries = append(entries, canonical+"\x00"+fingerprint)
+		entries = append(entries, path+"\x00"+fingerprint)
 	}
-	if payloadEntries == 0 {
+	payloadEntries, err := qualityLoopArchivePayloadEntries(repo, payloadDir, state.ChangeName)
+	if err != nil {
+		return "", err
+	}
+	if len(payloadEntries) == 0 {
 		return "", fmt.Errorf("archive 门禁找不到提案内容：%s", payloadDir)
 	}
+	entries = append(entries, payloadEntries...)
 	sort.Strings(entries)
 	sourceHash := qualityHashStrings(entries...)
 	evidenceHash, err := qualityLoopRequiredEvidenceSnapshot(repo, state)
@@ -593,6 +597,75 @@ func qualityLoopArchiveInvariantSnapshot(repo string, state State) (string, erro
 		return "", fmt.Errorf("archive 门禁 required evidence 已偏离最近通过的 acceptance")
 	}
 	return qualityHashStrings(sourceHash, evidenceHash), nil
+}
+
+var qualityLoopArchiveRelativeTestsReference = regexp.MustCompile(`(^|[[:space:]\x60"'(\[：])tests/`)
+
+// qualityLoopArchivePayloadEntries hashes one proposal while normalizing deterministic archive rewrites.
+func qualityLoopArchivePayloadEntries(repo, payloadDir, changeName string) ([]string, error) {
+	relativePayload, err := filepath.Rel(repo, payloadDir)
+	if err != nil {
+		return nil, err
+	}
+	payloadPrefix := strings.TrimPrefix(filepath.ToSlash(relativePayload), "./") + "/"
+	activePrefix := "docs/changes/" + changeName + "/"
+	var entries []string
+	err = filepath.WalkDir(payloadDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(payloadDir, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if utf8.Valid(data) {
+			text := strings.ReplaceAll(string(data), payloadPrefix, "@current-change/")
+			text = strings.ReplaceAll(text, activePrefix, "@current-change/")
+			if relative != "tests" && !strings.HasPrefix(relative, "tests/") {
+				text = normalizeQualityLoopArchiveRelativeTests(text)
+			}
+			data = []byte(text)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		fingerprint := qualityHashStrings(
+			info.Mode().Type().String(),
+			fmt.Sprintf("%t", info.Mode().Perm()&0o111 != 0),
+			string(data),
+		)
+		entries = append(entries, "@current-change/"+relative+"\x00"+fingerprint)
+		return nil
+	})
+	return entries, err
+}
+
+// normalizeQualityLoopArchiveRelativeTests canonicalizes the CLI's proposal-local tests rewrite.
+func normalizeQualityLoopArchiveRelativeTests(text string) string {
+	var out strings.Builder
+	last := 0
+	for _, match := range qualityLoopArchiveRelativeTestsReference.FindAllStringIndex(text, -1) {
+		start, end := match[0], match[1]
+		out.WriteString(text[last:start])
+		if strings.HasPrefix(text[end:], "specs/") {
+			out.WriteString(text[start:end])
+		} else {
+			out.WriteString(text[start : end-len("tests/")])
+			out.WriteString("@current-change/tests/")
+		}
+		last = end
+	}
+	out.WriteString(text[last:])
+	return out.String()
 }
 
 // qualityLoopRequiredEvidenceSnapshot binds only safe, readable regular files from sealed acceptance.

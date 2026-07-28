@@ -9,8 +9,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 )
 
 var afterQualityLoopProposalRestore = func(string) error { return nil }
@@ -451,6 +453,7 @@ func (e *Engine) restoreQualityLoopProposalForAudit(state *State) error {
 	active := filepath.Join(e.Repo, "docs", "changes", state.ChangeName)
 	info, err := os.Stat(active)
 	restored := false
+	archivedDir := ""
 	switch {
 	case err == nil && !info.IsDir():
 		return fmt.Errorf("archive 恢复目标不是目录：%s", active)
@@ -465,16 +468,19 @@ func (e *Engine) restoreQualityLoopProposalForAudit(state *State) error {
 		if len(matches) != 1 {
 			return fmt.Errorf("archive 恢复要求唯一归档提案，找到 %d 个：%s", len(matches), state.ChangeName)
 		}
-		archivedAcceptance := filepath.Join(matches[0], "acceptance.json")
-		if err := verifyAcceptanceMatchesSealed(archivedAcceptance, state.AcceptanceHash); err != nil {
+		archivedDir = matches[0]
+		if err := verifyArchivedAcceptanceMatchesSealed(e.Repo, archivedDir, state.ChangeName, state.AcceptanceHash); err != nil {
 			return fmt.Errorf("archive 恢复拒绝非封存提案：%w", err)
 		}
-		if err := os.Rename(matches[0], active); err != nil {
+		if err := os.Rename(archivedDir, active); err != nil {
 			return fmt.Errorf("archive 恢复提案失败：%w", err)
 		}
 		restored = true
 	}
 	if restored {
+		if err := restoreQualityLoopArchivedReferences(e.Repo, active, archivedDir, state.ChangeName); err != nil {
+			return err
+		}
 		if err := afterQualityLoopProposalRestore(active); err != nil {
 			return err
 		}
@@ -494,6 +500,56 @@ func (e *Engine) restoreQualityLoopProposalForAudit(state *State) error {
 	state.BaselineDiff = diff
 	state.QualityLoop.DiffHash = qualityHashStrings(content)
 	return nil
+}
+
+// restoreQualityLoopArchivedReferences converts deterministic archive paths back to active proposal paths.
+func restoreQualityLoopArchivedReferences(repo, activeDir, archivedDir, changeName string) error {
+	return filepath.WalkDir(activeDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !utf8.Valid(data) {
+			return nil
+		}
+		normalized, err := normalizeQualityLoopArchivedReferences(repo, activeDir, archivedDir, changeName, data)
+		if err != nil {
+			return err
+		}
+		if string(normalized) == string(data) {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, normalized, info.Mode().Perm())
+	})
+}
+
+// normalizeQualityLoopArchivedReferences reverses archive paths and repairs legacy root-test rewrites.
+func normalizeQualityLoopArchivedReferences(repo, proposalDir, archivedDir, changeName string, data []byte) ([]byte, error) {
+	relativeArchive, err := filepath.Rel(repo, archivedDir)
+	if err != nil {
+		return nil, err
+	}
+	archivePrefix := strings.TrimPrefix(filepath.ToSlash(relativeArchive), "./") + "/"
+	activePrefix := "docs/changes/" + changeName + "/"
+	testReference := regexp.MustCompile(regexp.QuoteMeta(archivePrefix+"tests/") + `[^\s\x60"'()\[\]{}<>，。；：,]+`)
+	text := testReference.ReplaceAllStringFunc(string(data), func(reference string) string {
+		relative := strings.TrimPrefix(reference, archivePrefix)
+		if _, statErr := os.Stat(filepath.Join(proposalDir, filepath.FromSlash(relative))); os.IsNotExist(statErr) {
+			return relative
+		}
+		return reference
+	})
+	return []byte(strings.ReplaceAll(text, archivePrefix, activePrefix)), nil
 }
 
 // qualityLoopResumeStageAfterQASourceProgress routes post-checkpoint progress through fresh gates.

@@ -503,6 +503,14 @@ func newQualityLoopArchiveGateFixture(t *testing.T) (string, string, State, *Eng
 	if err := os.WriteFile(evidencePath, []byte("archive evidence\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	briefPath := filepath.Join(repo, "docs", "changes", changeName, "brief.md")
+	if err := os.WriteFile(
+		briefPath,
+		[]byte("# 归档合同\n\n运行 `tests/contract.test.ts` 与 `docs/changes/"+changeName+"/tests/contract.test.ts`。\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
 	content, err := gitChangeContentSnapshotForChange(repo, changeName)
 	if err != nil {
 		t.Fatal(err)
@@ -525,10 +533,34 @@ func newQualityLoopArchiveGateFixture(t *testing.T) (string, string, State, *Eng
 	return repo, changeName, state, NewEngine(repo, NewAgentRegistry()), evidencePath
 }
 
+// rewriteFixtureArchiveReferences simulates the deterministic text rewrite performed by oz archive.
+func rewriteFixtureArchiveReferences(t *testing.T, repo, changeName string) {
+	t.Helper()
+	archivedName := "20260726-" + changeName
+	path := filepath.Join(repo, "docs", "changes", "archive", archivedName, "brief.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ReplaceAll(
+		string(data),
+		"docs/changes/"+changeName+"/",
+		"docs/changes/archive/"+archivedName+"/",
+	)
+	text = strings.ReplaceAll(
+		text,
+		"`tests/",
+		"`docs/changes/archive/"+archivedName+"/tests/",
+	)
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation protects the final clean QA snapshot.
 func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) {
-	for _, mutate := range []bool{false, true} {
-		t.Run(fmt.Sprintf("mutate=%v", mutate), func(t *testing.T) {
+	for _, mutation := range []string{"none", "source", "proposal"} {
+		t.Run(mutation, func(t *testing.T) {
 			repo, changeName, state, engine, _ := newQualityLoopArchiveGateFixture(t)
 			blocked, err := engine.prepareQualityLoopArchiveReadOnlyGate(&state)
 			if err != nil || blocked {
@@ -537,8 +569,23 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 			if err := archiveRepairEvidence(repo, state.RunID, changeName); err != nil {
 				t.Fatal(err)
 			}
-			if mutate {
+			rewriteFixtureArchiveReferences(t, repo, changeName)
+			switch mutation {
+			case "source":
 				if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("archive source mutation\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			case "proposal":
+				path := filepath.Join(repo, "docs", "changes", "archive", "20260726-"+changeName, "brief.md")
+				file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := file.WriteString("\n归档阶段新增了未经 QA 的语义。\n"); err != nil {
+					_ = file.Close()
+					t.Fatal(err)
+				}
+				if err := file.Close(); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -546,7 +593,7 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if mutate {
+			if mutation != "none" {
 				if passed || state.Status != statusBlockedStalled || state.QualityLoop.BlockedFromStage != workflowStageArchive {
 					t.Fatalf("archive mutation passed=%v state=%s/%s from=%q", passed, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
 				}
@@ -560,6 +607,59 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 				t.Fatalf("successful archive gate evidence = %#v", gate)
 			}
 		})
+	}
+}
+
+// TestQualityLoopArchiveRestoreReversesMechanicalReferences protects recovery from archive path rewrites.
+func TestQualityLoopArchiveRestoreReversesMechanicalReferences(t *testing.T) {
+	repo := gitRepo(t)
+	changeName := "1-归档恢复"
+	activeDir := filepath.Join(repo, "docs", "changes", changeName)
+	archivedDir := filepath.Join(repo, "docs", "changes", "archive", "2026-07-28-"+changeName)
+	if err := os.MkdirAll(filepath.Join(activeDir, "tests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "tests", "spec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte("{\"local\":\"docs/changes/" + changeName + "/tests/local.ts\",\"global\":\"tests/spec/global.ts\"}\n")
+	if err := os.WriteFile(filepath.Join(activeDir, "acceptance.json"), original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(activeDir, "tests", "local.ts"), []byte("local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "tests", "spec", "global.ts"), []byte("global\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(archivedDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(activeDir, archivedDir); err != nil {
+		t.Fatal(err)
+	}
+	archivePrefix := "docs/changes/archive/2026-07-28-" + changeName + "/"
+	rewritten := strings.ReplaceAll(string(original), "docs/changes/"+changeName+"/", archivePrefix)
+	rewritten = strings.ReplaceAll(rewritten, "tests/spec/global.ts", archivePrefix+"tests/spec/global.ts")
+	if err := os.WriteFile(filepath.Join(archivedDir, "acceptance.json"), []byte(rewritten), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state := qualityLoopState(workflowStageArchive)
+	state.ChangeName = changeName
+	state.AcceptanceHash = acceptanceContentHash(original)
+	engine := NewEngine(repo, NewAgentRegistry())
+	if err := engine.verifyQualityLoopArchivedAcceptance(state); err != nil {
+		t.Fatalf("mechanically rewritten archive rejected: %v", err)
+	}
+	if err := engine.restoreQualityLoopProposalForAudit(&state); err != nil {
+		t.Fatalf("archive restore failed: %v", err)
+	}
+	restored, err := os.ReadFile(filepath.Join(activeDir, "acceptance.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(restored) != string(original) {
+		t.Fatalf("restored acceptance mismatch:\n%s", restored)
 	}
 }
 

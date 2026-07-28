@@ -881,7 +881,28 @@ func (e *Engine) verifyQualityLoopArchivedAcceptance(state State) error {
 	if err != nil {
 		return err
 	}
-	return verifyAcceptanceMatchesSealed(path, state.AcceptanceHash)
+	return verifyArchivedAcceptanceMatchesSealed(e.Repo, filepath.Dir(path), state.ChangeName, state.AcceptanceHash)
+}
+
+// verifyArchivedAcceptanceMatchesSealed permits only deterministic path rewrites made by oz archive.
+func verifyArchivedAcceptanceMatchesSealed(repo, archivedDir, changeName, expected string) error {
+	if !validAcceptanceHash(strings.TrimSpace(expected)) {
+		return fmt.Errorf("delivery acceptance 缺少有效的封存完整性哈希")
+	}
+	path := filepath.Join(archivedDir, "acceptance.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("读取 delivery acceptance %s 失败: %w", path, err)
+	}
+	normalized, err := normalizeQualityLoopArchivedReferences(repo, archivedDir, archivedDir, changeName, data)
+	if err != nil {
+		return err
+	}
+	actual := acceptanceContentHash(normalized)
+	if actual != strings.TrimSpace(expected) {
+		return fmt.Errorf("delivery acceptance 与封存合同不一致: path=%s expected=%s actual=%s", path, expected, actual)
+	}
+	return nil
 }
 
 // verifyAcceptanceMatchesSealed compares one delivery contract with the engine-owned run digest.
