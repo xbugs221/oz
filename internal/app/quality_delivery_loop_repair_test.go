@@ -633,14 +633,14 @@ type qualityUnboundedRunner struct {
 // Run writes real dynamic artifacts and tracked repair progress for the production engine loop.
 func (r *qualityUnboundedRunner) Run(_ context.Context, _ string, prompt string, _ string, _ StageOptions) (string, error) {
 	base := runDir(r.repo, r.runID)
-	if strings.Contains(prompt, "写入：`"+filepath.Join(base, "audit-1.json")+"`") {
+	if strings.Contains(prompt, "写入：`audit-1.json`（相对运行目录）") {
 		audit := cleanReviewForStageDecision()
 		audit.Evidence = []string{"go test ./internal/app; runtime audit passed"}
 		return "shared-repair", writeJSONFile(filepath.Join(base, "audit-1.json"), audit)
 	}
 	for iteration := 1; iteration <= 12; iteration++ {
 		repairPath := filepath.Join(base, fmt.Sprintf("targeted-repair-%d.json", iteration))
-		if strings.Contains(prompt, "写入：`"+repairPath+"`") {
+		if strings.Contains(prompt, fmt.Sprintf("写入：`targeted-repair-%d.json`（相对运行目录）", iteration)) {
 			progress := filepath.Join(r.repo, "README.md")
 			if err := os.WriteFile(progress, []byte(fmt.Sprintf("repair progress %d\n", iteration)), 0o644); err != nil {
 				return "", err
@@ -652,7 +652,7 @@ func (r *qualityUnboundedRunner) Run(_ context.Context, _ string, prompt string,
 	}
 	for iteration := 1; iteration <= 13; iteration++ {
 		qaPath := filepath.Join(base, fmt.Sprintf("qa-%d.json", iteration))
-		if !strings.Contains(prompt, "写入：`"+qaPath+"`") {
+		if !strings.Contains(prompt, fmt.Sprintf("写入（相对运行目录）：`qa-%d.json`", iteration)) {
 			continue
 		}
 		qa := cleanRepairDAGQA()

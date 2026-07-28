@@ -1,4 +1,7 @@
-读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、当前完整变更 `{{.ChangePath}}/`、当前 diff baseline `{{.BaselineHead}}`
+## 审核任务
+阶段：`{{.Stage}}`（第 `{{.Iteration}}` 轮）
+运行目录：`{{.RunDirectory}}`
+读取（相对此目录）：`state.json`、`acceptance.json`；当前变更：`{{.ChangePath}}/`；diff baseline：`{{.BaselineHead}}`。
 
 任务：
 
@@ -11,9 +14,9 @@
 {{if .HasPreviousFixSummary}}Fix summary：`{{.LatestPreviousFixSummaryPath}}`
 {{end}}{{end}}
 
-写入：`{{.ReviewPath}}`
+写入（相对运行目录）：`review-{{.Iteration}}.json`
 
-写入后运行：`oz flow validate-review --artifact "{{.ReviewPath}}" --json`
+在运行目录中运行：`oz flow validate-review --artifact "review-{{.Iteration}}.json" --json`
 
 {{if .IsFirstRoleTurn}}
 严格 JSON：只写一个 JSON object。
@@ -24,5 +27,5 @@ findings 字段：`{title,severity,scope,evidence,recommendation}`；`severity`:
 
 clean：`decision=0`、`findings=[]`、`checks` 全 true、`evidence` 非空并覆盖 acceptance_contract。needs_fix：`decision=1` 且 `findings` 非空。
 {{else}}
-续轮：复用当前角色会话 `{{.RoleSessionKey}}`，按同 schema 重写 `{{.ReviewPath}}` 为一个 JSON object；核对上一轮 review/fix 后只报告仍存在的问题。
+续轮：复用当前角色会话 `{{.RoleSessionKey}}`，按同 schema 重写 `review-{{.Iteration}}.json`；核对上一轮 review/fix 后只报告仍存在的问题。
 {{end}}

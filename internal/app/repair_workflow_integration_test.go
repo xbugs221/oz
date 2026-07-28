@@ -327,7 +327,7 @@ func (r *zeroRepairWorkflowRunner) Run(_ context.Context, _ string, prompt strin
 		}
 		return "zero-qa-session", nil
 	case 3:
-		if !strings.Contains(prompt, filepath.Join(runDir(r.repo, r.runID), "qa-1.json")) {
+		if !strings.Contains(prompt, "历史 audit/repair/QA artifacts") {
 			return "", fmt.Errorf("zero-repair archive prompt misses qa-1.json: %q", promptStageExcerpt(prompt))
 		}
 		if err := archiveRepairEvidence(r.repo, r.runID, r.changeName); err != nil {

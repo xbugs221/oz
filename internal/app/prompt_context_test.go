@@ -163,9 +163,9 @@ func TestRepairPromptCarriesLatestFailedQA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previousQAPath := filepath.Join(runDir(repo, state.RunID), "qa-1.json")
-	if !strings.Contains(prompt, previousQAPath) {
-		t.Fatalf("repair prompt must carry triggering QA artifact %q:\n%s", previousQAPath, prompt)
+	const previousQAFile = "qa-1.json"
+	if !strings.Contains(prompt, previousQAFile) {
+		t.Fatalf("repair prompt must carry triggering QA artifact %q:\n%s", previousQAFile, prompt)
 	}
 
 	state.Stages = map[string]string{"repair_1": "completed"}
@@ -177,7 +177,7 @@ func TestRepairPromptCarriesLatestFailedQA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(prompt, previousQAPath) {
+	if strings.Contains(prompt, previousQAFile) {
 		t.Fatalf("direct repair needs_more must not reference a missing QA artifact:\n%s", prompt)
 	}
 }

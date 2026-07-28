@@ -19,6 +19,7 @@ type promptSnapshot struct {
 // promptTemplateContext is the data exposed to named prompt templates.
 type promptTemplateContext struct {
 	RunID                        string
+	RunDirectory                 string
 	ChangeName                   string
 	Stage                        string
 	StageKind                    string
@@ -44,6 +45,8 @@ type promptTemplateContext struct {
 	LatestPreviousReviewPath     string
 	LatestPreviousRepairPath     string
 	LatestPreviousQAPath         string
+	LatestPreviousRepairFile     string
+	LatestPreviousQAFile         string
 	LatestPreviousFixSummaryPath string
 	HasPreviousReview            bool
 	HasPreviousRepair            bool
@@ -124,15 +127,14 @@ func promptForStage(repo string, state State) (string, error) {
 func appendQualityLoopPrompt(prompt string, context promptTemplateContext) string {
 	var block strings.Builder
 	block.WriteString("\n\n# 动态质量循环合同\n\n")
-	fmt.Fprintf(&block, "- 当前 state：`%s`\n- 封存 acceptance：`%s`\n- 当前 diff baseline：`%s`\n",
-		context.StatePath, context.AcceptancePath, context.BaselineHead)
+	fmt.Fprintf(&block, "- 当前阶段：`%s`（第 `%d` 轮）；运行目录：`%s`；diff baseline：`%s`。\n", context.Stage, context.Iteration, context.RunDirectory, context.BaselineHead)
 	switch context.RepairMode {
 	case "pre_qa_audit":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
-		fmt.Fprintf(&block, "- 模式：`pre_qa_audit`\n- 输出 artifact：`%s`\n- 全量检查当前提案的 acceptance、完整 diff、源码、测试与证据。\n- 发现问题时修复并写入本轮 audit artifact；只有本轮无新问题且全部 required tests 通过才可移交独立 QA。\n", context.RepairPath)
+		fmt.Fprintf(&block, "- 模式：`pre_qa_audit`；写入：`audit-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"audit-%d.json\" --json`。\n- 全量检查当前提案的 acceptance、完整 diff、源码、测试与证据；本轮零新问题且 required tests 通过才可移交独立 QA。\n", context.Iteration, context.Iteration)
 	case "qa_targeted_repair":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
-		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`\n- 输出 artifact：`%s`\n- 只处理最新 QA findings 及直接相关回归，不重新启动全量扩审。\n- 来源 QA artifact：`%s`\n", context.RepairPath, context.SourceQAArtifact)
+		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`；写入：`targeted-repair-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"targeted-repair-%d.json\" --json`。\n- 仅处理最新 QA findings 及直接相关回归；来源 QA：`qa-%d.json`。\n", context.Iteration, context.Iteration, context.Iteration)
 		if len(context.QAFindingSummaries) > 0 {
 			block.WriteString("- 最新 QA findings：\n")
 			for _, finding := range context.QAFindingSummaries {
@@ -263,6 +265,7 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 	roleSessionKey, roleSessionID := promptRoleSession(state)
 	context := promptTemplateContext{
 		RunID:                   state.RunID,
+		RunDirectory:            runPath,
 		ChangeName:              state.ChangeName,
 		Stage:                   state.Stage,
 		StageKind:               kind,
@@ -405,6 +408,12 @@ func promptContext(repo string, state State) (promptTemplateContext, error) {
 			appendFiniteArchivePaths(&context, state, runPath)
 		}
 		finalizePreviousArtifactContext(&context)
+	}
+	if context.LatestPreviousRepairPath != "" {
+		context.LatestPreviousRepairFile = filepath.Base(context.LatestPreviousRepairPath)
+	}
+	if context.LatestPreviousQAPath != "" {
+		context.LatestPreviousQAFile = filepath.Base(context.LatestPreviousQAPath)
 	}
 	return context, nil
 }

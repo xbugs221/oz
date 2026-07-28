@@ -53,8 +53,8 @@ verify_dynamic_contract() {
   fi
   repair_prompt="$(prompt_block repair)"
   qa_prompt="$(prompt_block qa)"
-  rg -q '`pre_qa_audit` 模式对应动态 `audit_N` 阶段' <<<"$repair_prompt"
-  rg -q '`qa_targeted_repair` 模式对应动态 `targeted_repair_N` 阶段' <<<"$repair_prompt"
+  rg -q '`pre_qa_audit`（`audit_N`）' <<<"$repair_prompt"
+  rg -q '`qa_targeted_repair`（`targeted_repair_N`）' <<<"$repair_prompt"
   rg -q 'repairer 不能自行归档，clean 后仍须独立 QA 放行' <<<"$repair_prompt"
   rg -q '使用独立 QA 会话' <<<"$qa_prompt"
   printf 'dynamic_quality_loop=passed\n' >>"$RUNTIME_LOG"

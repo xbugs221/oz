@@ -24,7 +24,7 @@ func (r *qualityDeliveryLoopRunner) Run(_ context.Context, _ string, prompt stri
 	r.calls++
 	base := runDir(r.repo, r.runID)
 	switch {
-	case strings.Contains(prompt, "写入：`"+filepath.Join(base, "audit-1.json")+"`"):
+	case strings.Contains(prompt, "写入：`audit-1.json`（相对运行目录）"):
 		if err := os.WriteFile(filepath.Join(r.repo, "README.md"), []byte("pre-QA audit repair progress\n"), 0o644); err != nil {
 			return "", err
 		}
@@ -36,14 +36,14 @@ func (r *qualityDeliveryLoopRunner) Run(_ context.Context, _ string, prompt stri
 			return "", err
 		}
 		return "quality-repair-session", nil
-	case strings.Contains(prompt, "写入：`"+filepath.Join(base, "audit-2.json")+"`"):
+	case strings.Contains(prompt, "写入：`audit-2.json`（相对运行目录）"):
 		audit := cleanReviewForStageDecision()
 		audit.Evidence = []string{"go test ./internal/app；quality-loop runtime audit clean verified"}
 		if err := writeJSONFile(filepath.Join(base, "audit-2.json"), audit); err != nil {
 			return "", err
 		}
 		return "quality-repair-session", nil
-	case strings.Contains(prompt, "写入：`"+filepath.Join(base, "qa-1.json")+"`"):
+	case strings.Contains(prompt, "写入（相对运行目录）：`qa-1.json`"):
 		qa := cleanRepairDAGQA()
 		qa.Decision = "needs_fix"
 		qa.Findings = []Finding{blockingFindingForStageDecision()}
@@ -52,7 +52,7 @@ func (r *qualityDeliveryLoopRunner) Run(_ context.Context, _ string, prompt stri
 			return "", err
 		}
 		return "quality-qa-session", nil
-	case strings.Contains(prompt, "写入：`"+filepath.Join(base, "targeted-repair-1.json")+"`"):
+	case strings.Contains(prompt, "写入：`targeted-repair-1.json`（相对运行目录）"):
 		if err := os.WriteFile(filepath.Join(r.repo, "README.md"), []byte("targeted repair progress\n"), 0o644); err != nil {
 			return "", err
 		}
@@ -62,7 +62,7 @@ func (r *qualityDeliveryLoopRunner) Run(_ context.Context, _ string, prompt stri
 			return "", err
 		}
 		return "quality-repair-session", nil
-	case strings.Contains(prompt, "写入：`"+filepath.Join(base, "qa-2.json")+"`"):
+	case strings.Contains(prompt, "写入（相对运行目录）：`qa-2.json`"):
 		if err := writeJSONFile(filepath.Join(base, "qa-2.json"), cleanRepairDAGQA()); err != nil {
 			return "", err
 		}

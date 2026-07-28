@@ -1,17 +1,20 @@
-读取：`{{.StatePath}}`、`{{.AcceptancePath}}`、{{if .HasRepairCheckpoint}}`{{.RepairPath}}`、{{else}}本轮未配置 repair 检查点、{{end}}当前完整 diff baseline `{{.BaselineHead}}`、当前变更 `{{.ChangePath}}/`
+## QA 任务
+阶段：`{{.Stage}}`（第 `{{.Iteration}}` 轮）
+运行目录：`{{.RunDirectory}}`
+读取（相对此目录）：`state.json`、`acceptance.json`、{{if .HasRepairCheckpoint}}最新 repair 检查点，{{else}}本轮未配置 repair 检查点，{{end}}当前变更：`{{.ChangePath}}/`；diff baseline：`{{.BaselineHead}}`。
 
 任务：
 
-- 只验收当前提案范围，不修改源码或 `{{.AcceptancePath}}`。
+- 只验收当前提案范围，不修改源码或封存 `acceptance.json`。
 - 使用独立 QA 会话核对{{if .HasRepairCheckpoint}}最新 repair 检查点{{else}}执行结果（零轮 repair 模式无 repair 检查点）{{end}}；不得继承 repairer 的自我判断。
 - QA 打回时必须在 findings 和 acceptance_matrix 中给出可复现的失败证据；下一阶段只会据此进行定向修复。
-- `acceptance_matrix[].id` 必须逐字来自 `{{.AcceptancePath}}` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
+- `acceptance_matrix[].id` 必须逐字来自封存 `acceptance.json` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
 - blocking scope 只允许 `current_change` 或 `introduced_regression`；required_evidence 只要求可复核，不要求运行产物进 git。
 
-写入：`{{.QAPath}}`
+写入（相对运行目录）：`qa-{{.Iteration}}.json`
 
-写入后运行：`oz flow validate-qa --artifact "{{.QAPath}}" --acceptance "{{.AcceptancePath}}" --json`
+在运行目录中运行：`oz flow validate-qa --artifact "qa-{{.Iteration}}.json" --acceptance "acceptance.json" --json`
 
 {{if .IsFirstRoleTurn}}
 只写一个 JSON object。
@@ -22,5 +25,5 @@
 
 clean：`decision=0`、`findings=[]`、`evidence` 非空、`acceptance_matrix` 覆盖 required_tests/required_evidence。needs_fix：`decision=1` 且 `findings` 非空。
 {{else}}
-续轮：复用当前角色会话 `{{.RoleSessionKey}}`，按同 schema 重写 `{{.QAPath}}`。
+续轮：复用当前角色会话 `{{.RoleSessionKey}}`，按同 schema 重写 `qa-{{.Iteration}}.json`。
 {{end}}
