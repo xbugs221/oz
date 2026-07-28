@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,6 +182,15 @@ func (e *Engine) prepareQualityLoopQAReadOnlyGate(state *State) (qualityLoopQAGa
 		return qualityLoopQAGateInput{}, true, nil
 	}
 	if state.QualityLoop.EvidenceHash == "" || evidenceHash != state.QualityLoop.EvidenceHash {
+		if state.QualityLoop.EvidenceHash != "" && e.rerouteQualityLoopQAOnAcceptanceDrift(
+			state,
+			&qualityAcceptanceCheckpointDriftError{
+				Stage: state.Stage, Component: "evidence", Result: state.QualityLoop.EvidenceHash,
+				Current: evidenceHash, State: state.QualityLoop.EvidenceHash,
+			},
+		) {
+			return qualityLoopQAGateInput{}, true, nil
+		}
 		reason := fmt.Sprintf("%s 开始前 required evidence 已偏离最近通过的 acceptance", state.Stage)
 		if blockErr := e.blockQualityLoopQAReadOnly(state, currentHash, reason); blockErr != nil {
 			return qualityLoopQAGateInput{}, false, blockErr
@@ -202,6 +212,9 @@ func (e *Engine) prepareQualityLoopQAReadOnlyGate(state *State) (qualityLoopQAGa
 		return qualityLoopQAGateInput{}, true, nil
 	}
 	if err := verifyQualityLoopDurableCheckpoint(e.Repo, *state, checkpoint); err != nil {
+		if e.rerouteQualityLoopQAOnAcceptanceDrift(state, err) {
+			return qualityLoopQAGateInput{}, true, nil
+		}
 		if blockErr := e.blockQualityLoopQAReadOnly(state, currentHash, err.Error()); blockErr != nil {
 			return qualityLoopQAGateInput{}, false, blockErr
 		}
@@ -265,6 +278,9 @@ func (e *Engine) verifyQualityLoopQAReadOnlyGate(state *State) (bool, error) {
 		return false, e.blockQualityLoopQAReadOnly(state, currentHash, err.Error())
 	}
 	if err := verifyQualityLoopDurableCheckpoint(e.Repo, *state, checkpoint); err != nil {
+		if e.rerouteQualityLoopQAOnAcceptanceDrift(state, err) {
+			return false, nil
+		}
 		return false, e.blockQualityLoopQAReadOnly(state, currentHash, err.Error())
 	}
 	input := state.ArtifactGates[state.Stage]
@@ -296,6 +312,29 @@ func (e *Engine) verifyQualityLoopQAReadOnlyGate(state *State) (bool, error) {
 		state.ArtifactGates[state.Stage] = input
 		return true, nil
 	}
+}
+
+// rerouteQualityLoopQAOnAcceptanceDrift sends changed valid acceptance input through a fresh audit.
+func (e *Engine) rerouteQualityLoopQAOnAcceptanceDrift(state *State, cause error) bool {
+	if state == nil || !isQualityLoopQAStage(*state) {
+		return false
+	}
+	var drift *qualityAcceptanceCheckpointDriftError
+	if !errors.As(cause, &drift) {
+		return false
+	}
+	previousStage := state.Stage
+	state.Stage = qualityLoopResumeAuditStage(state)
+	state.Status = statusRunning
+	state.Error = ""
+	state.QualityLoop.ResumeRerunPending = true
+	delete(state.Stages, previousStage)
+	delete(state.StageTimings, previousStage)
+	delete(state.DAGNodes, previousStage)
+	delete(state.Validation, previousStage)
+	delete(state.AcceptanceRun, previousStage)
+	delete(state.ArtifactGates, previousStage)
+	return true
 }
 
 // qualityLoopQACheckpointDiffHash resolves the tested audit or targeted-repair input for one QA.

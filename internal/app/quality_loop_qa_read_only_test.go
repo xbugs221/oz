@@ -315,8 +315,8 @@ func TestQualityLoopAuditFinalBindingIgnoresSiblingProposal(t *testing.T) {
 	}
 }
 
-// TestQualityLoopQAReadOnlyGateRejectsRequiredEvidenceDrift binds QA to tested regular files.
-func TestQualityLoopQAReadOnlyGateRejectsRequiredEvidenceDrift(t *testing.T) {
+// TestQualityLoopQAReadOnlyGateReroutesChangedEvidenceButBlocksUnsafeEvidence protects QA continuity.
+func TestQualityLoopQAReadOnlyGateReroutesChangedEvidenceButBlocksUnsafeEvidence(t *testing.T) {
 	for _, action := range []string{"modify", "directory", "fifo", "device"} {
 		t.Run(action, func(t *testing.T) {
 			repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
@@ -351,12 +351,40 @@ func TestQualityLoopQAReadOnlyGateRejectsRequiredEvidenceDrift(t *testing.T) {
 			if err := engine.runStage(context.Background(), &state); err != nil {
 				t.Fatal(err)
 			}
+			if action == "modify" {
+				if runner.calls != 0 || state.Status != statusRunning || state.Stage != "audit_2" ||
+					!state.QualityLoop.ResumeRerunPending ||
+					state.QualityLoop.BlockedFromStage != "" {
+					t.Fatalf("QA evidence %s did not reroute: calls=%d state=%s/%s from=%q",
+						action, runner.calls, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
+				}
+				return
+			}
 			if runner.calls != 0 || state.Status != statusBlockedStalled ||
 				state.QualityLoop.BlockedFromStage != "qa_1" {
 				t.Fatalf("QA evidence %s calls=%d state=%s/%s from=%q",
 					action, runner.calls, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
 			}
 		})
+	}
+}
+
+// TestQualityLoopQAReroutesEvidenceChangedDuringRun ensures a completed QA cannot bless stale evidence.
+func TestQualityLoopQAReroutesEvidenceChangedDuringRun(t *testing.T) {
+	repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
+	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "runtime.log")
+	runner.duringRun = func() error {
+		return os.WriteFile(evidencePath, []byte("new evidence after QA started\n"), 0o644)
+	}
+
+	if err := engine.runStage(context.Background(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if runner.calls != 1 || state.Status != statusRunning || state.Stage != "audit_2" ||
+		!state.QualityLoop.ResumeRerunPending ||
+		state.QualityLoop.BlockedFromStage != "" {
+		t.Fatalf("mid-QA evidence drift did not reroute: calls=%d state=%s/%s from=%q",
+			runner.calls, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
 	}
 }
 

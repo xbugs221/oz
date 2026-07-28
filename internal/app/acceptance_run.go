@@ -58,6 +58,27 @@ type acceptanceRunBinding struct {
 	ContractHash string
 }
 
+// qualityAcceptanceCheckpointDriftError reports valid acceptance content that changed after review.
+type qualityAcceptanceCheckpointDriftError struct {
+	Stage     string
+	Component string
+	Result    string
+	Current   string
+	State     string
+}
+
+// Error preserves the existing operator-facing hash mismatch diagnostic.
+func (e *qualityAcceptanceCheckpointDriftError) Error() string {
+	return fmt.Sprintf(
+		"阶段 %s acceptance %s hash 不一致：result=%s current=%s state=%s",
+		e.Stage,
+		e.Component,
+		e.Result,
+		e.Current,
+		e.State,
+	)
+}
+
 // AcceptanceRunSummary records aggregate counts for fast gate decisions.
 type AcceptanceRunSummary struct {
 	Total           int `json:"total"`
@@ -611,22 +632,16 @@ func verifyQualityAcceptanceCheckpoint(repo string, state State, stage string) (
 	}
 	testsHash, evidenceHash := qualityAcceptanceProgressHashes(repo, result)
 	if result.TestsHash != testsHash || result.TestsHash != state.QualityLoop.TestsHash {
-		return AcceptanceRunResult{}, fmt.Errorf(
-			"阶段 %s acceptance tests hash 不一致：result=%s current=%s state=%s",
-			stage,
-			result.TestsHash,
-			testsHash,
-			state.QualityLoop.TestsHash,
-		)
+		return AcceptanceRunResult{}, &qualityAcceptanceCheckpointDriftError{
+			Stage: stage, Component: "tests", Result: result.TestsHash,
+			Current: testsHash, State: state.QualityLoop.TestsHash,
+		}
 	}
 	if result.EvidenceHash != evidenceHash || result.EvidenceHash != state.QualityLoop.EvidenceHash {
-		return AcceptanceRunResult{}, fmt.Errorf(
-			"阶段 %s acceptance evidence hash 不一致：result=%s current=%s state=%s",
-			stage,
-			result.EvidenceHash,
-			evidenceHash,
-			state.QualityLoop.EvidenceHash,
-		)
+		return AcceptanceRunResult{}, &qualityAcceptanceCheckpointDriftError{
+			Stage: stage, Component: "evidence", Result: result.EvidenceHash,
+			Current: evidenceHash, State: state.QualityLoop.EvidenceHash,
+		}
 	}
 	return result, nil
 }
