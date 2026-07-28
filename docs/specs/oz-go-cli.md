@@ -144,10 +144,10 @@ active 提案必须把实现步骤保留在执行器 Todo 或运行态中，不�
 
 ### 场景：工作流配置解析边界保持清晰
 
-- **当** 维护者调整 `oz-flow.yaml` schema、profile 模板、parallel 展开或 validation 配置解析
-- **则** `internal/app/config_schema.go`、`internal/app/config_profiles.go`、`internal/app/config_parallel.go` 和 `internal/app/config_validation.go` 必须作为独立边界文件存在
-- **并且** `internal/app/config.go` 不得重新直接定义 schema input、profile 渲染、parallel 展开或 validation 解析 helper
-- **并且** 默认 tree config、legacy 字段拒绝、profile 发现、MADA profile 生成和 parallel 配置合同必须继续通过，证明用户可见配置行为不变
+- **当** 维护者调整 `oz-flow.yaml` schema、内嵌默认配置、parallel 展开或 validation 配置解析
+- **则** `internal/app/config.go`、`internal/app/config_schema.go`、`internal/app/config_parallel.go` 和 `internal/app/config_validation.go` 必须作为清晰的职责边界存在
+- **并且** `internal/app/config.go` 不得重新直接定义 schema input、parallel 展开或 validation 解析 helper；唯一默认 YAML 仅在该文件内嵌
+- **并且** 默认 tree config、legacy 字段拒绝和 parallel 配置合同必须继续通过，证明用户可见配置行为不变
 
 ### 场景：工作流 Engine 运行边界保持清晰
 

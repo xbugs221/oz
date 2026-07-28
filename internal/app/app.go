@@ -420,8 +420,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "用法：")
 	fmt.Fprintln(stdout, "  oz flow")
-	fmt.Fprintln(stdout, "  oz flow config [--global] [--profile <name>]")
-	fmt.Fprintln(stdout, "  oz flow config --list-profiles")
+	fmt.Fprintln(stdout, "  oz flow config [--global]")
 	fmt.Fprintln(stdout, "  oz flow run | oz flow r")
 	fmt.Fprintln(stdout, "  oz flow status")
 	fmt.Fprintln(stdout, "  oz flow restart")
@@ -442,8 +441,7 @@ func printHelp(stdout io.Writer) {
 	fmt.Fprintln(stdout, "人类交互命令：")
 	fmt.Fprintln(stdout, "  oz flow                         进入规划、选择 active change，或恢复 run")
 	fmt.Fprintln(stdout, "  oz flow clean [--agent-sessions] [--dry-run] [--json] 清理当前项目失败或异常运行态")
-	fmt.Fprintln(stdout, "  oz flow config [--global] [--profile <name>] 写入仓库 oz-flow.yaml 或用户 ~/oz-flow.yaml（默认写入 default profile）")
-	fmt.Fprintln(stdout, "  oz flow config --list-profiles  查看可用的 profile 列表")
+	fmt.Fprintln(stdout, "  oz flow config [--global] 写入仓库 oz-flow.yaml 或用户 ~/oz-flow.yaml")
 	fmt.Fprintln(stdout, "  oz flow run | oz flow r              直接全选 active change 并启动任务队列")
 	fmt.Fprintln(stdout, "  oz flow status                  打印最新 run 进度")
 	fmt.Fprintln(stdout, "  oz flow restart [-bN|-wN]       重启最近失败或中断的批量任务/工作流")
@@ -641,37 +639,18 @@ func resolveWatchTarget(repo string, args []string) (kind string, ref StatusRef,
 }
 
 type configCommandOptions struct {
-	Global       bool
-	Profile      string
-	ListProfiles bool
+	Global bool
 }
 
 func parseConfigCommandOptions(args []string) (configCommandOptions, error) {
-	options := configCommandOptions{Profile: "default"}
+	options := configCommandOptions{}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--global":
 			options.Global = true
-		case "--list-profiles":
-			options.ListProfiles = true
-		case "--profile":
-			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
-				return configCommandOptions{}, fmt.Errorf("缺少 --profile 的值")
-			}
-			options.Profile = args[i+1]
-			i++
 		default:
-			return configCommandOptions{}, fmt.Errorf("用法：oz flow config [--global] [--profile <name>] 或 oz flow config --list-profiles")
+			return configCommandOptions{}, fmt.Errorf("用法：oz flow config [--global]")
 		}
 	}
-	if options.ListProfiles && (options.Global || options.Profile != "default" || len(args) > 1) {
-		return configCommandOptions{}, fmt.Errorf("用法：oz flow config --list-profiles")
-	}
 	return options, nil
-}
-
-func printWorkflowProfiles(stdout io.Writer) {
-	for _, profile := range BuiltInWorkflowProfiles() {
-		fmt.Fprintf(stdout, "%s\t%s\t适用场景：%s\n", profile.Name, profile.Description, profile.Scenario)
-	}
 }

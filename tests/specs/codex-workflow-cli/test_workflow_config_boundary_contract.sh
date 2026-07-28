@@ -28,7 +28,6 @@ note "test id: workflow-config-boundary-contract"
 
 for file in \
   internal/app/config_schema.go \
-  internal/app/config_profiles.go \
   internal/app/config_parallel.go \
   internal/app/config_validation.go
 do
@@ -39,8 +38,6 @@ done
 for symbol in \
   'type workflowConfigInput' \
   'type stageOptionsInput' \
-  'func WorkflowProfileYAML' \
-  'func BuiltInWorkflowProfiles' \
   'func parallelGroupConfigFromInput' \
   'func parallelConfigFromStages' \
   'func validateParallelConfig' \
@@ -52,12 +49,10 @@ do
   fi
 done
 
-note "运行默认配置、legacy 拒绝、profile 和固定子代理拆除合同"
+note "运行默认配置和 legacy 拒绝合同"
 for test_script in \
-  tests/specs/codex-workflow-cli/test_legacy_config_rejection_contract.sh \
-  tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh \
-  tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh \
-  tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh
+  tests/specs/codex-workflow-cli/test_go_dag_graph_status_contract.sh \
+  tests/specs/codex-workflow-cli/test_legacy_config_rejection_contract.sh
 do
   note "运行 $test_script"
   bash "$test_script" 2>&1 | tee -a "$log"

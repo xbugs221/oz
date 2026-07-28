@@ -1,4 +1,4 @@
-// Package app tests workflow model selection reaches the agent command line.
+// Package app tests the built-in default workflow configuration.
 package app
 
 import (
@@ -9,25 +9,33 @@ import (
 	"testing"
 )
 
-// TestBuiltInProfilesPinCodexModel verifies every built-in profile passes the pinned model to each Codex command.
-func TestBuiltInProfilesPinCodexModel(t *testing.T) {
+// TestDefaultWorkflowConfigPinsCodexModel verifies the default config passes the pinned model to each Codex command.
+func TestDefaultWorkflowConfigPinsCodexModel(t *testing.T) {
 	const wantModel = "gpt-5.6-sol"
 
-	for _, profile := range BuiltInWorkflowProfiles() {
-		config, err := workflowConfigFromProfile(profile.Name)
-		if err != nil {
-			t.Fatalf("load profile %q: %v", profile.Name, err)
+	config := DefaultWorkflowConfig()
+	for stage, options := range config.Stages {
+		if options.Tool != "codex" {
+			continue
 		}
-		for stage, options := range config.Stages {
-			if options.Tool != "codex" {
-				continue
-			}
-			if options.Model != wantModel {
-				t.Errorf("profile %q stage %q model = %q, want %q", profile.Name, stage, options.Model, wantModel)
-			}
-			if args := codexCommandArgsForTest(stage, options); !containsCommandArgPair(args, "-m", wantModel) {
-				t.Errorf("profile %q stage %q args = %q, want -m %s", profile.Name, stage, args, wantModel)
-			}
+		if options.Model != wantModel {
+			t.Errorf("stage %q model = %q, want %q", stage, options.Model, wantModel)
+		}
+		if args := codexCommandArgsForTest(stage, options); !containsCommandArgPair(args, "-m", wantModel) {
+			t.Errorf("stage %q args = %q, want -m %s", stage, args, wantModel)
+		}
+	}
+}
+
+func TestConfigCommandOnlyAcceptsGlobal(t *testing.T) {
+	for _, args := range [][]string{nil, {"--global"}} {
+		if _, err := parseConfigCommandOptions(args); err != nil {
+			t.Errorf("parseConfigCommandOptions(%q): %v", args, err)
+		}
+	}
+	for _, args := range [][]string{{"--profile", "mada-code"}, {"--list-profiles"}, {"--unknown"}} {
+		if _, err := parseConfigCommandOptions(args); err == nil {
+			t.Errorf("parseConfigCommandOptions(%q) unexpectedly succeeded", args)
 		}
 	}
 }

@@ -58,15 +58,11 @@ func handleFlowConfigCommand(ctx context.Context, args []string, stdout io.Write
 	if err != nil {
 		return err
 	}
-	if options.ListProfiles {
-		printWorkflowProfiles(stdout)
-		return nil
-	}
 	targetRepo := repo
 	if options.Global {
 		targetRepo = ""
 	}
-	path, err := WriteWorkflowConfigProfile(targetRepo, options.Global, options.Profile)
+	path, err := WriteWorkflowConfig(targetRepo, options.Global)
 	if err != nil {
 		return err
 	}

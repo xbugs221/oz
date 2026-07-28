@@ -367,7 +367,7 @@
 - **且** 默认配置不包含 `parallel`、`subagents`、`subagent_guard` 或 `stages.*.before`
 - **且** 不创建 legacy repo dir
 - **且** 后续规划、graph 或 sealed run 能读取其中的根节点配置
-- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_go_dag_graph_status_contract.sh`
 
 #### 场景：初始化全局默认配置
 
@@ -504,7 +504,7 @@
 
 系统必须让新用户默认看不到 oz 外置固定子代理配置。默认 workflow 只表达 planning、execution、repair、qa、archive 主阶段，以及 validation、prompt 和主 agent 配置；运行图使用动态 audit、targeted repair 与 QA 循环。默认 graph、prompt、status/watch 和源码边界不得再依赖 oz 生成的 subagent、fan-in、parallel artifact 或外置子代理 runner。
 
-归档提案 42 内的 `tests/test_remove_fixed_subagents_contract.sh` 是当时 review/fix 状态机的历史快照；后续主流程演进为 repair，再演进为 audit/targeted repair 后，现行验证入口由根目录 `tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh` 取代，归档脚本不参与当前合同运行。
+归档提案 42 内的 `tests/test_remove_fixed_subagents_contract.sh` 是当时 review/fix 状态机的历史快照；后续主流程演进为 repair，再演进为 audit/targeted repair，历史 shell 合同已退出当前测试入口。
 
 #### 场景：默认配置不再生成外置子代理配置
 
@@ -512,7 +512,7 @@
 - **则** 默认 `oz-flow.yaml` 不包含 `parallel:`、`subagent_guard:` 或 `before:`
 - **且** 默认 `oz-flow.yaml` 不包含内置固定 helper 名称，例如 `代码库侦察员`、`目标核对审核员`、`浏览器路径测试员`
 - **且** 默认 `oz-flow.yaml` 仍包含 execution、repair、qa、archive 主阶段配置
-- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_go_dag_graph_status_contract.sh`
 - **关键断言**：真实 `cmd/oz` 生成的默认配置只保留主阶段配置，不暴露固定外置子代理
 - **剩余风险**：用户自定义旧配置不自动迁移，只在读取时明确拒绝
 
@@ -522,7 +522,7 @@
 - **则** graph nodes 不包含 `type=subagent` 或 `type=fanin`
 - **且** graph artifacts 不包含 `parallel-*` 路径
 - **且** graph 仍包含 `execution`、`audit_N`、`qa_N`、`targeted_repair_N`、`archive` 和 gate 节点
-- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_go_dag_graph_status_contract.sh`
 - **关键断言**：默认拓扑只保留主阶段和 gate，状态观测事实源不再包含外置子代理节点
 - **剩余风险**：该场景不启动完整 sealed run；运行时 status/watch 由源码边界和 Go 回归共同约束
 
@@ -532,7 +532,7 @@
 - **当** 系统渲染主阶段 prompt
 - **则** execution/repair/QA prompt 不包含 `subagent artifact`、`parallel-`、`ParallelContext`、`ParallelReview`、`ParallelQA`、`review helper` 或 `QA helper`
 - **且** prompt 仍保留 `StatePath`、`AcceptancePath`、`ChangePath`、`RepairPath` 或 `QAPath` 等主阶段必要输入
-- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **测试**：`go test ./internal/app`
 - **关键断言**：内置 prompt 不再要求主 agent 读取 oz 生成的固定外置子代理产物
 - **剩余风险**：用户自定义 prompt 可自行保留文本，不属于默认模板合同
 
@@ -543,7 +543,7 @@
 - **则** 配置读取必须失败
 - **且** 错误信息必须提到对应字段已删除或不再支持
 - **且** 空对象或空值写法，例如 `parallel: {}`、`parallel:`、`subagents: {}`、`subagent_guard:` 也必须被拒绝
-- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **测试**：`tests/specs/codex-workflow-cli/test_legacy_config_rejection_contract.sh`
 - **关键断言**：旧字段不会被静默忽略，也不会继续影响 workflow
 - **剩余风险**：迁移用户配置文件内容由用户或后续工具处理
 
@@ -552,7 +552,7 @@
 - **当** 检查 `internal/app` 生产源码并运行核心 Go 回归
 - **则** `internal/app` 不再包含 `nodeRunSubagent`、`nodeFanin`、`runSubagentAttempts`、`ParallelMemberResult`、`memberArtifactPath` 或 `ValidateParallelQAGate`
 - **且** `go test ./internal/app ./internal/ozcli ./tests -count=1` 必须通过
-- **测试**：`tests/specs/codex-workflow-cli/test_remove_fixed_subagents_contract.sh`
+- **测试**：`go test ./internal/app ./internal/ozcli ./tests -count=1`
 - **关键断言**：oz 不再保留外置子代理 runner、member artifact、fan-in 和 parallel QA gate 边界
 - **剩余风险**：静态断言不穷举所有历史命名，代码审查仍需关注死代码残留
 
@@ -2403,68 +2403,20 @@
 - **且** `tests/specs` 和 Go 测试继续作为当前业务测试入口
 - **测试**：`tests/specs/codex-workflow-cli/test_root_test_layout_contract.sh`
 
-### 需求：默认工作流模板脱离 Go 硬编码
+### 需求：唯一默认工作流配置内嵌在 Go 中
 
-// Sources: 11-新增-MADA-工作流profiles
+系统必须仅提供一份内嵌在 Go 源码中的默认 `oz-flow.yaml` 配置；不得保留 profile 模板目录、多 profile CLI 参数或 MADA profile。
 
-系统必须把默认 `oz-flow.yaml` 的主阶段、验证和提示词配置从 Go 字符串拼接中剥离到独立内置 YAML 模板文件 `profiles-template/*.yaml`，并且不得在模板中恢复已删除的固定外置子代理。
-
-#### 场景：默认 profile 由内置 YAML 模板生成
+#### 场景：默认配置生成并可加载
 
 - **给定** 当前仓库源码
-- **当** 系统生成默认工作流配置
-- **则** 仓库必须包含 `profiles-template/default.yaml`
-- **并且** `profiles-template/default.yaml` 必须保存默认 `oz flow config` 当前输出语义
-- **并且** Go 源码不得继续硬编码已删除的默认 subagent 角色名和 purpose 文本
-- **并且** 默认 `oz flow config` 不带 `--profile` 时仍生成与现有默认 profile 等价的标准 `oz-flow.yaml`
-- **测试**：`tests/specs/codex-workflow-cli/test_profile_templates_externalized_contract.sh`
-- **关键断言**：模板文件存在且包含主阶段与 prompt；Go 源码不再承载旧默认角色文本；默认 `oz flow config` 仍可生成和加载标准配置
-- **剩余风险**：替换内置模板后需要重新构建二进制
-
-### 需求：MADA profile 生成标准配置
-
-// Sources: 11-新增-MADA-工作流profiles
-
-系统必须允许用户通过 `oz flow config --profile <name>` 生成可试用的 MADA 工作流配置，且输出仍是标准 `oz-flow.yaml`。
-
-#### 场景：三个 MADA profile 均能生成可加载的 oz-flow.yaml
-
-- **给定** 一个临时 git 仓库
-- **当** 用户分别运行 `oz flow config --profile mada-code`、`oz flow config --profile mada-decision`、`oz flow config --profile mada-research`
-- **则** 每次都必须生成 `oz-flow.yaml`
-- **并且** YAML 必须包含 execution、repair、qa 和 archive 主阶段
-- **并且** YAML 不得包含 `parallel`、`subagents`、`subagent_guard` 或 `stages.*.before`
-- **并且** `oz flow graph --change <change> --format json` 必须能成功读取该配置
-- **测试**：`tests/specs/codex-workflow-cli/test_mada_profiles_config_contract.sh`
-- **关键断言**：三类 profile 都生成可加载的标准主阶段配置，且不恢复固定外置子代理
-- **剩余风险**：不启动真实 agent，避免创建阶段依赖外部模型
-
-### 需求：Profile 可发现且错误明确
-
-// Sources: 11-新增-MADA-工作流profiles
-
-系统必须让用户能发现可用 profile，并在输入错误 profile 时得到明确反馈。
-
-#### 场景：oz flow config --list-profiles 输出全部 profile
-
-- **当** 用户运行 `oz flow config --list-profiles`
-- **则** 输出必须包含 `default`、`mada-code`、`mada-decision`、`mada-research`
-- **并且** 每个 MADA profile 必须带有中文用途说明
-- **并且** 该命令不得写入 `oz-flow.yaml`
-- **测试**：`tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh`
-- **关键断言**：profile 可发现；list 命令无写文件副作用
-- **剩余风险**：第一版只要求 human 输出，不要求 JSON 输出
-
-#### 场景：未知 profile 返回错误并提示可用名称
-
-- **当** 用户运行 `oz flow config --profile not-real`
-- **则** 命令必须非零退出
-- **并且** stderr 必须包含未知 profile 名称
-- **并且** stderr 必须提示至少一个可用 profile 名称
-- **并且** 不得写入 `oz-flow.yaml`
-- **测试**：`tests/specs/codex-workflow-cli/test_mada_profile_discovery_contract.sh`
-- **关键断言**：错误明确且无配置文件副作用
-- **剩余风险**：错误文案可以调整，但必须包含输入名和可用 profile 名称
+- **当** 用户运行 `oz flow config` 或系统未发现配置文件
+- **则** 系统必须使用同一份内嵌默认配置
+- **并且** `oz flow config` 必须生成包含 planning、execution、repair、qa 和 archive 阶段及内嵌 prompts 的标准 `oz-flow.yaml`
+- **并且** 配置不得包含 `parallel`、`subagents`、`subagent_guard` 或 `stages.*.before`
+- **并且** `oz flow config [--global]` 以外的参数必须返回用法错误
+- **并且** 仓库不得包含 `profiles-template/` 目录
+- **测试**：Go 配置测试及 `tests/specs/codex-workflow-cli/test_workflow_config_boundary_contract.sh`
 
 // Sources: 12-收窄验收gate到提案范围
 

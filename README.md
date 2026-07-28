@@ -102,6 +102,8 @@ oz flow watch
 内置默认 -> ~/oz-flow.yaml -> 仓库 oz-flow.yaml -> 本次 run 快照
 ```
 
+`oz flow config` 只生成这一份内嵌默认配置，并且仅支持可选的 `--global`。不再提供 profile、`--profile` 或 `--list-profiles`；需要差异化行为时，直接编辑生成的 `oz-flow.yaml`。
+
 职责边界：skill 说明各角色怎么做；change 目录保存需求与范围；`acceptance.json` 是测试和证据的可执行合同；`oz flow` 决定何时推进阶段并执行门禁。
 
 常见门禁配置：

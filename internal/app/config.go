@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	promptstemplate "github.com/xbugs221/oz/prompts-template"
 	"gopkg.in/yaml.v3"
@@ -84,13 +85,6 @@ type ValidationCommand struct {
 	Args       []string `json:"args,omitempty" yaml:"args"`
 }
 
-// WorkflowProfile describes one built-in profile visible from `oz flow config`.
-type WorkflowProfile struct {
-	Name        string
-	Description string
-	Scenario    string
-}
-
 // DefaultWorkflowConfigYAML is kept for tests that compare the generated config text.
 var DefaultWorkflowConfigYAML = mustDefaultWorkflowConfigYAML()
 
@@ -119,7 +113,7 @@ func LoadWorkflowConfig(repo string) (WorkflowConfig, error) {
 
 // DefaultWorkflowConfig returns the built-in runtime behavior used without oz-flow.yaml.
 func DefaultWorkflowConfig() WorkflowConfig {
-	config, err := workflowConfigFromProfile("default")
+	config, err := workflowConfigFromYAML([]byte(DefaultWorkflowConfigYAML), "built-in default configuration", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -234,17 +228,8 @@ func InitWorkflowConfig(repo string) (string, error) {
 	return WriteWorkflowConfig(repo, false)
 }
 
-// WriteWorkflowConfig writes either repository or user-level default configuration.
+// WriteWorkflowConfig writes the built-in configuration to the repository or user level.
 func WriteWorkflowConfig(repo string, global bool) (string, error) {
-	return WriteWorkflowConfigProfile(repo, global, "default")
-}
-
-// WriteWorkflowConfigProfile writes a built-in profile as repository or user-level configuration.
-func WriteWorkflowConfigProfile(repo string, global bool, profile string) (string, error) {
-	body, err := WorkflowProfileYAML(profile)
-	if err != nil {
-		return "", err
-	}
 	path := filepath.Join(repo, "oz-flow.yaml")
 	if global {
 		var err error
@@ -259,18 +244,10 @@ func WriteWorkflowConfigProfile(repo string, global bool, profile string) (strin
 	if !global && fileExists(filepath.Join(repo, "oz-flow.yml")) {
 		return "", fmt.Errorf("oz-flow.yml 已存在")
 	}
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(DefaultWorkflowConfigYAML), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil
-}
-
-func workflowConfigFromProfile(profile string) (WorkflowConfig, error) {
-	body, err := WorkflowProfileYAML(profile)
-	if err != nil {
-		return WorkflowConfig{}, err
-	}
-	return workflowConfigFromYAML([]byte(body), profile+".yaml", nil)
 }
 
 func workflowConfigFromYAML(data []byte, source string, baseConfig *WorkflowConfig) (WorkflowConfig, error) {
@@ -416,9 +393,49 @@ func defaultPromptSet() map[string]string {
 }
 
 func mustDefaultWorkflowConfigYAML() string {
-	body, err := WorkflowProfileYAML("default")
-	if err != nil {
-		panic(err)
+	template := `stages:
+  planning:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: xhigh
+  execution:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: medium
+  repair:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: high
+  qa:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: high
+  archive:
+    agent: codex
+    model: gpt-5.6-sol
+    reasoning: low
+validation:
+  limit: 3
+  commands: []
+prompts:
+  planning: |
+{{ prompt "planning" }}
+  execution: |
+{{ prompt "execution" }}
+  repair: |
+{{ prompt "repair" }}
+  qa: |
+{{ prompt "qa" }}
+  archive: |
+{{ prompt "archive" }}`
+	prompts := defaultPromptSet()
+	for _, key := range rolePromptKeys() {
+		body := strings.TrimRight(prompts[key], "\n")
+		lines := strings.Split(body, "\n")
+		for i := range lines {
+			lines[i] = "      " + lines[i]
+		}
+		template = strings.ReplaceAll(template, fmt.Sprintf(`{{ prompt "%s" }}`, key), strings.Join(lines, "\n"))
 	}
-	return body
+	return template + "\n"
 }

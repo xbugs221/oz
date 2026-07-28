@@ -56,7 +56,6 @@ active_paths=(
   README.md
   docs/specs
   prompts-template
-  profiles-template
   tests/specs
   .github/workflows
 )
@@ -65,7 +64,7 @@ note "扫描用户文档、规格、模板、发布门禁和规格测试"
 scan_forbidden "内部引擎名称不得进入用户可见面" '\bgo-dag\b|\bdagu\b|engine: go-dag|引擎 go-dag' "${active_paths[@]}"
 scan_forbidden "旧 wo 配置、命令和状态目录不得进入活跃维护面" 'cmd/wo|\.\/cmd/wo|wo\.yaml|(^|/)\.wo(/|$)|/wo/repos|\bwo (status|watch|run|clean|config|restart|resume|batch|abort|update|graph|contract|list-changes)\b|`wo`|wo 命令|wo 二进制|wo CLI|wo 工作流|wo 执行器' "${active_paths[@]}"
 scan_forbidden "旧 WO_* 产品变量不得进入活跃维护面" '\bWO_[A-Z0-9_]*|\bwo_bin\b|\bWO_BIN\b' internal tests/specs docs/specs README.md
-scan_forbidden "legacy 后端不得进入默认配置、文档或模板" 'legacy-agent|LegacyAgent|opencode|OpenCode|open""code' README.md docs/specs prompts-template profiles-template .github/workflows
+scan_forbidden "legacy 后端不得进入默认配置、文档或模板" 'legacy-agent|LegacyAgent|opencode|OpenCode|open""code' README.md docs/specs prompts-template .github/workflows
 
 note "构建真实 oz 二进制并检查帮助、配置、graph、status、错误输出"
 OZ_BIN="$TMP/oz"
