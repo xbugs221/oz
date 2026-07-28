@@ -52,25 +52,15 @@ func (r *repairWorkflowRunner) Run(_ context.Context, _ string, prompt string, s
 		qa := cleanQAForStageDecision()
 		qa.Evidence = []string{"runtime go test ./internal/app passed"}
 		qa.AcceptanceMatrix = []AcceptanceResult{
-			{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "integration contract passed"},
-			{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "runtime log exists"},
+			{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "integration contract passed"},
+			{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "final demo exists"},
 		}
 		if err := writeJSONFile(filepath.Join(base, "qa-3.json"), qa); err != nil {
 			return "", err
 		}
 		return "qa-session", nil
 	case 4:
-		if err := os.WriteFile(filepath.Join(base, "delivery-summary.md"), []byte("# 交付\n\n## 最终审核\n\n独立 QA 已通过。\n"), 0o644); err != nil {
-			return "", err
-		}
-		archiveRoot := filepath.Join(r.repo, "docs", "changes", "archive")
-		if err := os.MkdirAll(archiveRoot, 0o755); err != nil {
-			return "", err
-		}
-		if err := os.Rename(
-			filepath.Join(r.repo, "docs", "changes", r.change),
-			filepath.Join(archiveRoot, "20260726-"+r.change),
-		); err != nil {
+		if err := archiveRepairEvidence(r.repo, r.runID, r.change); err != nil {
 			return "", err
 		}
 		return "archive-session", nil
@@ -113,7 +103,7 @@ func newRepairEvidenceFixture(t *testing.T) (string, string, string, string, str
 	if err := os.MkdirAll(filepath.Dir(testPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成真实运行证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'runtime verified\\n' > test-results/repair-dag/runtime.log\n"
+	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成最终能力演示证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'demo verified\\n' > test-results/repair-dag/final-demo.webm\n"
 	if err := os.WriteFile(testPath, []byte(testBody), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -159,10 +149,87 @@ func archiveRepairEvidence(repo, runID, changeName string) error {
 	if err := os.MkdirAll(archiveRoot, 0o755); err != nil {
 		return err
 	}
-	return os.Rename(
+	if err := os.Rename(
 		filepath.Join(repo, "docs", "changes", changeName),
 		filepath.Join(archiveRoot, "20260726-"+changeName),
+	); err != nil {
+		return err
+	}
+	if err := rewriteArchiveFixtureBrief(repo, changeName); err != nil {
+		return err
+	}
+	gitPath, err := resolveCommand("git")
+	if err != nil {
+		return err
+	}
+	activeRelative := filepath.ToSlash(filepath.Join("docs", "changes", changeName))
+	packageRelative := filepath.ToSlash(filepath.Join("tests", "evidence", "proposals", changeName))
+	addArgs := []string{
+		"add", "-A", "--",
+		filepath.ToSlash(filepath.Join("docs", "changes", "archive", "20260726-"+changeName)),
+	}
+	for _, relative := range []string{activeRelative, packageRelative} {
+		known, knownErr := gitArchiveFixturePathKnown(repo, gitPath, relative)
+		if knownErr != nil {
+			return knownErr
+		}
+		if known {
+			addArgs = append(addArgs, relative)
+		}
+	}
+	add := commandContext(context.Background(), gitPath, addArgs...)
+	add.Dir = repo
+	if output, runErr := add.CombinedOutput(); runErr != nil {
+		return fmt.Errorf("stage archive fixture: %w: %s", runErr, strings.TrimSpace(string(output)))
+	}
+	staged := commandContext(context.Background(), gitPath, "diff", "--cached", "--quiet")
+	staged.Dir = repo
+	if staged.Run() == nil {
+		return nil
+	}
+	commit := commandContext(context.Background(), gitPath, "commit", "-q", "-m", "archive fixture with evidence")
+	commit.Dir = repo
+	if output, runErr := commit.CombinedOutput(); runErr != nil {
+		return fmt.Errorf("commit archive fixture: %w: %s", runErr, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// gitArchiveFixturePathKnown reports whether git add should include an existing or previously tracked path.
+func gitArchiveFixturePathKnown(repo, gitPath, relative string) (bool, error) {
+	if _, err := os.Lstat(filepath.Join(repo, filepath.FromSlash(relative))); err == nil {
+		return true, nil
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	tracked := commandContext(context.Background(), gitPath, "ls-files", "--", relative)
+	tracked.Dir = repo
+	output, err := tracked.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("inspect archive fixture path %s: %w: %s", relative, err, strings.TrimSpace(string(output)))
+	}
+	return strings.TrimSpace(string(output)) != "", nil
+}
+
+// rewriteArchiveFixtureBrief simulates the deterministic proposal-reference rewrite before the archive commit.
+func rewriteArchiveFixtureBrief(repo, changeName string) error {
+	archivedName := "20260726-" + changeName
+	path := filepath.Join(repo, "docs", "changes", "archive", archivedName, "brief.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	text := strings.ReplaceAll(
+		string(data),
+		"docs/changes/"+changeName+"/",
+		"docs/changes/archive/"+archivedName+"/",
 	)
+	text = strings.ReplaceAll(
+		text,
+		"`tests/",
+		"`docs/changes/archive/"+archivedName+"/tests/",
+	)
+	return os.WriteFile(path, []byte(text), 0o644)
 }
 
 // cleanRepairDAGQA returns a QA artifact covering the integration acceptance contract.
@@ -170,8 +237,8 @@ func cleanRepairDAGQA() QA {
 	qa := cleanQAForStageDecision()
 	qa.Evidence = []string{"runtime go test ./internal/app passed"}
 	qa.AcceptanceMatrix = []AcceptanceResult{
-		{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "integration contract passed"},
-		{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "runtime log exists"},
+		{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "integration contract passed"},
+		{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "final demo exists"},
 	}
 	return qa
 }
@@ -199,7 +266,7 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(testPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成真实运行证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'runtime verified\\n' > test-results/repair-dag/runtime.log\n"
+	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成最终能力演示证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'demo verified\\n' > test-results/repair-dag/final-demo.webm\n"
 	if err := os.WriteFile(testPath, []byte(testBody), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -259,8 +326,8 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	qa.Decision = "needs_fix"
 	qa.Findings = []Finding{blockingFindingForStageDecision()}
 	qa.AcceptanceMatrix = []AcceptanceResult{
-		{ID: "repair-dag-contract", Status: "failed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "integration contract failed"},
-		{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/runtime.log", Evidence: "runtime evidence exists"},
+		{ID: "repair-dag-contract", Status: "failed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "integration contract failed"},
+		{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "final demo exists"},
 	}
 	if err := writeJSONFile(filepath.Join(runDir(repo, runID), "qa-1.json"), qa); err != nil {
 		t.Fatal(err)
@@ -591,9 +658,16 @@ func repairDAGAcceptanceJSON() string {
   "required_evidence": [
     {
       "id": "repair-dag-runtime",
-      "kind": "runtime_log",
-      "path": "test-results/repair-dag/runtime.log",
-      "purpose": "prove the integration command executed"
+      "kind": "demo_video",
+      "path": "test-results/repair-dag/final-demo.webm",
+      "purpose": "demonstrate the final integration capability"
+    }
+  ],
+  "submission_evidence": [
+    {
+      "evidence_id": "repair-dag-runtime",
+      "source_path": "test-results/repair-dag/final-demo.webm",
+      "archive_path": "tests/evidence/proposals/1-演示/final-demo.webm"
     }
   ]
 }`

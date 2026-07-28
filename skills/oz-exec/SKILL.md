@@ -18,12 +18,13 @@ small 不降低测试要求；归档前仍要把长期行为沉淀到规格和�
 
 ## 流程
 
-1. 确认当前提案目录已经提交，避免实现阶段误删创建阶段合同。
+1. 确认当前提案目录已经提交；Oz 启动后封存 `delivery_base_head`，执行、自查、修复和测试阶段都不得创建或改写 commit。
 2. 默认只读取 `brief.md`、`acceptance.json` 和 `tests/`，先抓硬合同。
 3. 先运行创建阶段契约测试，确认失败来自目标行为缺失，而不是测试语法、路径或环境问题。
 4. 实现最小可验证变更，并按需读取长文档解决冲突。
 5. 运行相关测试和 `acceptance.json.required_tests` 中声明的命令。
 6. 在执行器 Todo 或运行态中维护动态计划；交付时说明改动、验证和剩余风险。
+7. 调用 `fix-code` 或 `fix-webapp` 时明确告知其处于 Oz 执行上下文：修复技能只修改、测试和整理证据，不自行提交；最终由 `oz-archive` 统一提交。
 
 确认提案目录已提交到 git，防止后续操作误删：
 
@@ -31,7 +32,7 @@ small 不降低测试要求；归档前仍要把长期行为沉淀到规格和�
 git log --oneline -- docs/changes/<change>/
 ```
 
-若未提交，先 `git add docs/changes/<change>/ && git commit -m "提案草稿: <change>"`。
+若未提交，必须在启动 Oz 工作流前先 `git add docs/changes/<change>/ && git commit -m "提案草稿: <change>"`；工作流启动后禁止补交、amend、rebase 或 squash。
 
 默认先读取硬合同：
 
@@ -48,14 +49,15 @@ git log --oneline -- docs/changes/<change>/
 - 如果历史测试与新意图冲突，更新测试代码，并在 `design.md` 或交付说明中记录原因
 - 先运行创建阶段写入 `docs/changes/<change>/tests/` 的契约测试；如果功能尚未实现，失败原因应指向目标行为缺失
 - 不得删除、弱化、跳过或改写创建阶段的契约测试或 `acceptance.json` 来让实现过关
-- 如果合同要求 `test-results/`、截图、trace 或 runtime log 被 git 跟踪，应判定为验收合同错误，先同步修正 `acceptance.json`、`spec.md`、`design.md` 和对应测试；不得通过修改 `.gitignore`、`git add -f` 或提交测试结果来让合同过关
+- 如果合同要求直接跟踪 `test-results/` 下的截图、trace 或 runtime log，应判定为验收合同错误并同步修正；运行结果只有经 `oz-archive` 归集到 `tests/evidence/proposals/<change>/` 后才能跟踪，不得用 `git add -f` 绕过
 - 如用户最新意图明确改变验收标准，必须先同步更新 `spec.md`、`design.md`、`acceptance.json` 和对应测试，并写明变更原因，再继续实现
 - 可以新增补充测试，但新增测试必须是真实项目测试代码；契约补充写入 `docs/changes/<change>/tests/`，端到端/回归验收可按项目惯例写入根目录测试集，并同步更新 `acceptance.json`
 - 不得 mock API、mock 数据库、伪造认证、硬编码成功结果或只断言 HTTP 200，除非用户明确要求且已在提案文档记录风险
 - 不在 `tests/` 写占位文档
 - 禁止创建或修改 `task.md`；不得用其他 Git 跟踪文件保存动态实现步骤，计划只进入 Todo 或运行态
+- 执行、自查、修复和测试阶段禁止提交；归档阶段会把 `delivery_base_head` 之后的全部交付内容一次性提交
 - 结束前运行相关测试
-- 可以生成 `test-results/` 本地 evidence，但不要提交这些运行产物；仓库只提交测试代码、验收合同、源码和必要 fixture
+- `test-results/` 只存放临时运行结果，禁止提交。稳定测试快照基线可按项目惯例跟踪；实际运行结果只能在最终通过后由 `oz-archive` 归集到 `tests/evidence/proposals/<change>/` 再跟踪
 
 ## 退出条件
 

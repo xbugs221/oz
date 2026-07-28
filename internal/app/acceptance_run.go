@@ -98,6 +98,7 @@ type AcceptanceRunTestResult struct {
 	Status          string `json:"status"`
 	ExitCode        int    `json:"exit_code"`
 	LogPath         string `json:"log_path"`
+	SealedLogPath   string `json:"sealed_log_path,omitempty"`
 	LogHash         string `json:"log_hash,omitempty"`
 	LogProgressHash string `json:"log_progress_hash,omitempty"`
 	DurationMS      int64  `json:"duration_ms"`
@@ -105,10 +106,13 @@ type AcceptanceRunTestResult struct {
 
 // AcceptanceRunEvidenceResult records whether one required_evidence artifact exists.
 type AcceptanceRunEvidenceResult struct {
-	ID     string `json:"id"`
-	Kind   string `json:"kind"`
-	Path   string `json:"path"`
-	Status string `json:"status"`
+	ID           string `json:"id"`
+	Kind         string `json:"kind"`
+	Path         string `json:"path"`
+	SealedPath   string `json:"sealed_path,omitempty"`
+	ContentHash  string `json:"content_hash,omitempty"`
+	ProgressHash string `json:"progress_hash,omitempty"`
+	Status       string `json:"status"`
 }
 
 // AcceptanceRunCoverageResult records which required tests and evidence cover one spec.
@@ -201,10 +205,20 @@ func runAcceptanceContract(ctx context.Context, repo, changeName string, contrac
 		ResultPath:   filepath.ToSlash(filepath.Join(resultDirRel, "result.json")),
 		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
 	}
+	tempResultPath := result.ResultPath
+	sealValid := true
 	var logDiagnostics []acceptance.LifecycleDiagnostic
 	result.Tests, logDiagnostics = runAcceptanceTests(ctx, repo, resultDir, resultDirRel, binding.RunID != "", contract.RequiredTests)
 	result.Evidence = checkAcceptanceEvidence(repo, contract.RequiredEvidence)
 	if binding.RunID != "" {
+		if sealErr := sealAcceptanceRunArtifacts(repo, binding, &result); sealErr != nil {
+			sealValid = false
+			logDiagnostics = append(logDiagnostics, acceptance.LifecycleDiagnostic{
+				Code:     "acceptance_evidence_seal_failed",
+				Severity: "error",
+				Message:  fmt.Sprintf("acceptance 运行证据封存失败: %v", sealErr),
+			})
+		}
 		result.TestsHash, result.EvidenceHash, result.TestsProgressHash, result.EvidenceProgressHash =
 			qualityAcceptanceSnapshotHashes(repo, result)
 	}
@@ -215,7 +229,7 @@ func runAcceptanceContract(ctx context.Context, repo, changeName string, contrac
 	result.Producers = buildAcceptanceRunProducers(repo, contract, lifecycle.Valid)
 	result.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	result.Summary = summarizeAcceptanceRun(result.Tests, result.Evidence)
-	result.Valid = lifecycle.Valid && result.Summary.Failed == 0 && result.Summary.EvidenceMissing == 0
+	result.Valid = lifecycle.Valid && sealValid && result.Summary.Failed == 0 && result.Summary.EvidenceMissing == 0
 	for _, item := range result.Evidence {
 		diagnostic, ok := acceptanceEvidenceDiagnostic(item)
 		if ok {
@@ -225,8 +239,13 @@ func runAcceptanceContract(ctx context.Context, repo, changeName string, contrac
 	if !result.Valid {
 		result.Status = validationStatusFailed
 	}
-	if err := writeAcceptanceRunResult(repo, result); err != nil {
+	if err := writeAcceptanceRunResultAt(repo, tempResultPath, result); err != nil {
 		return result, err
+	}
+	if binding.RunID != "" {
+		if err := writeSealedAcceptanceRunResult(result); err != nil {
+			return result, err
+		}
 	}
 	if !result.Valid {
 		return result, fmt.Errorf("acceptance run failed: %s", result.ResultPath)
@@ -464,11 +483,32 @@ func summarizeAcceptanceRun(tests []AcceptanceRunTestResult, evidence []Acceptan
 
 // writeAcceptanceRunResult atomically persists the exact JSON object emitted to runner stdout.
 func writeAcceptanceRunResult(repo string, result AcceptanceRunResult) error {
-	data, err := json.MarshalIndent(result, "", "  ")
+	if filepath.IsAbs(result.ResultPath) {
+		data, err := marshalAcceptanceRunResult(result)
+		if err != nil {
+			return err
+		}
+		return atomicWriteFile(result.ResultPath, data, 0o600)
+	}
+	return writeAcceptanceRunResultAt(repo, result.ResultPath, result)
+}
+
+// writeAcceptanceRunResultAt persists a runner result to one overwriteable repository artifact.
+func writeAcceptanceRunResultAt(repo, relative string, result AcceptanceRunResult) error {
+	data, err := marshalAcceptanceRunResult(result)
 	if err != nil {
 		return err
 	}
-	return writeAcceptanceArtifactFile(repo, result.ResultPath, append(data, '\n'))
+	return writeAcceptanceArtifactFile(repo, relative, data)
+}
+
+// marshalAcceptanceRunResult returns the canonical newline-terminated runner JSON.
+func marshalAcceptanceRunResult(result AcceptanceRunResult) ([]byte, error) {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
 }
 
 // ensureAcceptanceArtifactDirectory creates a repository-contained directory without following links.
@@ -590,13 +630,14 @@ func verifyQualityAcceptanceCheckpoint(repo string, state State, stage string) (
 		checkpoint.Attempts < 1 || strings.TrimSpace(checkpoint.LastArtifact) == "" {
 		return AcceptanceRunResult{}, fmt.Errorf("阶段 %s 缺少最后通过的 acceptance checkpoint", stage)
 	}
-	resultDir, err := acceptanceRunResultDir(state.ChangeName, acceptanceRunBinding{
+	binding := acceptanceRunBinding{
 		RunID: state.RunID, Stage: stage, Attempt: checkpoint.Attempts,
-	})
+	}
+	resultDir, err := acceptanceRunSealedDir(repo, binding)
 	if err != nil {
 		return AcceptanceRunResult{}, err
 	}
-	expectedPath := filepath.ToSlash(filepath.Join(resultDir, "result.json"))
+	expectedPath := filepath.Join(resultDir, "result.json")
 	if checkpoint.LastArtifact != expectedPath {
 		return AcceptanceRunResult{}, fmt.Errorf(
 			"阶段 %s acceptance checkpoint 路径不一致：state=%s expected=%s",
@@ -605,7 +646,7 @@ func verifyQualityAcceptanceCheckpoint(repo string, state State, stage string) (
 			expectedPath,
 		)
 	}
-	data, err := readAcceptanceArtifactFile(repo, expectedPath)
+	data, err := readSealedAcceptanceArtifact(expectedPath)
 	if err != nil {
 		return AcceptanceRunResult{}, fmt.Errorf("读取 acceptance checkpoint 失败：%w", err)
 	}
@@ -620,11 +661,10 @@ func verifyQualityAcceptanceCheckpoint(repo string, state State, stage string) (
 	if err := validateQualityAcceptanceCheckpointIdentity(state, stage, checkpoint, expectedPath, contractHash, result); err != nil {
 		return AcceptanceRunResult{}, err
 	}
-	if err := validateQualityAcceptanceCheckpointTests(repo, resultDir, contract, result); err != nil {
+	if err := validateQualityAcceptanceCheckpointTests(resultDir, contract, result); err != nil {
 		return AcceptanceRunResult{}, err
 	}
-	currentEvidence := checkAcceptanceEvidence(repo, contract.RequiredEvidence)
-	if err := validateQualityAcceptanceCheckpointEvidence(contract, result.Evidence, currentEvidence); err != nil {
+	if err := validateQualityAcceptanceCheckpointEvidence(resultDir, contract, result.Evidence); err != nil {
 		return AcceptanceRunResult{}, err
 	}
 	if result.Summary != summarizeAcceptanceRun(result.Tests, result.Evidence) {
@@ -674,7 +714,7 @@ func validateQualityAcceptanceCheckpointIdentity(
 }
 
 // validateQualityAcceptanceCheckpointTests binds test metadata and every persisted log to the sealed contract.
-func validateQualityAcceptanceCheckpointTests(repo, resultDir string, contract Acceptance, result AcceptanceRunResult) error {
+func validateQualityAcceptanceCheckpointTests(resultDir string, contract Acceptance, result AcceptanceRunResult) error {
 	if len(result.Tests) != len(contract.RequiredTests) {
 		return fmt.Errorf("acceptance checkpoint required_tests 数量不一致")
 	}
@@ -684,11 +724,11 @@ func validateQualityAcceptanceCheckpointTests(repo, resultDir string, contract A
 			actual.Command != expected.Command || actual.Status != validationStatusPassed || actual.ExitCode != 0 {
 			return fmt.Errorf("acceptance checkpoint required_test %q 结果或合同绑定不一致", expected.ID)
 		}
-		expectedLog := filepath.ToSlash(filepath.Join(resultDir, acceptanceLogName(index, expected.ID)))
-		if actual.LogPath != expectedLog {
-			return fmt.Errorf("acceptance checkpoint required_test %q 日志路径不一致", expected.ID)
+		expectedLog := filepath.Join(resultDir, "tests", acceptanceLogName(index, expected.ID))
+		if actual.SealedLogPath != expectedLog {
+			return fmt.Errorf("acceptance checkpoint required_test %q 封存日志路径不一致", expected.ID)
 		}
-		data, err := readAcceptanceArtifactFile(repo, actual.LogPath)
+		data, err := readSealedAcceptanceArtifact(actual.SealedLogPath)
 		if err != nil {
 			return fmt.Errorf("读取 acceptance checkpoint required_test %q 日志失败：%w", expected.ID, err)
 		}
@@ -703,22 +743,32 @@ func validateQualityAcceptanceCheckpointTests(repo, resultDir string, contract A
 	return nil
 }
 
-// validateQualityAcceptanceCheckpointEvidence requires persisted and current evidence to match the sealed contract.
+// validateQualityAcceptanceCheckpointEvidence requires every persisted evidence copy to match its sealed bytes.
 func validateQualityAcceptanceCheckpointEvidence(
+	resultDir string,
 	contract Acceptance,
 	persisted []AcceptanceRunEvidenceResult,
-	current []AcceptanceRunEvidenceResult,
 ) error {
-	if len(persisted) != len(contract.RequiredEvidence) || len(current) != len(contract.RequiredEvidence) {
+	if len(persisted) != len(contract.RequiredEvidence) {
 		return fmt.Errorf("acceptance checkpoint required_evidence 数量不一致")
 	}
 	for index, expected := range contract.RequiredEvidence {
 		recorded := persisted[index]
-		observed := current[index]
 		if recorded.ID != expected.ID || recorded.Kind != expected.Kind || recorded.Path != expected.Path ||
-			recorded.Status != "present" || observed.ID != recorded.ID || observed.Kind != recorded.Kind ||
-			observed.Path != recorded.Path || observed.Status != recorded.Status {
-			return fmt.Errorf("acceptance checkpoint required_evidence %q 已漂移或合同绑定不一致", expected.ID)
+			recorded.Status != "present" {
+			return fmt.Errorf("acceptance checkpoint required_evidence %q 合同绑定不一致", expected.ID)
+		}
+		expectedPath := filepath.Join(resultDir, "required", acceptanceEvidenceName(index, expected.ID, expected.Path))
+		if recorded.SealedPath != expectedPath {
+			return fmt.Errorf("acceptance checkpoint required_evidence %q 封存路径不一致", expected.ID)
+		}
+		rawHash, progressHash, _, err := qualityHashEvidenceFilePair(recorded.SealedPath, recorded.Kind)
+		if err != nil {
+			return fmt.Errorf("读取 acceptance checkpoint required_evidence %q 失败：%w", expected.ID, err)
+		}
+		if recorded.ContentHash == "" || rawHash != recorded.ContentHash ||
+			recorded.ProgressHash == "" || progressHash != recorded.ProgressHash {
+			return fmt.Errorf("acceptance checkpoint required_evidence %q 封存内容哈希不一致", expected.ID)
 		}
 	}
 	return nil
@@ -924,10 +974,14 @@ func verifyAcceptanceMatchesSealed(path, expected string) error {
 func qualityEnvironmentNamesFromAcceptanceResult(repo string, result AcceptanceRunResult) []string {
 	var output strings.Builder
 	for _, test := range result.Tests {
-		if test.Status == validationStatusPassed || strings.TrimSpace(test.LogPath) == "" {
+		logPath := test.SealedLogPath
+		if logPath == "" {
+			logPath = filepath.Join(repo, filepath.FromSlash(test.LogPath))
+		}
+		if test.Status == validationStatusPassed || strings.TrimSpace(logPath) == "" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(test.LogPath)))
+		data, err := os.ReadFile(logPath)
 		if err != nil {
 			continue
 		}
@@ -969,7 +1023,11 @@ func qualityAcceptanceSnapshotHashes(repo string, result AcceptanceRunResult) (s
 	for _, item := range result.Evidence {
 		rawContent, stableContent := item.Status, item.Status
 		if item.Status == "present" {
-			rawContent, stableContent, _ = qualityEvidencePathHashes(repo, item.Path, item.Kind)
+			if item.SealedPath != "" {
+				rawContent, stableContent, _, _ = qualityHashEvidenceFilePair(item.SealedPath, item.Kind)
+			} else {
+				rawContent, stableContent, _ = qualityEvidencePathHashes(repo, item.Path, item.Kind)
+			}
 		}
 		evidenceParts = append(evidenceParts, fmt.Sprintf(
 			"%s\x00%s\x00%s\x00%s",
@@ -1011,8 +1069,17 @@ type qualityCurrentEvidenceObservation struct {
 	ProgressEligible bool
 }
 
-// qualityCurrentEvidenceObservationForState reads sealed evidence into one recovery observation.
+// qualityCurrentEvidenceObservationForState prefers the latest state-owned snapshot over overwriteable test-results.
 func qualityCurrentEvidenceObservationForState(repo string, state State) (qualityCurrentEvidenceObservation, error) {
+	if observation, found, err := qualitySealedEvidenceObservationForState(repo, state); found || err != nil {
+		return observation, err
+	}
+	if state.Status == statusBlockedStalled || state.QualityLoop.BlockedFromStage != "" {
+		return qualityCurrentEvidenceObservation{
+			RawHash:      state.QualityLoop.EvidenceHash,
+			ProgressHash: state.QualityLoop.EvidenceProgressHash,
+		}, nil
+	}
 	contract, err := readAcceptanceForState(repo, state)
 	if err != nil {
 		return qualityCurrentEvidenceObservation{}, err
@@ -1040,6 +1107,85 @@ func qualityCurrentEvidenceObservationForState(repo string, state State) (qualit
 		ProgressHash:     qualityHashStrings(semanticParts...),
 		ProgressEligible: eligible,
 	}, nil
+}
+
+// qualitySealedEvidenceObservationForState restores recovery hashes from the checkpoint nearest the blocked stage.
+func qualitySealedEvidenceObservationForState(repo string, state State) (qualityCurrentEvidenceObservation, bool, error) {
+	stages := make([]string, 0, len(state.AcceptanceRun)+2)
+	seen := map[string]bool{}
+	appendStage := func(stage string) {
+		if stage != "" && !seen[stage] {
+			seen[stage] = true
+			stages = append(stages, stage)
+		}
+	}
+	blockedStage := state.QualityLoop.BlockedFromStage
+	if parsed, err := parseWorkflowStage(blockedStage); err == nil {
+		if parsed.isKind(workflowStageQA) {
+			probe := state
+			probe.Stage = blockedStage
+			if checkpoint, _, checkpointErr := qualityLoopQACheckpointDiffHash(probe); checkpointErr == nil {
+				appendStage(checkpoint)
+			}
+		} else if parsed.isKind(workflowStageArchive) {
+			if checkpoint, checkpointErr := qualityLoopArchiveCheckpointStage(state); checkpointErr == nil {
+				appendStage(checkpoint)
+			}
+		}
+	}
+	appendStage(blockedStage)
+	appendStage(state.Stage)
+	var passed []string
+	var remaining []string
+	for stage, checkpoint := range state.AcceptanceRun {
+		if checkpoint.Status == validationStatusPassed {
+			passed = append(passed, stage)
+		} else {
+			remaining = append(remaining, stage)
+		}
+	}
+	sort.Strings(passed)
+	sort.Strings(remaining)
+	for index := len(passed) - 1; index >= 0; index-- {
+		appendStage(passed[index])
+	}
+	for index := len(remaining) - 1; index >= 0; index-- {
+		appendStage(remaining[index])
+	}
+	for _, stage := range stages {
+		checkpoint := state.AcceptanceRun[stage]
+		if !filepath.IsAbs(checkpoint.LastArtifact) {
+			continue
+		}
+		data, err := readSealedAcceptanceArtifact(checkpoint.LastArtifact)
+		if err != nil {
+			return qualityCurrentEvidenceObservation{}, true, err
+		}
+		var result AcceptanceRunResult
+		if err := decodeStrictArtifactJSON(data, &result); err != nil {
+			return qualityCurrentEvidenceObservation{}, true, err
+		}
+		if result.RunID != state.RunID || result.Stage != stage || result.Attempt != checkpoint.Attempts ||
+			result.ResultPath != checkpoint.LastArtifact {
+			return qualityCurrentEvidenceObservation{}, true, fmt.Errorf("acceptance recovery snapshot %s 绑定不一致", stage)
+		}
+		_, rawHash, _, progressHash := qualityAcceptanceSnapshotHashes(repo, result)
+		if rawHash != result.EvidenceHash || progressHash != result.EvidenceProgressHash {
+			return qualityCurrentEvidenceObservation{}, true, fmt.Errorf("acceptance recovery snapshot %s evidence hash 不一致", stage)
+		}
+		eligible := len(result.Evidence) > 0
+		for _, item := range result.Evidence {
+			if item.Status != "present" || item.SealedPath == "" || item.ProgressHash == "" {
+				eligible = false
+			}
+		}
+		return qualityCurrentEvidenceObservation{
+			RawHash:          rawHash,
+			ProgressHash:     progressHash,
+			ProgressEligible: eligible,
+		}, true, nil
+	}
+	return qualityCurrentEvidenceObservation{}, false, nil
 }
 
 // qualityEvidenceContentHash hashes only safe repository-relative evidence files.

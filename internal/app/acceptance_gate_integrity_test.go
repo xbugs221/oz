@@ -62,7 +62,7 @@ func TestQualityLoopAcceptanceResultsAreDurableAndBound(t *testing.T) {
 		t.Fatalf("audit acceptance gate = passed:%v err:%v", passed, err)
 	}
 	firstPath := state.AcceptanceRun["audit_1"].LastArtifact
-	firstData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(firstPath)))
+	firstData, err := os.ReadFile(acceptanceTestArtifactPath(repo, firstPath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestQualityLoopAcceptanceResultsAreDurableAndBound(t *testing.T) {
 	if firstPath == secondPath {
 		t.Fatalf("dynamic acceptance results share path %q", firstPath)
 	}
-	unchanged, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(firstPath)))
+	unchanged, err := os.ReadFile(acceptanceTestArtifactPath(repo, firstPath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,8 +97,8 @@ func TestQualityLoopAcceptanceResultsAreDurableAndBound(t *testing.T) {
 		t.Fatalf("result content binding = %#v", result)
 	}
 	for _, testResult := range result.Tests {
-		if !strings.Contains(testResult.LogPath, filepath.ToSlash(filepath.Join(state.RunID, "audit_1", "attempt-1"))) {
-			t.Fatalf("log path lacks durable namespace: %q", testResult.LogPath)
+		if !strings.Contains(testResult.SealedLogPath, filepath.Join(state.RunID, acceptanceEvidenceDirectory, "audit_1", "attempt-1")) {
+			t.Fatalf("sealed log path lacks durable namespace: %q", testResult.SealedLogPath)
 		}
 	}
 }
@@ -132,7 +132,7 @@ func TestVerifyQualityAcceptanceCheckpointAcceptsLegacyProgressHash(t *testing.T
 	}
 }
 
-// TestVerifyQualityAcceptanceCheckpointRejectsTampering covers metadata, logs, and current evidence.
+// TestVerifyQualityAcceptanceCheckpointRejectsTampering covers metadata, sealed logs, and sealed evidence.
 func TestVerifyQualityAcceptanceCheckpointRejectsTampering(t *testing.T) {
 	for _, testCase := range []struct {
 		name   string
@@ -163,7 +163,7 @@ func TestVerifyQualityAcceptanceCheckpointRejectsTampering(t *testing.T) {
 			name: "test log content",
 			tamper: func(t *testing.T, repo string, state *State) {
 				result := readAcceptanceResultForState(t, repo, *state, "audit_1")
-				path := filepath.Join(repo, filepath.FromSlash(result.Tests[0].LogPath))
+				path := result.Tests[0].SealedLogPath
 				if err := os.WriteFile(path, []byte("tampered log\n"), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -183,7 +183,7 @@ func TestVerifyQualityAcceptanceCheckpointRejectsTampering(t *testing.T) {
 			name: "test log symlink",
 			tamper: func(t *testing.T, repo string, state *State) {
 				result := readAcceptanceResultForState(t, repo, *state, "audit_1")
-				path := filepath.Join(repo, filepath.FromSlash(result.Tests[0].LogPath))
+				path := result.Tests[0].SealedLogPath
 				data, err := os.ReadFile(path)
 				if err != nil {
 					t.Fatal(err)
@@ -201,13 +201,10 @@ func TestVerifyQualityAcceptanceCheckpointRejectsTampering(t *testing.T) {
 			},
 		},
 		{
-			name: "current evidence",
-			tamper: func(t *testing.T, repo string, _ *State) {
-				if err := os.WriteFile(
-					filepath.Join(repo, "test-results", "demo", "runtime.log"),
-					[]byte("tampered evidence\n"),
-					0o644,
-				); err != nil {
+			name: "sealed evidence",
+			tamper: func(t *testing.T, repo string, state *State) {
+				result := readAcceptanceResultForState(t, repo, *state, "audit_1")
+				if err := os.WriteFile(result.Evidence[0].SealedPath, []byte("tampered evidence\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -226,6 +223,46 @@ func TestVerifyQualityAcceptanceCheckpointRejectsTampering(t *testing.T) {
 				t.Fatalf("tampered checkpoint %q was accepted", testCase.name)
 			}
 		})
+	}
+}
+
+// TestVerifyQualityAcceptanceCheckpointIgnoresTemporaryEvidenceOverwrite proves QA reads the sealed snapshot.
+func TestVerifyQualityAcceptanceCheckpointIgnoresTemporaryEvidenceOverwrite(t *testing.T) {
+	repo, state := passedAcceptanceCheckpointFixture(t)
+	if err := os.WriteFile(
+		filepath.Join(repo, "test-results", "demo", "runtime.log"),
+		[]byte("later attempt evidence\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := verifyQualityAcceptanceCheckpoint(repo, state, "audit_1"); err != nil {
+		t.Fatalf("temporary evidence overwrite invalidated sealed checkpoint: %v", err)
+	}
+}
+
+// TestQualityRecoveryUsesSealedEvidenceSnapshot prevents blocked recovery from treating test-results churn as progress.
+func TestQualityRecoveryUsesSealedEvidenceSnapshot(t *testing.T) {
+	repo, state := passedAcceptanceCheckpointFixture(t)
+	result := readAcceptanceResultForState(t, repo, state, "audit_1")
+	state.Status = statusBlockedStalled
+	state.Stage = statusBlockedStalled
+	state.QualityLoop.BlockedFromStage = "qa_1"
+	if err := os.WriteFile(
+		filepath.Join(repo, "test-results", "demo", "runtime.log"),
+		[]byte("untrusted recovery churn\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	observation, err := qualityCurrentEvidenceObservationForState(repo, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observation.RawHash != result.EvidenceHash ||
+		observation.ProgressHash != result.EvidenceProgressHash ||
+		!observation.ProgressEligible {
+		t.Fatalf("recovery evidence observation = %#v, want sealed result %#v", observation, result)
 	}
 }
 
@@ -292,7 +329,7 @@ func TestQualityLoopRepeatedAcceptanceFailureStalls(t *testing.T) {
 		t.Fatalf("first acceptance failure = passed:%v err:%v", passed, err)
 	}
 	firstPath := state.AcceptanceRun[state.Stage].LastArtifact
-	firstData, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(firstPath)))
+	firstData, err := os.ReadFile(acceptanceTestArtifactPath(repo, firstPath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +344,7 @@ func TestQualityLoopRepeatedAcceptanceFailureStalls(t *testing.T) {
 	if firstPath == secondPath || !strings.Contains(secondPath, "attempt-2") {
 		t.Fatalf("attempt paths = first:%q second:%q", firstPath, secondPath)
 	}
-	unchanged, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(firstPath)))
+	unchanged, err := os.ReadFile(acceptanceTestArtifactPath(repo, firstPath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -543,7 +580,7 @@ func TestQualityEvidenceProgressHashStreamsLargeArtifacts(t *testing.T) {
 func readAcceptanceResultForState(t *testing.T, repo string, state State, stage string) AcceptanceRunResult {
 	t.Helper()
 	path := state.AcceptanceRun[stage].LastArtifact
-	data, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(path)))
+	data, err := os.ReadFile(acceptanceTestArtifactPath(repo, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -552,6 +589,14 @@ func readAcceptanceResultForState(t *testing.T, repo string, state State, stage 
 		t.Fatal(err)
 	}
 	return result
+}
+
+// acceptanceTestArtifactPath resolves both legacy repository artifacts and state-owned sealed artifacts.
+func acceptanceTestArtifactPath(repo, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(repo, filepath.FromSlash(path))
 }
 
 // TestQualityLoopAcceptanceAttemptReservationSurvivesRestart verifies crash recovery advances the namespace.

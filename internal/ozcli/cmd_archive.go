@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 func (c *cli) archiveCmd(args []string) error {
@@ -32,8 +34,15 @@ func (c *cli) archiveCmd(args []string) error {
 	if !result.Valid {
 		return fmt.Errorf("%s: %s", change, strings.Join(result.Errors, "; "))
 	}
-	date := c.now().Format("2006-01-02")
 	changeDir := filepath.Join(root, "changes", change)
+	contract, err := acceptance.Read(filepath.Join(changeDir, "acceptance.json"))
+	if err != nil {
+		return fmt.Errorf("%s: acceptance.json 无效：%w", change, err)
+	}
+	if err := acceptance.ValidateSubmissionEvidenceForChange(filepath.Dir(root), contract, change); err != nil {
+		return fmt.Errorf("%s: 提交级证据包无效：%w", change, err)
+	}
+	date := c.now().Format("2006-01-02")
 	archiveDir := filepath.Join(root, "changes", "archive", date+"-"+change)
 	if _, err := os.Stat(archiveDir); err == nil {
 		return fmt.Errorf("归档目标已存在：%s", archiveDir)

@@ -53,6 +53,7 @@ type State struct {
 	BatchTotal                int                             `json:"batch_total,omitempty"`
 	BaselineHead              string                          `json:"baseline_head"`
 	BaselineDiff              string                          `json:"baseline_diff"`
+	DeliveryBaseHead          string                          `json:"delivery_base_head,omitempty"`
 	AcceptanceHash            string                          `json:"acceptance_hash,omitempty"`
 	Sessions                  map[string]string               `json:"sessions"`
 	Stages                    map[string]string               `json:"stages"`

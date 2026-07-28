@@ -48,6 +48,9 @@ func newProject(t *testing.T) string {
 	// newProject creates the minimum docs tree oz expects in user projects.
 	t.Helper()
 	dir := t.TempDir()
+	if output, err := exec.Command("git", "-C", dir, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("initialize project repository: %v: %s", err, output)
+	}
 	if err := os.MkdirAll(filepath.Join(dir, "docs", "changes", "archive"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +75,7 @@ func writeValidChange(t *testing.T, project, change string) {
 	    {
 	      "spec": "需求：归档测试 / 场景：归档包含测试",
 	      "tests": ["archive-test"],
-	      "evidence": ["archive-log"],
+	      "evidence": ["archive-log", "archive-demo-video"],
 	      "risk": "运行日志只证明测试命令执行结果"
 	    }
 	  ],
@@ -82,8 +85,8 @@ func writeValidChange(t *testing.T, project, change string) {
 	      "source": "change_contract",
 	      "path": "docs/changes/` + change + `/tests/archive_test.go",
 	      "command": "go test docs/changes/` + change + `/tests/archive_test.go",
-	      "purpose": "证明提案包含真实测试入口，并生成 archive-log 到 test-results/archive.log",
-	      "assertions": ["归档后提案测试文件仍随 active change 保留，测试命令写出 archive-log 运行证据"]
+	      "purpose": "证明提案包含真实测试入口，并生成 archive-log 与最终演示视频",
+	      "assertions": ["归档后提案测试文件仍随 active change 保留，测试命令写出 test-results/archive.log 与 test-results/archive-demo.webm"]
 	    }
 	  ],
   "required_evidence": [
@@ -92,6 +95,24 @@ func writeValidChange(t *testing.T, project, change string) {
       "kind": "runtime_log",
       "path": "test-results/archive.log",
       "purpose": "记录归档测试结果"
+    },
+    {
+      "id": "archive-demo-video",
+      "kind": "demo_video",
+      "path": "test-results/archive-demo.webm",
+      "purpose": "演示归档提案的最终用户流程"
+    }
+  ],
+  "submission_evidence": [
+    {
+      "evidence_id": "archive-log",
+      "source_path": "test-results/archive.log",
+      "archive_path": "tests/evidence/proposals/` + change + `/archive.log"
+    },
+    {
+      "evidence_id": "archive-demo-video",
+      "source_path": "test-results/archive-demo.webm",
+      "archive_path": "tests/evidence/proposals/` + change + `/archive-demo.webm"
     }
   ]
 }
@@ -105,6 +126,22 @@ func writeValidChange(t *testing.T, project, change string) {
 	testBody := "package tests\n\nimport \"testing\"\n\n// source: docs/changes/" + change + "/fixtures/input.json\nfunc TestArchivedBehavior(t *testing.T) {}\n"
 	if err := os.WriteFile(filepath.Join(dir, "tests", "archive_test.go"), []byte(testBody), 0o644); err != nil {
 		t.Fatal(err)
+	}
+	for relativePath, body := range map[string]string{
+		"test-results/archive.log":                                  "archive test passed\n",
+		"test-results/archive-demo.webm":                            "final demo video\n",
+		"tests/evidence/proposals/" + change + "/archive.log":       "archive test passed\n",
+		"tests/evidence/proposals/" + change + "/archive-demo.webm": "final demo video\n",
+		"tests/evidence/proposals/" + change + "/README.md":         "# 归档证据\n",
+		"tests/evidence/proposals/" + change + "/manifest.json":     `{"version":1,"change":"` + change + `"}`,
+	} {
+		path := filepath.Join(project, filepath.FromSlash(relativePath))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -266,7 +303,7 @@ func TestListAndStatusReportActiveChangeProgress(t *testing.T) {
 	if _, ok := seen["task.md"]; ok {
 		t.Fatalf("status must not expose task.md as an active artifact: %#v", seen)
 	}
-	if statusPayload.Acceptance.RequiredTests.Total != 1 || statusPayload.Acceptance.RequiredEvidence.Total != 1 {
+	if statusPayload.Acceptance.RequiredTests.Total != 1 || statusPayload.Acceptance.RequiredEvidence.Total != 2 {
 		t.Fatalf("unexpected acceptance summary: %#v", statusPayload.Acceptance)
 	}
 }
@@ -281,8 +318,8 @@ func TestValidateJSONIncludesLifecycleDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	acceptanceText := strings.ReplaceAll(string(acceptanceData), "证明提案包含真实测试入口，并生成 archive-log 到 test-results/archive.log", "证明提案包含真实测试入口")
-	acceptanceText = strings.ReplaceAll(acceptanceText, "归档后提案测试文件仍随 active change 保留，测试命令写出 archive-log 运行证据", "归档后提案测试文件仍随 active change 保留并执行真实业务断言")
+	acceptanceText := strings.ReplaceAll(string(acceptanceData), "证明提案包含真实测试入口，并生成 archive-log 与最终演示视频", "证明提案包含真实测试入口")
+	acceptanceText = strings.ReplaceAll(acceptanceText, "归档后提案测试文件仍随 active change 保留，测试命令写出 test-results/archive.log 与 test-results/archive-demo.webm", "归档后提案测试文件仍随 active change 保留并执行真实业务断言")
 	if err := os.WriteFile(acceptancePath, []byte(acceptanceText), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -820,6 +857,80 @@ func TestArchiveKeepsProposalTestsWithoutEditingMainSpec(t *testing.T) {
 	}
 }
 
+func TestArchiveRequiresCommittedSubmissionEvidence(t *testing.T) {
+	// TestArchiveRequiresCommittedSubmissionEvidence verifies archive rejects legacy, misplaced, missing, or ignored proposal evidence.
+	tests := []struct {
+		name    string
+		prepare func(*testing.T, string, string)
+		wantErr string
+	}{
+		{
+			name: "legacy contract has no package",
+			prepare: func(t *testing.T, project, change string) {
+				rewriteAcceptanceJSON(t, project, change, func(payload map[string]any) {
+					delete(payload, "submission_evidence")
+				})
+			},
+			wantErr: "必须声明 submission_evidence",
+		},
+		{
+			name: "archive directory belongs to another change",
+			prepare: func(t *testing.T, project, change string) {
+				rewriteAcceptanceJSON(t, project, change, func(payload map[string]any) {
+					items := payload["submission_evidence"].([]any)
+					for _, rawItem := range items {
+						item := rawItem.(map[string]any)
+						item["archive_path"] = strings.Replace(
+							item["archive_path"].(string),
+							"/"+change+"/",
+							"/9-other/",
+							1,
+						)
+					}
+				})
+			},
+			wantErr: "当前 change",
+		},
+		{
+			name: "archive file is missing",
+			prepare: func(t *testing.T, project, change string) {
+				path := filepath.Join(project, "tests", "evidence", "proposals", change, "archive-demo.webm")
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantErr: "不存在",
+		},
+		{
+			name: "archive file is gitignored",
+			prepare: func(t *testing.T, project, change string) {
+				pattern := "tests/evidence/proposals/" + change + "/archive-demo.webm\n"
+				if err := os.WriteFile(filepath.Join(project, ".gitignore"), []byte(pattern), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantErr: "不得被 Git ignore",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			project := newProject(t)
+			change := "2-提交证据"
+			writeValidChange(t, project, change)
+			test.prepare(t, project, change)
+
+			result := runCLI(t, project, "archive", change, "--yes")
+			if result.code == 0 || !strings.Contains(result.stderr, test.wantErr) {
+				t.Fatalf("archive error = %q, want substring %q", result.stderr, test.wantErr)
+			}
+			if _, err := os.Stat(filepath.Join(project, "docs", "changes", change)); err != nil {
+				t.Fatalf("failed evidence gate must keep active change: %v", err)
+			}
+		})
+	}
+}
+
 func TestArchivePreservesHistoricalTaskFiles(t *testing.T) {
 	// TestArchivePreservesHistoricalTaskFiles keeps old archived plans as immutable historical material.
 	project := newProject(t)
@@ -843,6 +954,28 @@ func TestArchivePreservesHistoricalTaskFiles(t *testing.T) {
 	}
 	if string(data) != historicalBody {
 		t.Fatalf("historical task.md changed: %q", data)
+	}
+}
+
+func rewriteAcceptanceJSON(t *testing.T, project, change string, mutate func(map[string]any)) {
+	// rewriteAcceptanceJSON updates one fixture contract while preserving valid JSON formatting.
+	t.Helper()
+	path := filepath.Join(project, "docs", "changes", change, "acceptance.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	mutate(payload)
+	updated, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(updated, '\n'), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

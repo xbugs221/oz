@@ -90,7 +90,11 @@ func (e *Engine) createRun(changeName string) (State, error) {
 		return State{}, err
 	}
 	acceptanceSource := acceptancePath(e.Repo, changeName)
-	if _, err := ReadAcceptance(acceptanceSource); err != nil {
+	contract, err := ReadAcceptance(acceptanceSource)
+	if err != nil {
+		return State{}, err
+	}
+	if err := ValidateAcceptanceSubmissionContract(contract, changeName); err != nil {
 		return State{}, err
 	}
 	workflow, err := LoadWorkflowConfig(e.Repo)
@@ -110,6 +114,7 @@ func (e *Engine) createRun(changeName string) (State, error) {
 		Engine:                  publicEngineLabel(workflow.Engine),
 		BaselineHead:            head,
 		BaselineDiff:            diff,
+		DeliveryBaseHead:        head,
 		Sessions:                map[string]string{},
 		Stages:                  map[string]string{},
 		Paths:                   map[string]string{},

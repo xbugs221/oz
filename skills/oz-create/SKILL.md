@@ -47,7 +47,8 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 - 如果缺少真实账号、真实样例数据、外部服务权限或可运行环境，先向用户澄清；不要创建会让执行器自行编造数据的提案
 - 如果当前仓库完全没有可用测试框架，也必须在 `tests/` 写出最小可运行的项目测试入口；引入新框架前先确认这是最小代价
 - 契约测试脚本必须包含业务级断言，断言对象应是输出内容、数据库记录、API 响应字段、权限拒绝、持久化状态、审计日志或用户可见流程结果；不能只证明测试文件能运行
-- 测试结果、截图、trace、runtime log 等 evidence artifact 是运行产物，默认写入 `test-results/` 并被 git 忽略；仓库只跟踪测试代码、验收合同和必要 fixture。不得在契约测试中用 `git ls-files --error-unmatch` 要求 `test-results` 被跟踪，不得通过修改 `.gitignore` 或 `git add -f` 让 `test-results` 成为交付物。若某份证据必须长期版本化，应放入 `docs/changes/<change>/evidence/`，不要放入 `test-results/`。
+- `test-results/` 只存放可重新生成的临时运行产物，始终不得跟踪。稳定测试快照基线可以按项目惯例跟踪；实际运行结果不得冒充快照基线。
+- 每份 `required_evidence` 都必须在 `submission_evidence` 中声明相同 `source_path` 和位于 `tests/evidence/proposals/<change>/` 的 `archive_path`；至少一份证据使用 `kind=demo_video`。Oz 工作流由引擎从最终通过轮次的封存副本提升，独立归档则在调用 `oz archive` 前归集。
 - 创建完成前要自查一次：如果实现者只做最小表面实现也能通过测试，必须继续加断言或收窄文档承诺
 
 `acceptance.json` 使用严格 JSON，形如：
@@ -59,7 +60,7 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
     {
       "spec": "需求：示例能力 / 场景：主业务路径",
       "tests": ["contract-main-flow"],
-      "evidence": ["screenshot-after-reload"],
+      "evidence": ["main-flow-demo"],
       "risk": "未覆盖的边界或外部依赖"
     }
   ],
@@ -80,18 +81,25 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
   ],
   "required_evidence": [
     {
-      "id": "screenshot-after-reload",
-      "kind": "screenshot",
-      "path": "test-results/main-flow/after-reload.png",
-      "purpose": "证明刷新后状态恢复；该文件是本地运行产物，不进入 git"
+      "id": "main-flow-demo",
+      "kind": "demo_video",
+      "path": "test-results/main-flow/demo.webm",
+      "purpose": "从真实入口演示创建、刷新和状态恢复"
+    }
+  ],
+  "submission_evidence": [
+    {
+      "evidence_id": "main-flow-demo",
+      "source_path": "test-results/main-flow/demo.webm",
+      "archive_path": "tests/evidence/proposals/12-示例/main-flow-demo.webm"
     }
   ]
 }
 ```
 
-`coverage[].spec` 必须引用 `spec.md` 中真实存在的需求和场景；`coverage[].tests` 必须引用 `required_tests[].id`；`coverage[].evidence` 必须引用 `required_evidence[].id`，没有证据时写空数组并在 `risk` 解释。`required_tests[].source` 仅使用 `change_contract`、`root_e2e`、`existing_regression`、`new_regression`。`required_tests[].assertions` 至少列出一个业务级断言。`required_evidence[].kind` 仅使用 `screenshot`、`trace`、`network`、`console`、`runtime_log`、`state_snapshot`、`other`。
+`coverage[].spec` 必须引用 `spec.md` 中真实存在的需求和场景；`coverage[].tests` 必须引用 `required_tests[].id`；`coverage[].evidence` 必须引用 `required_evidence[].id`，没有证据时写空数组并在 `risk` 解释。`required_tests[].source` 仅使用 `change_contract`、`root_e2e`、`existing_regression`、`new_regression`。`required_tests[].assertions` 至少列出一个业务级断言。`required_evidence[].kind` 仅使用 `screenshot`、`trace`、`network`、`console`、`runtime_log`、`state_snapshot`、`demo_video`、`other`。
 
-`required_evidence` 表示 QA/执行阶段可复核的运行证据，不表示该产物必须进入版本控制。`test-results/` 下的 evidence 只要求能由 `required_tests[].command` 或明确记录的 QA 命令重新生成并复核。
+`required_evidence` 表示 QA/执行阶段可复核的临时运行证据；`submission_evidence` 表示最终提交路径。`test-results/` 本身不进入版本控制，归档只从最终通过轮次的不可变副本提升证据。
 
 如果暂时无法确定测试策略、真实数据来源、用户可感知断言或 QA 证据要求，先和用户澄清；不要创建缺少契约测试或 `acceptance.json` 的提案。
 
@@ -108,7 +116,7 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 - `<change-name>` 必须是中文需求描述，可以混用英文单词、数字和连字符，但必须包含中文汉字，不能全英文。尽量写成动宾短语格式，让人一眼能看明白提案的意图
 
 - 运行 `oz validate <change> --json` 检验，确认 `brief.md` 存在且能支撑执行阶段默认上下文，`tests/` 目录存在、包含测试代码且没有占位内容
-- 人工核对 `acceptance.json` 是合法 JSON，且其中的 `coverage` / `required_tests` / `required_evidence` 与文档、测试路径和测试脚本内部断言一致
+- 人工核对 `acceptance.json` 是合法 JSON，且 `coverage` / `required_tests` / `required_evidence` / `submission_evidence` 一致；全部临时证据都有归档映射，并包含 demo 视频
 - 完成后，立刻 commit 这部分提案，message格式："<number>提案: <change-name>"
 
 ## 反偷懒检查
@@ -117,5 +125,5 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 | --- | --- |
 | “先写文档，测试执行阶段补” | 创建阶段必须写真实契约测试和 `acceptance.json`，否则执行阶段没有硬合同 |
 | “只要有 `spec.md` 就够了” | `spec.md` 中每个场景都必须被测试或 evidence 覆盖 |
-| “test-results 也提交进去更稳” | `test-results/` 是本地运行产物，默认不进 git；需要长期版本化时放入 change 的 `evidence/` |
+| “test-results 也提交进去更稳” | `test-results/` 永远只作临时目录；归档时仅把最终通过轮次归集到 `tests/evidence/proposals/<change>/` |
 | “真实数据不好准备，先 mock” | 缺真实账号、样例数据或权限时先问用户，不让执行器编造 |

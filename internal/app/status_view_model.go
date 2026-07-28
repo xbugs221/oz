@@ -395,6 +395,9 @@ func statusStageProgress(state State, stage string) string {
 	if state.Stages[stage] == "completed" {
 		return "completed"
 	}
+	if stage == workflowStageArchive && state.Stages[stage] != "" && state.Stages[stage] != statusRunning {
+		return statusFailed
+	}
 	if state.Stage == stage && state.Status == statusRunning {
 		return statusRunning
 	}

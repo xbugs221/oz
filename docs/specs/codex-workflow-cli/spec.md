@@ -177,6 +177,25 @@
 - **且** 失败测试、全部 required tests 与 validation commands 均通过且结果绑定当前差异后，系统才进入隔离的 `qa_(N+1)`
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`
 
+#### 场景：QA 可信证据漂移后重新全量自查
+
+- **给定** `qa_N` 开始前已把当前提案差异、required evidence 和最近通过的 audit/targeted repair 检查点绑定到只读门禁
+- **当** QA 开始前或执行期间，required evidence 或 durable checkpoint 发生仍可安全读取和验证的漂移
+- **则** 当前 QA 结论不得放行，也不得直接进入停滞暂停
+- **且** 系统必须把该 QA 轮次记录为 `rerouted`，清理其验证与只读门禁状态，并进入新的 `audit_M`
+- **且** 新 audit 通过后必须分配从未使用的 `qa_(N+1)` 或更大编号、独立会话和独立 artifact，不得因旧 `qa-N.json` 仍存在而跳过 QA
+- **且** 哈希计算只能读取并摘要当前输入，不得预处理或改写仓库文件
+- **测试**：`internal/app/quality_loop_qa_read_only_test.go`
+
+#### 场景：QA 与归档只读门禁区分预期移动和内容漂移
+
+- **当** QA 修改当前提案的 tracked source
+- **则** QA 只读门禁必须拒绝该轮结论
+- **当** archive 阶段把活动提案迁入归档目录并执行确定性的路径引用重写
+- **则** 系统必须按归一化内容验证该机械迁移，不得仅因路径变化回退到自查
+- **但** 归档期间出现迁移合同之外的源码、验收合同或证据变化时，系统必须恢复活动提案并进入新的全量 audit
+- **测试**：`internal/app/quality_loop_qa_read_only_test.go`
+
 #### 场景：质量循环不受固定轮次限制
 
 // Sources: 45-收敛全量自查与QA定向修复闭环, 46-验证升级后动态质量循环
@@ -190,6 +209,15 @@
 - **且** 缺少环境前置条件时进入 `blocked_environment`，补齐后从原阶段恢复
 - **且** 相同失败指纹下源码、测试、验证和 evidence 均无变化时进入 `blocked_stalled`，提供新输入后可恢复
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`、`tests/specs/codex-workflow-cli/test_compact_chinese_graph_and_iteration_limit.sh`
+
+#### 场景：可恢复暂停保持批次挂接
+
+- **给定** 当前 run 进入 `blocked_environment` 或 `blocked_stalled`
+- **则** 所属 batch 必须保持 `running` 并停留在当前 change，`oz flow loop` 不得归档该 run 或跳到后续 change
+- **当** 环境、源码、测试、证据或人工重启指令满足恢复条件
+- **则** `oz flow restart` 必须从原阶段或重新建立的可信 audit 检查点继续
+- **且** 只有终止失败才允许 `oz flow archive` 归档运行记录；`oz flow loop` 可在归档后为剩余 active changes 创建续跑批次
+- **测试**：`internal/app/quality_delivery_loop_repair_test.go`、`internal/app/flow_control_test.go`
 
 #### 场景：旧 sealed 运行按快照兼容
 

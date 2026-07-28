@@ -36,3 +36,8 @@ func ReadAcceptance(path string) (Acceptance, error) {
 func ValidateAcceptance(contract Acceptance) error {
 	return acceptance.Validate(contract)
 }
+
+// ValidateAcceptanceSubmissionContract rejects a sealed run that cannot produce one complete delivery package.
+func ValidateAcceptanceSubmissionContract(contract Acceptance, changeName string) error {
+	return acceptance.ValidateSubmissionEvidenceContractForChange(contract, changeName)
+}

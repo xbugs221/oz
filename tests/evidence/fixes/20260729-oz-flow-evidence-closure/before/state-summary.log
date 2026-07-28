@@ -1,0 +1,9 @@
+source=~/.local/state/oz/flow/repos/matx-dev-c49ed14714/runs/20260728T154608.277857967Z/state.json
+change=319-完善计算队列可视化与任务可靠性
+status=aborted
+stage=audit_16
+observed_audit_artifacts=audit-1.json..audit-15.json
+observed_qa_artifacts=qa-1.json..qa-6.json
+acceptance_last_artifact=test-results/acceptance-run/319-完善计算队列可视化与任务可靠性/.../result.json
+contract_gap=319..326 acceptance.json 均无 submission_evidence，且没有 demo_video 证据声明
+failure=流程把可变临时目录当作后续阶段证据来源，无法形成 Git 内可复查的完整交付提交

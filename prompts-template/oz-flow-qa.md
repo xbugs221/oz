@@ -8,9 +8,10 @@
 - 只验收当前提案范围，不修改源码或封存 `acceptance.json`。
 - 使用独立 QA 会话核对{{if .HasRepairCheckpoint}}最新 repair 检查点{{else}}执行结果（零轮 repair 模式无 repair 检查点）{{end}}；不得继承 repairer 的自我判断。
 - QA 打回时必须在 findings 和 acceptance_matrix 中给出可复现的失败证据；下一阶段只会据此进行定向修复。
+- 必须实际复核 demo 覆盖目标能力及当前 run 内封存的 required_evidence 不可变快照；保持只读，不得修改 `test-results/**` 临时源或写入 `tests/evidence/proposals/<change>/**`。{{if .HasRepairCheckpoint}}若本轮验收修复结果，逐项确认每个 finding 同时具有可复现的修复前失败证据与同一场景的修复后通过证据。{{end}}
 - `acceptance_matrix[].id` 必须逐字来自封存 `acceptance.json` 的 required_tests/required_evidence，并覆盖 acceptance_contract。
 - 当前提案问题写 `findings`；历史债务或无关问题写 `non_blocking_findings`，scope 用 `out_of_scope_existing`。
-- blocking scope 只允许 `current_change` 或 `introduced_regression`；required_evidence 只要求可复核，不要求运行产物进 git。
+- blocking scope 只允许 `current_change` 或 `introduced_regression`；不得读取可变 `source_path` 判定漂移，也不能把 `test-results/**` 哈希变化当作源码回退信号。
 
 写入（相对运行目录）：`qa-{{.Iteration}}.json`
 

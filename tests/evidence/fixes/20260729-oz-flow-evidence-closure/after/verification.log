@@ -1,0 +1,10 @@
+go_test=rtk go test ./... -count=1
+go_test_result=432 passed in 8 packages
+go_vet=rtk go vet ./...
+go_vet_result=No issues found
+diff_check=rtk git diff --check
+diff_check_result=passed
+skill_validation=oz-create, oz-exec, oz-archive, fix-code, fix-webapp 及 3 个全局 Oz 副本
+skill_validation_result=8 passed
+regressions=临时证据覆盖/删除/目录/FIFO/设备不再改变最终门禁；封存篡改被拒绝；证据包未跟踪、被忽略、跨提交或多提交均被拒绝
+result=最终测试证据只从不可变运行态副本提升，归档产物可由唯一 Git 提交完整追溯

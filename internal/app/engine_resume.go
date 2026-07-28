@@ -376,6 +376,15 @@ func (e *Engine) prepareQualityLoopResume(state *State, manualInstruction bool) 
 		return fmt.Errorf("run %s 的 %s 缺少原阶段，无法恢复", state.RunID, state.Status)
 	}
 	blockedFrom := original
+	if blockedFrom == workflowStageArchive {
+		resumed, err := e.resumeQualityLoopArchiveGateIfUnchanged(state)
+		if err != nil {
+			return err
+		}
+		if resumed {
+			return saveState(e.Repo, *state)
+		}
+	}
 	switch state.Status {
 	case statusBlockedEnvironment:
 		names := append([]string(nil), state.QualityLoop.MissingEnvironmentNames...)
@@ -443,6 +452,33 @@ func (e *Engine) prepareQualityLoopResume(state *State, manualInstruction bool) 
 	state.QualityLoop.BlockedFromStage = ""
 	state.QualityLoop.MissingEnvironmentNames = nil
 	return saveState(e.Repo, *state)
+}
+
+// resumeQualityLoopArchiveGateIfUnchanged rechecks a completed archive without rerunning its agent.
+func (e *Engine) resumeQualityLoopArchiveGateIfUnchanged(state *State) (bool, error) {
+	if state == nil || state.Status != statusBlockedStalled {
+		return false, nil
+	}
+	gate := state.ArtifactGates[workflowStageArchive]
+	if gate.DiffHash == "" {
+		return false, nil
+	}
+	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
+	if err != nil || invariant != gate.DiffHash {
+		return false, nil
+	}
+	gate.Kind = validationKindArchiveReadOnly
+	gate.Status = validationStatusPassed
+	gate.LastError = ""
+	state.ArtifactGates[workflowStageArchive] = gate
+	state.Stages[workflowStageArchive] = statusRunning
+	state.Status = statusRunning
+	state.Stage = workflowStageArchive
+	state.Error = ""
+	state.QualityLoop.BlockedFromStage = ""
+	state.QualityLoop.MissingEnvironmentNames = nil
+	state.QualityLoop.ResumeRerunPending = false
+	return true, nil
 }
 
 // restoreQualityLoopProposalForAudit moves one verified archived proposal back to its active path.

@@ -4,9 +4,11 @@ package acceptance
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -21,12 +23,15 @@ var weakAssertionPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^\s*页面能打开\s*$`),
 }
 
+const maxInlineSubmissionEvidenceBytes int64 = 20 << 20
+
 // Contract is the JSON contract produced before implementation starts.
 type Contract struct {
-	Summary          string     `json:"summary"`
-	Coverage         []Coverage `json:"coverage,omitempty"`
-	RequiredTests    []Test     `json:"required_tests"`
-	RequiredEvidence []Evidence `json:"required_evidence"`
+	Summary            string               `json:"summary"`
+	Coverage           []Coverage           `json:"coverage,omitempty"`
+	RequiredTests      []Test               `json:"required_tests"`
+	RequiredEvidence   []Evidence           `json:"required_evidence"`
+	SubmissionEvidence []SubmissionEvidence `json:"submission_evidence,omitempty"`
 }
 
 // Coverage links spec scenarios to concrete tests and QA evidence.
@@ -54,6 +59,14 @@ type Evidence struct {
 	Kind    string `json:"kind"`
 	Path    string `json:"path"`
 	Purpose string `json:"purpose"`
+}
+
+// SubmissionEvidence maps one temporary required-evidence source to its committed proposal archive.
+// It represents final proposal demonstrations, not repair-only before/after diagnostics.
+type SubmissionEvidence struct {
+	EvidenceID  string `json:"evidence_id"`
+	SourcePath  string `json:"source_path"`
+	ArchivePath string `json:"archive_path"`
 }
 
 // Read loads and validates the acceptance JSON file.
@@ -119,7 +132,7 @@ func Validate(contract Contract) error {
 		}
 		testIDs[test.ID] = true
 	}
-	evidenceIDs := map[string]bool{}
+	evidenceByID := map[string]Evidence{}
 	for i, evidence := range contract.RequiredEvidence {
 		if strings.TrimSpace(evidence.ID) == "" || strings.TrimSpace(evidence.Kind) == "" || strings.TrimSpace(evidence.Path) == "" || strings.TrimSpace(evidence.Purpose) == "" {
 			return fmt.Errorf("required_evidence[%d] 不完整", i)
@@ -127,10 +140,13 @@ func Validate(contract Contract) error {
 		if !validEvidenceKind(evidence.Kind) {
 			return fmt.Errorf("required_evidence[%d].kind 无效：%q", i, evidence.Kind)
 		}
-		if evidenceIDs[evidence.ID] {
+		if _, exists := evidenceByID[evidence.ID]; exists {
 			return fmt.Errorf("required_evidence[%d].id 重复：%q", i, evidence.ID)
 		}
-		evidenceIDs[evidence.ID] = true
+		evidenceByID[evidence.ID] = evidence
+	}
+	if err := validateSubmissionEvidence(contract.SubmissionEvidence, evidenceByID); err != nil {
+		return err
 	}
 	for i, coverage := range contract.Coverage {
 		if strings.TrimSpace(coverage.Spec) == "" {
@@ -151,7 +167,7 @@ func Validate(contract Contract) error {
 			if strings.TrimSpace(id) == "" {
 				return fmt.Errorf("coverage[%d].evidence[%d] 不能为空", i, j)
 			}
-			if !evidenceIDs[id] {
+			if _, exists := evidenceByID[id]; !exists {
 				return fmt.Errorf("coverage[%d].evidence[%d] 引用未知 required_evidence id：%q", i, j, id)
 			}
 		}
@@ -160,6 +176,232 @@ func Validate(contract Contract) error {
 		}
 	}
 	return nil
+}
+
+// ValidateSubmissionEvidenceContractForChange rejects contracts that cannot produce one complete proposal package.
+func ValidateSubmissionEvidenceContractForChange(contract Contract, changeName string) error {
+	if err := Validate(contract); err != nil {
+		return err
+	}
+	if contract.SubmissionEvidence == nil {
+		return fmt.Errorf("提案 %q 归档前必须声明 submission_evidence", changeName)
+	}
+	if !validSubmissionChangeName(changeName) {
+		return fmt.Errorf("submission_evidence 的 changeName 无效：%q", changeName)
+	}
+	for i, item := range contract.SubmissionEvidence {
+		archiveRelative, ok := submissionPathUnder(item.ArchivePath, "tests/evidence/proposals")
+		if !ok {
+			return fmt.Errorf("submission_evidence[%d].archive_path 必须位于 tests/evidence/proposals/<change>/：%s", i, item.ArchivePath)
+		}
+		archiveParts := strings.Split(archiveRelative, "/")
+		if len(archiveParts) < 2 || archiveParts[0] != changeName {
+			return fmt.Errorf("submission_evidence[%d].archive_path 的提案目录必须等于当前 change %q：%s", i, changeName, item.ArchivePath)
+		}
+	}
+	return nil
+}
+
+// ValidateSubmissionEvidenceForChange enforces the archive-time evidence gate for one proposal.
+func ValidateSubmissionEvidenceForChange(projectRoot string, contract Contract, changeName string) error {
+	if err := ValidateSubmissionEvidenceContractForChange(contract, changeName); err != nil {
+		return err
+	}
+	for i, item := range contract.SubmissionEvidence {
+		archivePath := filepath.Join(projectRoot, filepath.FromSlash(item.ArchivePath))
+		info, err := os.Lstat(archivePath)
+		if err != nil {
+			return fmt.Errorf("submission_evidence[%d].archive_path 不存在：%s: %w", i, item.ArchivePath, err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("submission_evidence[%d].archive_path 必须是非符号链接的普通文件：%s", i, item.ArchivePath)
+		}
+		if info.Size() == 0 {
+			return fmt.Errorf("submission_evidence[%d].archive_path 不能为空文件：%s", i, item.ArchivePath)
+		}
+		ignored, err := submissionPathGitIgnored(projectRoot, item.ArchivePath)
+		if err != nil {
+			return fmt.Errorf("submission_evidence[%d].archive_path 无法检查 Git ignore：%s: %w", i, item.ArchivePath, err)
+		}
+		if ignored {
+			return fmt.Errorf("submission_evidence[%d].archive_path 不得被 Git ignore：%s", i, item.ArchivePath)
+		}
+		if info.Size() > maxInlineSubmissionEvidenceBytes {
+			usesLFS, err := submissionPathUsesGitLFS(projectRoot, item.ArchivePath)
+			if err != nil {
+				return fmt.Errorf("submission_evidence[%d].archive_path 无法检查 Git LFS：%s: %w", i, item.ArchivePath, err)
+			}
+			if !usesLFS {
+				return fmt.Errorf(
+					"submission_evidence[%d].archive_path 超过 20 MiB，必须通过 Git LFS 跟踪：%s",
+					i,
+					item.ArchivePath,
+				)
+			}
+		}
+	}
+	packageRoot := filepath.ToSlash(filepath.Join("tests", "evidence", "proposals", changeName))
+	for _, name := range []string{"README.md", "manifest.json"} {
+		relativePath := filepath.ToSlash(filepath.Join(packageRoot, name))
+		if err := validateSubmissionArchiveFile(projectRoot, relativePath); err != nil {
+			return fmt.Errorf("提交级证据包缺少有效的 %s：%w", name, err)
+		}
+	}
+	return nil
+}
+
+// validateSubmissionArchiveFile enforces a reviewable, Git-visible package artifact.
+func validateSubmissionArchiveFile(projectRoot, relativePath string) error {
+	archivePath := filepath.Join(projectRoot, filepath.FromSlash(relativePath))
+	info, err := os.Lstat(archivePath)
+	if err != nil {
+		return fmt.Errorf("%s 不存在: %w", relativePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s 必须是非符号链接的普通文件", relativePath)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf("%s 不能为空文件", relativePath)
+	}
+	ignored, err := submissionPathGitIgnored(projectRoot, relativePath)
+	if err != nil {
+		return fmt.Errorf("%s 无法检查 Git ignore: %w", relativePath, err)
+	}
+	if ignored {
+		return fmt.Errorf("%s 不得被 Git ignore", relativePath)
+	}
+	return nil
+}
+
+// validateSubmissionEvidence enforces the final proposal evidence package while preserving contracts
+// created before submission_evidence existed.
+func validateSubmissionEvidence(items []SubmissionEvidence, evidenceByID map[string]Evidence) error {
+	if items == nil {
+		return nil
+	}
+	if len(items) == 0 {
+		return fmt.Errorf("submission_evidence 声明后至少包含一个最终演示证据")
+	}
+
+	seenEvidence := map[string]bool{}
+	seenArchives := map[string]bool{}
+	proposalDir := ""
+	hasDemoVideo := false
+	for i, item := range items {
+		if strings.TrimSpace(item.EvidenceID) == "" || strings.TrimSpace(item.SourcePath) == "" || strings.TrimSpace(item.ArchivePath) == "" {
+			return fmt.Errorf("submission_evidence[%d] 不完整", i)
+		}
+		evidence, exists := evidenceByID[item.EvidenceID]
+		if !exists {
+			return fmt.Errorf("submission_evidence[%d].evidence_id 引用未知 required_evidence id：%q", i, item.EvidenceID)
+		}
+		if seenEvidence[item.EvidenceID] {
+			return fmt.Errorf("submission_evidence[%d].evidence_id 重复：%q", i, item.EvidenceID)
+		}
+		seenEvidence[item.EvidenceID] = true
+		if item.SourcePath != evidence.Path {
+			return fmt.Errorf("submission_evidence[%d].source_path 必须等于 required_evidence %q 的 path：%s", i, item.EvidenceID, evidence.Path)
+		}
+		if _, ok := submissionPathUnder(item.SourcePath, "test-results"); !ok {
+			return fmt.Errorf("submission_evidence[%d].source_path 必须是 test-results/ 下的规范相对文件路径：%s", i, item.SourcePath)
+		}
+		archiveRelative, ok := submissionPathUnder(item.ArchivePath, "tests/evidence/proposals")
+		if !ok {
+			return fmt.Errorf("submission_evidence[%d].archive_path 必须位于 tests/evidence/proposals/<change>/：%s", i, item.ArchivePath)
+		}
+		archiveParts := strings.Split(archiveRelative, "/")
+		if len(archiveParts) < 2 {
+			return fmt.Errorf("submission_evidence[%d].archive_path 必须包含提案目录和证据文件：%s", i, item.ArchivePath)
+		}
+		if proposalDir == "" {
+			proposalDir = archiveParts[0]
+		} else if proposalDir != archiveParts[0] {
+			return fmt.Errorf("submission_evidence[%d].archive_path 必须与证据包使用同一提案目录：%s", i, item.ArchivePath)
+		}
+		if seenArchives[item.ArchivePath] {
+			return fmt.Errorf("submission_evidence[%d].archive_path 重复：%q", i, item.ArchivePath)
+		}
+		seenArchives[item.ArchivePath] = true
+		if evidence.Kind == "demo_video" {
+			if !validDemoVideoPath(item.SourcePath) || !validDemoVideoPath(item.ArchivePath) {
+				return fmt.Errorf("submission_evidence[%d] 的 demo_video 必须使用 .webm、.mp4、.mov 或 .mkv 文件：%s", i, item.ArchivePath)
+			}
+			hasDemoVideo = true
+		}
+	}
+	for evidenceID := range evidenceByID {
+		if !seenEvidence[evidenceID] {
+			return fmt.Errorf("submission_evidence 必须覆盖全部 required_evidence，缺少：%q", evidenceID)
+		}
+	}
+	if !hasDemoVideo {
+		return fmt.Errorf("submission_evidence 至少引用一个 kind=demo_video 的 required_evidence；修复前后对比不能替代最终演示视频")
+	}
+	return nil
+}
+
+// validSubmissionChangeName reports whether a proposal name is one safe path segment.
+func validSubmissionChangeName(changeName string) bool {
+	trimmed := strings.TrimSpace(changeName)
+	cleaned := filepath.Clean(filepath.FromSlash(trimmed))
+	return trimmed != "" && trimmed == changeName && cleaned == trimmed && cleaned != "." && cleaned != ".." && filepath.Base(cleaned) == cleaned
+}
+
+// submissionPathUnder returns a normalized path relative to an allowed submission evidence root.
+func submissionPathUnder(rawPath, rawRoot string) (string, bool) {
+	trimmed := strings.TrimSpace(rawPath)
+	if trimmed == "" || strings.Contains(trimmed, `\`) || filepath.IsAbs(filepath.FromSlash(trimmed)) {
+		return "", false
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(trimmed)))
+	if cleaned != trimmed || cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", false
+	}
+	root := filepath.ToSlash(filepath.Clean(filepath.FromSlash(rawRoot)))
+	relative, err := filepath.Rel(filepath.FromSlash(root), filepath.FromSlash(cleaned))
+	if err != nil {
+		return "", false
+	}
+	relative = filepath.ToSlash(relative)
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, "../") {
+		return "", false
+	}
+	return relative, true
+}
+
+// validDemoVideoPath reports whether a declared demo uses a reviewable video container.
+func validDemoVideoPath(path string) bool {
+	switch strings.ToLower(filepath.Ext(filepath.FromSlash(path))) {
+	case ".webm", ".mp4", ".mov", ".mkv":
+		return true
+	default:
+		return false
+	}
+}
+
+// submissionPathGitIgnored asks Git whether a committed evidence target is hidden by ignore rules.
+func submissionPathGitIgnored(projectRoot, relativePath string) (bool, error) {
+	cmd := exec.Command("git", "-C", projectRoot, "check-ignore", "--no-index", "--quiet", "--", relativePath)
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
+}
+
+// submissionPathUsesGitLFS reports whether repository attributes route a large artifact through LFS.
+func submissionPathUsesGitLFS(projectRoot, relativePath string) (bool, error) {
+	cmd := exec.Command("git", "-C", projectRoot, "check-attr", "filter", "--", relativePath)
+	output, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	fields := strings.Split(strings.TrimSpace(string(output)), ":")
+	return len(fields) >= 3 && strings.TrimSpace(fields[len(fields)-1]) == "lfs", nil
 }
 
 // EvidenceHasProducer reports whether an evidence artifact is tied to a required test producer.
@@ -346,7 +588,7 @@ func validTestSource(source string) bool {
 func validEvidenceKind(kind string) bool {
 	// validEvidenceKind matches the existing oz flow sealed-run schema.
 	switch kind {
-	case "screenshot", "trace", "network", "console", "runtime_log", "state_snapshot", "other":
+	case "screenshot", "trace", "network", "console", "runtime_log", "state_snapshot", "demo_video", "other":
 		return true
 	default:
 		return false

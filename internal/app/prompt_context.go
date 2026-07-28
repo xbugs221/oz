@@ -128,13 +128,27 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 	var block strings.Builder
 	block.WriteString("\n\n# 动态质量循环合同\n\n")
 	fmt.Fprintf(&block, "- 当前阶段：`%s`（第 `%d` 轮）；运行目录：`%s`；diff baseline：`%s`。\n", context.Stage, context.Iteration, context.RunDirectory, context.BaselineHead)
+	stageKind := context.Stage
+	if parsed, err := parseWorkflowStage(context.Stage); err == nil {
+		stageKind = parsed.Kind
+	}
+	switch stageKind {
+	case workflowStagePlanning:
+		block.WriteString("- 规划必须定义覆盖目标能力的 demo，并在 `submission_evidence` 中把可变 `source_path` 映射到 `tests/evidence/proposals/<change>/**` 下的 `archive_path`；`test-results/**` 只作为可变运行产物。\n")
+	case workflowStageExecution:
+		block.WriteString("- 执行完成前必须实际运行覆盖目标能力的 demo，只产出 `submission_evidence.source_path` 声明的 `test-results/**` 临时证据，交由阶段后置门禁封存为当前 run 的不可变快照；不得自行写入 `tests/evidence/proposals/<change>/**` 或创建 git commit，最终证据只由引擎在归档前提升。\n")
+	case workflowStageQA:
+		block.WriteString("- QA 必须实际复核 demo 覆盖目标能力及当前 run 内封存的 required_evidence 不可变快照；保持只读，不得修改 `test-results/**` 临时源或写入 `tests/evidence/proposals/<change>/**`。若验收修复结果，逐项确认 finding 的修复前失败证据与同一场景的修复后通过证据。\n")
+	}
 	switch context.RepairMode {
 	case "pre_qa_audit":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
-		fmt.Fprintf(&block, "- 模式：`pre_qa_audit`；写入：`audit-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"audit-%d.json\" --json`。\n- 全量检查当前提案的 acceptance、完整 diff、源码、测试与证据；本轮零新问题且 required tests 通过才可移交独立 QA。\n", context.Iteration, context.Iteration)
+		block.WriteString("- 执行、自查和定向修复期间不得创建 git commit；完整交付提交只能由归档阶段创建。\n")
+		fmt.Fprintf(&block, "- 模式：`pre_qa_audit`；写入：`audit-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"audit-%d.json\" --json`。\n- 全量检查当前提案的 acceptance、完整 diff、源码、测试与证据；实际运行并确认 demo 覆盖目标能力，核对上一检查点的不可变证据快照（如有），只产出 `test-results/**` 临时源并交由本阶段后置门禁封存，不得写入 `tests/evidence/proposals/<change>/**` 提交级证据包；本轮零新问题且 required tests 通过才可移交独立 QA。\n", context.Iteration, context.Iteration)
 	case "qa_targeted_repair":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
-		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`；写入：`targeted-repair-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"targeted-repair-%d.json\" --json`。\n- 仅处理最新 QA findings 及直接相关回归；来源 QA：`qa-%d.json`。\n", context.Iteration, context.Iteration, context.Iteration)
+		block.WriteString("- 执行、自查和定向修复期间不得创建 git commit；完整交付提交只能由归档阶段创建。\n")
+		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`；写入：`targeted-repair-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"targeted-repair-%d.json\" --json`。\n- 仅处理最新 QA findings 及直接相关回归；来源 QA：`qa-%d.json`。逐项产出可复现的修复前失败证据与同一场景的修复后通过证据，按已封存 `submission_evidence` 映射更新临时源，交由本阶段后置门禁封存新快照。\n", context.Iteration, context.Iteration, context.Iteration)
 		if len(context.QAFindingSummaries) > 0 {
 			block.WriteString("- 最新 QA findings：\n")
 			for _, finding := range context.QAFindingSummaries {
@@ -145,6 +159,12 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 			fmt.Fprintf(&block, "- 失败 acceptance IDs：`%s`\n", strings.Join(context.FailedAcceptanceIDs, "`, `"))
 		}
 		block.WriteString("- 移交前必须复跑失败测试、全部 required tests 和 validation commands；任何失败或过期结果都留在本阶段。\n")
+	}
+	if context.Stage == workflowStageArchive {
+		block.WriteString("- 归档是最终 QA 后的只读边界：仅执行归档 skill 的机械移动并写入 delivery-summary.md；长期规格与规格测试必须已在最终 QA 前完成。\n")
+		block.WriteString("- 引擎会在进入归档前从最终通过的不可变快照自动提升证据；归档代理只核对最终包位于 `tests/evidence/proposals/<change>/**`、没有命中 git ignore，并将其随本次归档提交，不得从 `test-results/**` 自行复制或重建。\n")
+		block.WriteString("- 必须从 state 封存的 `delivery_base_head` 新建且只新建一个完整交付 commit，使实现、归档提案与最终证据同属 HEAD；禁止 amend、squash 或沿用执行/自查阶段的提交。\n")
+		block.WriteString("- 归档命令返回后，严禁编辑、格式化或恢复提案目录及任何源码；可以原样暂存/提交命令结果，但不得为工作区干净改写内容，差异必须交由只读门禁判定。\n")
 	}
 	return prompt + block.String()
 }

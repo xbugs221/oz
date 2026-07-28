@@ -472,10 +472,7 @@ func TestQABlockedResumeWithSourceProgressRoutesToTargetedRepair(t *testing.T) {
 	if _, err := promptContext(repo, state); err != nil {
 		t.Fatalf("resumed targeted repair prompt rejected refreshed QA baseline: %v", err)
 	}
-	checkpointPath := filepath.Join(
-		repo,
-		filepath.FromSlash(state.AcceptanceRun[checkpoint].LastArtifact),
-	)
+	checkpointPath := acceptanceTestArtifactPath(repo, state.AcceptanceRun[checkpoint].LastArtifact)
 	checkpointData, err := os.ReadFile(checkpointPath)
 	if err != nil {
 		t.Fatal(err)

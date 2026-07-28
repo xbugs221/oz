@@ -40,7 +40,7 @@ oz 按变更大小选择 micro、small、standard 三种入口。数量只作为
 
 small 仍必须写清长期规格去向，归档时必须把长期行为合并进 `docs/specs/`，把测试意图合并进 `tests/specs/`。standard 升级触发器包括跨模块影响、高风险迁移、多个业务场景、超过 2 个验收场景或超过 2 个 required tests；standard 不得为了显得“够大”硬凑测试或任务。
 
-运行 `oz archive <change> --yes` 时，CLI 会迁移提案（含 `tests/`），并将测试脚本、验收合同和文档中的相对测试引用同步改为归档路径；长期测试合并仍由归档技能按业务能力完成。
+运行 `oz archive <change> --yes` 时，CLI 只接受已经生成提交级证据包的提案，再迁移提案（含 `tests/`），并将测试脚本、验收合同和文档中的相对测试引用同步改为归档路径；长期测试合并仍由归档技能按业务能力完成。
 
 ## 核心产物关系
 
@@ -60,9 +60,12 @@ flowchart TD
     UT --> UT1["测试集"]
     M["docs/specs/*.md"] --> LM["长期规范"]
     LM --> RS["tests/specs/*（长期回归测试集）"]
-    R["test-results/acceptance-run/<change>/result.json"] --> E["测试证据清单"]
+    R["test-results/**（临时、忽略）"] --> I["~/.local/state/oz/flow/.../evidence（轮次封存）"]
+    I --> E["tests/evidence/proposals/<change>（最终提交证据包）"]
     RT["执行器 Todo / state.json"] --> DP["动态实现计划（不进入 Git）"]
 ```
+
+`acceptance.json.required_evidence` 声明测试生成的临时证据；`submission_evidence` 将每份临时证据映射到 `tests/evidence/proposals/<change>/`。映射必须覆盖全部 required evidence，并至少包含一个 `demo_video`。归档包还包含 `README.md`、`manifest.json`、最终验收结果和测试日志，与实现代码进入同一提交。
 
 active 提案禁止包含 `task.md`。创建阶段定义目标、边界和验收合同，具体步骤由执行器在 Todo 或运行态中动态决策；历史归档中的旧任务文件只作为历史资料保留。
 
@@ -124,6 +127,7 @@ flowchart LR
     E["执行"] --> U["自查"]
     U -->|"needs_more：修复后再查"| U
     U -->|"clean 且自测通过"| Q["测试"]
+    Q -->|"可信证据或检查点漂移"| U
     Q -->|"needs_fix"| T["修复"]
     T -->|"失败测试与完整验收通过"| Q
     T -->|"自测失败"| T
@@ -136,6 +140,8 @@ flowchart LR
 
 `status`、`watch`、JSON 的人类名称和 graph 可见节点统一显示“执行、自查、修复、测试、归档”。持久状态仍使用 `execution`、`audit_N`、`targeted_repair_N`、`qa_N`、`archive`，恢复与流转协议不变。
 
+阶段按适用范围依次通过“产物格式、只读边界、验证命令、验收测试、差异绑定”门禁。这里的哈希是 `state.json` 中保存的源码、测试、验证、证据和检查点摘要，用于确认当前结论仍对应同一组输入；它不会预处理或改写工作区文件。
+
 | 决策 | 原因 |
 | --- | --- |
 | 全量自查与定向修复复用同一后端、同一 repairer 会话 | 保留修改意图、失败尝试和排查脉络，避免每轮从头理解 |
@@ -143,11 +149,23 @@ flowchart LR
 | 每轮写 `audit-N.json`、`targeted-repair-N.json` 或 `qa-N.json` | 把发现、修复验证和剩余问题做成可恢复、可审计的检查点 |
 | QA 前持续全量自查，QA 后只定向修复 | 先覆盖当前提案完整范围，再避免 QA 打回后反复扩大修复范围 |
 | 每轮 QA 使用独立会话 | 降低修复者自我确认和前一轮 QA 判断造成的盲区 |
+| 每轮测试后封存 evidence | QA 和归档只读取运行态不可变副本，不再因 `test-results/**` 被后续测试覆盖而回退 |
+| QA 修改 tracked source 时暂停 | QA 必须只读；这类变化不是可吸收的新证据，必须拒绝当前结论 |
 | 不设置固定修复轮次上限 | 只要源码、测试或证据仍有进展就继续；相同失败且无变化时进入 `blocked_stalled` |
 | 环境缺失单独进入 `blocked_environment` | 补齐账号、配置或外部服务后从原阶段恢复，不把环境问题伪装成代码失败 |
 | 只有独立 QA clean 才能归档 | repairer 负责修复和自测，最终放行权仍属于独立 QA |
 
 因此，会话记忆只负责“延续思路”，`state.json`、封存的 `acceptance.json`、当前差异、动态阶段 artifact 和确定性测试才构成放行证据。新运行中的 `max_repair_iterations` 仅保留为迁移诊断，不作为终止条件；已 sealed 的 `repair-v1` 与更早的 review/fix 运行仍严格按快照中的有限状态机恢复，不会被静默改写。
+
+### 三类归档
+
+| 入口 | 作用 |
+| --- | --- |
+| `oz archive <change> --yes` | 把活动提案迁入 `docs/changes/archive/`，并更新提案内路径引用 |
+| 工作流 `archive` 阶段 | 从最终通过检查点生成 `tests/evidence/proposals/<change>/`，再调用提案归档、沉淀长期规格与测试并生成交付摘要 |
+| `oz flow archive` | 仅归档已经失败的 run/batch 运行记录，不等于完成提案交付 |
+
+`blocked_environment` 和 `blocked_stalled` 是可恢复暂停：批次继续挂接当前提案，`oz flow loop` 不会把它们当成失败归档；补齐输入或执行 `oz flow restart` 后从可信检查点恢复。真正的终止失败才会归档运行记录并尝试续跑剩余提案，相同失败连续出现两次或命中人工门禁时停止。
 
 ## 发布与本地验证
 

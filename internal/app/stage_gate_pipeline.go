@@ -176,29 +176,6 @@ func (e *Engine) prepareQualityLoopQAReadOnlyGate(state *State) (qualityLoopQAGa
 	if err != nil {
 		return qualityLoopQAGateInput{}, false, err
 	}
-	evidenceHash, err := qualityLoopRequiredEvidenceSnapshot(e.Repo, *state)
-	if err != nil {
-		if blockErr := e.blockQualityLoopQAReadOnly(state, currentHash, err.Error()); blockErr != nil {
-			return qualityLoopQAGateInput{}, false, blockErr
-		}
-		return qualityLoopQAGateInput{}, true, nil
-	}
-	if state.QualityLoop.EvidenceHash == "" || evidenceHash != state.QualityLoop.EvidenceHash {
-		if state.QualityLoop.EvidenceHash != "" && e.rerouteQualityLoopQAOnAcceptanceDrift(
-			state,
-			&qualityAcceptanceCheckpointDriftError{
-				Stage: state.Stage, Component: "evidence", Result: state.QualityLoop.EvidenceHash,
-				Current: evidenceHash, State: state.QualityLoop.EvidenceHash,
-			},
-		) {
-			return qualityLoopQAGateInput{}, true, nil
-		}
-		reason := fmt.Sprintf("%s 开始前 required evidence 已偏离最近通过的 acceptance", state.Stage)
-		if blockErr := e.blockQualityLoopQAReadOnly(state, currentHash, reason); blockErr != nil {
-			return qualityLoopQAGateInput{}, false, blockErr
-		}
-		return qualityLoopQAGateInput{}, true, nil
-	}
 	checkpoint, expectedHash, err := qualityLoopQACheckpointDiffHash(*state)
 	if err != nil {
 		if blockErr := e.blockQualityLoopQAReadOnly(state, currentHash, err.Error()); blockErr != nil {
@@ -330,7 +307,9 @@ func (e *Engine) rerouteQualityLoopQAOnAcceptanceDrift(state *State, cause error
 	state.Status = statusRunning
 	state.Error = ""
 	state.QualityLoop.ResumeRerunPending = true
-	delete(state.Stages, previousStage)
+	// Preserve the consumed QA iteration so the fresh audit cannot allocate its
+	// still-present artifact path again.
+	state.Stages[previousStage] = "rerouted"
 	delete(state.StageTimings, previousStage)
 	delete(state.DAGNodes, previousStage)
 	delete(state.Validation, previousStage)
@@ -397,7 +376,7 @@ func qualityLoopCheckpointTrustHash(repo string, state State, checkpoint string)
 		return "", fmt.Errorf("%s validation 检查点不可读: %w", checkpoint, err)
 	}
 	acceptance := state.AcceptanceRun[checkpoint]
-	acceptanceData, err := readAcceptanceArtifactFile(repo, acceptance.LastArtifact)
+	acceptanceData, err := readSealedAcceptanceArtifact(acceptance.LastArtifact)
 	if err != nil {
 		return "", fmt.Errorf("%s acceptance 检查点不可读: %w", checkpoint, err)
 	}
@@ -416,7 +395,7 @@ func qualityLoopDurableCheckpointProbe(repo string, state State, checkpoint stri
 		return State{}, err
 	}
 	acceptance := state.AcceptanceRun[checkpoint]
-	data, err = readAcceptanceArtifactFile(repo, acceptance.LastArtifact)
+	data, err = readSealedAcceptanceArtifact(acceptance.LastArtifact)
 	if err != nil {
 		return State{}, err
 	}
@@ -456,26 +435,31 @@ func (e *Engine) prepareQualityLoopArchiveReadOnlyGate(state *State) (bool, erro
 	if err := verifyQualityLoopDurableCheckpoint(e.Repo, *state, checkpoint); err != nil {
 		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
 	}
-	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
-	if err != nil {
-		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
-	}
 	if state.ArtifactGates == nil {
 		state.ArtifactGates = map[string]StageValidationState{}
 	}
 	gate := state.ArtifactGates[state.Stage]
+	if gate.DiffHash == "" {
+		currentHash, hashErr := e.currentQualityLoopDiffHash(*state)
+		if hashErr != nil {
+			return false, hashErr
+		}
+		if state.QualityLoop.DiffHash == "" || currentHash != state.QualityLoop.DiffHash {
+			return true, e.blockQualityLoopArchiveReadOnly(state, "archive 开始前源码已偏离最终 QA clean 快照")
+		}
+	}
+	if err := promoteQualityAcceptanceEvidence(e.Repo, *state, checkpoint); err != nil {
+		return true, e.blockQualityLoopArchiveReadOnly(state, fmt.Sprintf("archive 提升最终 acceptance evidence 失败: %v", err))
+	}
+	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
+	if err != nil {
+		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
+	}
 	if gate.DiffHash != "" {
 		if gate.DiffHash != invariant {
 			return true, e.blockQualityLoopArchiveReadOnly(state, "archive 修改了最终 QA 后的源码或提案内容")
 		}
 		return false, nil
-	}
-	currentHash, err := e.currentQualityLoopDiffHash(*state)
-	if err != nil {
-		return false, err
-	}
-	if state.QualityLoop.DiffHash == "" || currentHash != state.QualityLoop.DiffHash {
-		return true, e.blockQualityLoopArchiveReadOnly(state, "archive 开始前源码已偏离最终 QA clean 快照")
 	}
 	gate.Kind = validationKindArchiveReadOnly
 	gate.DiffHash = invariant
@@ -508,6 +492,9 @@ func (e *Engine) verifyQualityLoopArchiveReadOnlyGate(state *State) (bool, error
 	}
 	if invariant != gate.DiffHash {
 		return false, e.blockQualityLoopArchiveReadOnly(state, "archive 修改了最终 QA 后的源码或提案内容")
+	}
+	if err := verifyQualityLoopArchivedEvidenceCommit(e.Repo, *state); err != nil {
+		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
 	}
 	gate.Kind = validationKindArchiveReadOnly
 	gate.Status = validationStatusPassed
@@ -589,10 +576,15 @@ func qualityLoopArchiveInvariantSnapshot(repo string, state State) (string, erro
 	entries = append(entries, payloadEntries...)
 	sort.Strings(entries)
 	sourceHash := qualityHashStrings(entries...)
-	evidenceHash, err := qualityLoopRequiredEvidenceSnapshot(repo, state)
+	checkpoint, err := qualityLoopArchiveCheckpointStage(state)
 	if err != nil {
 		return "", err
 	}
+	acceptanceResult, err := verifyQualityAcceptanceCheckpoint(repo, state, checkpoint)
+	if err != nil {
+		return "", err
+	}
+	evidenceHash := acceptanceResult.EvidenceHash
 	if state.QualityLoop.EvidenceHash == "" || evidenceHash != state.QualityLoop.EvidenceHash {
 		return "", fmt.Errorf("archive 门禁 required evidence 已偏离最近通过的 acceptance")
 	}
@@ -666,27 +658,6 @@ func normalizeQualityLoopArchiveRelativeTests(text string) string {
 	}
 	out.WriteString(text[last:])
 	return out.String()
-}
-
-// qualityLoopRequiredEvidenceSnapshot binds only safe, readable regular files from sealed acceptance.
-func qualityLoopRequiredEvidenceSnapshot(repo string, state State) (string, error) {
-	contract, err := readAcceptanceForState(repo, state)
-	if err != nil {
-		return "", fmt.Errorf("quality gate 读取封存 acceptance 失败：%w", err)
-	}
-	result := AcceptanceRunResult{Evidence: checkAcceptanceEvidence(repo, contract.RequiredEvidence)}
-	for _, item := range result.Evidence {
-		if item.Status != "present" {
-			return "", fmt.Errorf(
-				"quality gate required evidence 不是可读普通文件：id=%s path=%s status=%s",
-				item.ID,
-				item.Path,
-				item.Status,
-			)
-		}
-	}
-	_, evidenceHash := qualityAcceptanceProgressHashes(repo, result)
-	return evidenceHash, nil
 }
 
 // qualityLoopArchivePayloadDir resolves the proposal before or after its archive move.

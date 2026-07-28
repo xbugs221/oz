@@ -25,6 +25,31 @@ func TestCompactStatusLinesSkipsCompletedPlanningPlaceholder(t *testing.T) {
 	}
 }
 
+// TestArchiveFailureTimingDoesNotRenderCompleted keeps a failed post-archive gate visible during re-audit.
+func TestArchiveFailureTimingDoesNotRenderCompleted(t *testing.T) {
+	state := statusViewImplementationContextState()
+	state.Workflow.Generation = qualityLoopWorkflowGeneration
+	state.Status = statusRunning
+	state.Stage = "audit_2"
+	state.Stages = map[string]string{
+		"execution": "completed",
+		"audit_1":   "completed",
+		"qa_1":      "completed",
+		"archive":   statusBlockedStalled,
+		"audit_2":   statusRunning,
+	}
+	state.StageTimings = map[string]StageTiming{
+		"archive": {
+			StartedAt:  "2026-07-28T14:00:00Z",
+			FinishedAt: "2026-07-28T14:01:00Z",
+		},
+	}
+	row := statusStageRow(t.TempDir(), state, compactStageSpecs[6], time.Now())
+	if row.Marker != "x" {
+		t.Fatalf("failed archive marker = %q, want x", row.Marker)
+	}
+}
+
 // TestCompactStatusLinesSkipsEmptyPlanningPlaceholder verifies default sealed runs do not show idle planning.
 func TestCompactStatusLinesSkipsEmptyPlanningPlaceholder(t *testing.T) {
 	state := statusViewImplementationContextState()

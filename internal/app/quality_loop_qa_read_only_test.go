@@ -202,7 +202,7 @@ func TestQualityLoopQAReadOnlyGateBlocksSourceMutation(t *testing.T) {
 // TestQualityLoopQAGateRejectsCheckpointDriftDuringRun freezes durable input before QA starts.
 func TestQualityLoopQAGateRejectsCheckpointDriftDuringRun(t *testing.T) {
 	repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
-	resultPath := filepath.Join(repo, filepath.FromSlash(state.AcceptanceRun["audit_1"].LastArtifact))
+	resultPath := acceptanceTestArtifactPath(repo, state.AcceptanceRun["audit_1"].LastArtifact)
 	runner.duringRun = func() error {
 		data, err := os.ReadFile(resultPath)
 		if err != nil {
@@ -247,7 +247,7 @@ func TestQualityLoopQAReadOnlyGateRequiresLatestTestedDiff(t *testing.T) {
 // TestQualityLoopQAGateRejectsTamperedCheckpoint proves QA replays durable artifact trust checks.
 func TestQualityLoopQAGateRejectsTamperedCheckpoint(t *testing.T) {
 	repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
-	resultPath := filepath.Join(repo, filepath.FromSlash(state.AcceptanceRun["audit_1"].LastArtifact))
+	resultPath := acceptanceTestArtifactPath(repo, state.AcceptanceRun["audit_1"].LastArtifact)
 	if err := os.WriteFile(resultPath, []byte("{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -315,12 +315,12 @@ func TestQualityLoopAuditFinalBindingIgnoresSiblingProposal(t *testing.T) {
 	}
 }
 
-// TestQualityLoopQAReadOnlyGateReroutesChangedEvidenceButBlocksUnsafeEvidence protects QA continuity.
-func TestQualityLoopQAReadOnlyGateReroutesChangedEvidenceButBlocksUnsafeEvidence(t *testing.T) {
+// TestQualityLoopQAReadOnlyGateIgnoresTemporaryEvidenceDrift keeps QA bound to its sealed checkpoint.
+func TestQualityLoopQAReadOnlyGateIgnoresTemporaryEvidenceDrift(t *testing.T) {
 	for _, action := range []string{"modify", "directory", "fifo", "device"} {
 		t.Run(action, func(t *testing.T) {
 			repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
-			path := filepath.Join(repo, "test-results", "repair-dag", "runtime.log")
+			path := filepath.Join(repo, "test-results", "repair-dag", "final-demo.webm")
 			switch action {
 			case "modify":
 				if err := os.WriteFile(path, []byte("changed evidence\n"), 0o644); err != nil {
@@ -351,28 +351,19 @@ func TestQualityLoopQAReadOnlyGateReroutesChangedEvidenceButBlocksUnsafeEvidence
 			if err := engine.runStage(context.Background(), &state); err != nil {
 				t.Fatal(err)
 			}
-			if action == "modify" {
-				if runner.calls != 0 || state.Status != statusRunning || state.Stage != "audit_2" ||
-					!state.QualityLoop.ResumeRerunPending ||
-					state.QualityLoop.BlockedFromStage != "" {
-					t.Fatalf("QA evidence %s did not reroute: calls=%d state=%s/%s from=%q",
-						action, runner.calls, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
-				}
-				return
-			}
-			if runner.calls != 0 || state.Status != statusBlockedStalled ||
-				state.QualityLoop.BlockedFromStage != "qa_1" {
-				t.Fatalf("QA evidence %s calls=%d state=%s/%s from=%q",
+			if runner.calls != 1 || state.Status != statusRunning || state.Stage != "qa_1" ||
+				state.QualityLoop.BlockedFromStage != "" {
+				t.Fatalf("temporary QA evidence %s changed sealed review: calls=%d state=%s/%s from=%q",
 					action, runner.calls, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
 			}
 		})
 	}
 }
 
-// TestQualityLoopQAReroutesEvidenceChangedDuringRun ensures a completed QA cannot bless stale evidence.
-func TestQualityLoopQAReroutesEvidenceChangedDuringRun(t *testing.T) {
+// TestQualityLoopQAIgnoresTemporaryEvidenceChangedDuringRun proves later attempts cannot invalidate sealed input.
+func TestQualityLoopQAIgnoresTemporaryEvidenceChangedDuringRun(t *testing.T) {
 	repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
-	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "runtime.log")
+	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "final-demo.webm")
 	runner.duringRun = func() error {
 		return os.WriteFile(evidencePath, []byte("new evidence after QA started\n"), 0o644)
 	}
@@ -380,10 +371,9 @@ func TestQualityLoopQAReroutesEvidenceChangedDuringRun(t *testing.T) {
 	if err := engine.runStage(context.Background(), &state); err != nil {
 		t.Fatal(err)
 	}
-	if runner.calls != 1 || state.Status != statusRunning || state.Stage != "audit_2" ||
-		!state.QualityLoop.ResumeRerunPending ||
+	if runner.calls != 1 || state.Status != statusRunning || state.Stage != "qa_1" ||
 		state.QualityLoop.BlockedFromStage != "" {
-		t.Fatalf("mid-QA evidence drift did not reroute: calls=%d state=%s/%s from=%q",
+		t.Fatalf("mid-QA temporary evidence changed sealed review: calls=%d state=%s/%s from=%q",
 			runner.calls, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
 	}
 }
@@ -496,7 +486,7 @@ func newQualityLoopArchiveGateFixture(t *testing.T) (string, string, State, *Eng
 	if err := snapshotQualityLoopAcceptance(repo, &state, acceptanceSource); err != nil {
 		t.Fatal(err)
 	}
-	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "runtime.log")
+	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "final-demo.webm")
 	if err := os.MkdirAll(filepath.Dir(evidencePath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -536,23 +526,7 @@ func newQualityLoopArchiveGateFixture(t *testing.T) (string, string, State, *Eng
 // rewriteFixtureArchiveReferences simulates the deterministic text rewrite performed by oz archive.
 func rewriteFixtureArchiveReferences(t *testing.T, repo, changeName string) {
 	t.Helper()
-	archivedName := "20260726-" + changeName
-	path := filepath.Join(repo, "docs", "changes", "archive", archivedName, "brief.md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := strings.ReplaceAll(
-		string(data),
-		"docs/changes/"+changeName+"/",
-		"docs/changes/archive/"+archivedName+"/",
-	)
-	text = strings.ReplaceAll(
-		text,
-		"`tests/",
-		"`docs/changes/archive/"+archivedName+"/tests/",
-	)
-	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+	if err := rewriteArchiveFixtureBrief(repo, changeName); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -610,6 +584,39 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 	}
 }
 
+// TestQualityLoopArchiveResumeCompletesUnchangedGate avoids restoring and re-auditing a valid archive.
+func TestQualityLoopArchiveResumeCompletesUnchangedGate(t *testing.T) {
+	repo, changeName, state, engine, _ := newQualityLoopArchiveGateFixture(t)
+	blocked, err := engine.prepareQualityLoopArchiveReadOnlyGate(&state)
+	if err != nil || blocked {
+		t.Fatalf("prepare archive gate = blocked:%v err:%v", blocked, err)
+	}
+	if err := archiveRepairEvidence(repo, state.RunID, changeName); err != nil {
+		t.Fatal(err)
+	}
+	rewriteFixtureArchiveReferences(t, repo, changeName)
+	if err := engine.blockQualityLoopArchiveReadOnly(&state, "legacy mechanical false positive"); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.prepareQualityLoopResume(&state, false); err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != statusRunning || state.Stage != workflowStageArchive ||
+		state.QualityLoop.ResumeRerunPending || state.QualityLoop.BlockedFromStage != "" {
+		t.Fatalf("unchanged archive resume = %s/%s quality=%#v", state.Status, state.Stage, state.QualityLoop)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "docs", "changes", changeName)); !os.IsNotExist(err) {
+		t.Fatalf("unchanged archive was restored to active proposal: %v", err)
+	}
+	result, err := engine.completeMainStage(context.Background(), &state, stageGatePipelineLoop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Done || result.Blocked || state.Status != statusDone || state.Stage != workflowStageDone {
+		t.Fatalf("unchanged archive completion = result:%#v state:%s/%s", result, state.Status, state.Stage)
+	}
+}
+
 // TestQualityLoopArchiveRestoreReversesMechanicalReferences protects recovery from archive path rewrites.
 func TestQualityLoopArchiveRestoreReversesMechanicalReferences(t *testing.T) {
 	repo := gitRepo(t)
@@ -663,8 +670,8 @@ func TestQualityLoopArchiveRestoreReversesMechanicalReferences(t *testing.T) {
 	}
 }
 
-// TestQualityLoopArchiveGateRejectsRequiredEvidenceMutation keeps final QA evidence immutable.
-func TestQualityLoopArchiveGateRejectsRequiredEvidenceMutation(t *testing.T) {
+// TestQualityLoopArchiveGateIgnoresTemporaryEvidenceMutation keeps archive bound to final QA's sealed copy.
+func TestQualityLoopArchiveGateIgnoresTemporaryEvidenceMutation(t *testing.T) {
 	for _, action := range []string{"modify", "delete", "directory", "fifo", "device"} {
 		t.Run(action, func(t *testing.T) {
 			repo, changeName, state, engine, evidencePath := newQualityLoopArchiveGateFixture(t)
@@ -710,9 +717,9 @@ func TestQualityLoopArchiveGateRejectsRequiredEvidenceMutation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if passed || state.Status != statusBlockedStalled ||
-				state.QualityLoop.BlockedFromStage != workflowStageArchive {
-				t.Fatalf("archive evidence %s passed=%v state=%s/%s from=%q",
+			if !passed || state.Status != statusRunning || state.Stage != workflowStageArchive ||
+				state.QualityLoop.BlockedFromStage != "" {
+				t.Fatalf("temporary archive evidence %s changed sealed gate: passed=%v state=%s/%s from=%q",
 					action, passed, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
 			}
 		})

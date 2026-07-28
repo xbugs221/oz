@@ -732,8 +732,8 @@ func TestRepairStalledBlockResumesWithProgress(t *testing.T) {
 	})
 }
 
-// TestRepairStalledBlockResumesWithEvidenceProgress accepts new runtime evidence without source churn.
-func TestRepairStalledBlockResumesWithEvidenceProgress(t *testing.T) {
+// TestRepairStalledBlockIgnoresTemporaryEvidenceProgress prevents overwriteable artifacts from reopening a run.
+func TestRepairStalledBlockIgnoresTemporaryEvidenceProgress(t *testing.T) {
 	repo, changeName, acceptanceSource, head, diff := newRepairEvidenceFixture(t)
 	content, err := gitChangeContentSnapshot(repo)
 	if err != nil {
@@ -748,7 +748,7 @@ func TestRepairStalledBlockResumesWithEvidenceProgress(t *testing.T) {
 	if err := snapshotQualityLoopAcceptance(repo, &state, acceptanceSource); err != nil {
 		t.Fatal(err)
 	}
-	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "runtime.log")
+	evidencePath := filepath.Join(repo, "test-results", "repair-dag", "final-demo.webm")
 	if err := os.MkdirAll(filepath.Dir(evidencePath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -792,14 +792,11 @@ func TestRepairStalledBlockResumesWithEvidenceProgress(t *testing.T) {
 	if err := os.WriteFile(evidencePath, []byte("new runtime evidence\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.prepareQualityLoopResume(&state, false); err != nil {
-		t.Fatal(err)
+	if err := engine.prepareQualityLoopResume(&state, false); err == nil {
+		t.Fatal("overwriteable evidence unexpectedly resumed stalled run")
 	}
-	if state.Status != statusRunning || state.Stage != "audit_1" {
-		t.Fatalf("evidence resume = %s/%s", state.Status, state.Stage)
-	}
-	if !shouldForceStageRerun(state) {
-		t.Fatal("evidence progress after QA must rerun deterministic gates through a fresh audit")
+	if state.Status != statusBlockedStalled {
+		t.Fatalf("temporary evidence changed blocked state: %s/%s", state.Status, state.Stage)
 	}
 }
 

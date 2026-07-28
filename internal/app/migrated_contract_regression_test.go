@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // TestBundledOzSkillPromptsDelegateToSkills verifies agent prompts do not duplicate oz skill bodies.
@@ -20,7 +22,7 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 	}{
 		{name: "oz-flow-discuss", mustHave: []string{"oz-plan", "讨论规划阶段"}, mustReject: []string{"change-name", "open questions"}},
 		{name: "oz-flow-start", mustHave: []string{"oz-exec", "state.json.change_name", "当前 oz change", "acceptance.json", "不要超出当前提案范围"}, mustReject: []string{"proposal.md", "design.md", "spec.md", "required_tests", "oz status", "tasks.done", "review-1.json", "fix-1-summary.md", "只修复当前 review/QA artifact 中列出的 findings"}},
-		{name: "oz-flow-done", mustHave: []string{"oz-archive", "delivery-summary.md", "最终审核"}, mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"}},
+		{name: "oz-flow-done", mustHave: []string{"oz-archive", "delivery-summary.md", "最终审核", "只读边界", "严禁编辑", "工作区干净"}, mustReject: []string{"oz status", "oz validate", "oz archive", "--yes", "tasks.total", "tasks.done", "delta specs", "git commit"}},
 	} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "prompts-template", tc.name+".md"))
 		if err != nil {
@@ -35,6 +37,59 @@ func TestBundledOzSkillPromptsDelegateToSkills(t *testing.T) {
 		for _, reject := range tc.mustReject {
 			if strings.Contains(body, reject) {
 				t.Fatalf("%s prompt still contains %q:\n%s", tc.name, reject, body)
+			}
+		}
+	}
+}
+
+// TestQualityLoopArchivePromptFreezesPostQAContent protects sealed runs with older prompt snapshots.
+func TestQualityLoopArchivePromptFreezesPostQAContent(t *testing.T) {
+	prompt := appendQualityLoopPrompt("legacy archive prompt", promptTemplateContext{
+		Stage:        workflowStageArchive,
+		RunDirectory: "/tmp/run",
+	})
+	for _, want := range []string{"最终 QA 后的只读边界", "tests/evidence/proposals/<change>/**", "git ignore", "test-results/**", "严禁编辑", "原样暂存"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("dynamic archive contract missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+// TestCommitEvidencePromptContract keeps all five workflow roles aligned on durable evidence handoff.
+func TestCommitEvidencePromptContract(t *testing.T) {
+	tests := []struct {
+		stage string
+		wants []string
+	}{
+		{stage: "planning", wants: []string{"demo", "submission_evidence", "tests/evidence/proposals/<change>/**", "test-results/**"}},
+		{stage: "execution", wants: []string{"demo", "阶段后置门禁封存", "不得自行", "git commit", "tests/evidence/proposals/<change>/**", "test-results/**"}},
+		{stage: "repair", wants: []string{"pre_qa_audit", "qa_targeted_repair", "修复前失败证据", "修复后通过证据", "不得创建 git commit", "tests/evidence/proposals/<change>/**"}},
+		{stage: "qa", wants: []string{"demo", "保持只读", "修复前失败证据", "修复后通过证据", "tests/evidence/proposals/<change>/**"}},
+		{stage: "archive", wants: []string{"引擎", "delivery_base_head", "一个完整交付 commit", "禁止 amend", "tests/evidence/proposals/<change>/**", "git ignore", "归档提交", "test-results/**"}},
+	}
+	defaults := defaultPromptSet()
+	rootConfigData, err := os.ReadFile(filepath.Join("..", "..", "oz-flow.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rootConfig struct {
+		Prompts map[string]string `yaml:"prompts"`
+	}
+	if err := yaml.Unmarshal(rootConfigData, &rootConfig); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range tests {
+		for _, source := range []struct {
+			name string
+			body string
+		}{
+			{name: "bundled prompt", body: defaults[tc.stage]},
+			{name: "repository config", body: rootConfig.Prompts[tc.stage]},
+		} {
+			for _, want := range tc.wants {
+				if !strings.Contains(source.body, want) {
+					t.Fatalf("%s %s contract missing %q:\n%s", tc.stage, source.name, want, source.body)
+				}
 			}
 		}
 	}
