@@ -133,7 +133,7 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 	})
 	previous := "execution"
 	if workflow.Generation == qualityLoopWorkflowGeneration {
-		return buildQualityLoopWorkflowSpec(spec)
+		return buildQualityLoopWorkflowSpec(spec, workflow)
 	}
 	if usesRepairWorkflow(workflow) {
 		for i := 1; i <= workflow.MaxRepairIterations; i++ {
@@ -227,8 +227,8 @@ func BuildWorkflowSpec(changeName string, workflow WorkflowConfig) WorkflowSpec 
 	return spec
 }
 
-// buildQualityLoopWorkflowSpec adds the unbounded audit, QA, and targeted-repair template.
-func buildQualityLoopWorkflowSpec(spec WorkflowSpec) WorkflowSpec {
+// buildQualityLoopWorkflowSpec adds the capped audit plus dynamic QA and targeted-repair template.
+func buildQualityLoopWorkflowSpec(spec WorkflowSpec, workflow WorkflowConfig) WorkflowSpec {
 	spec.addNode(WorkflowNode{
 		ID: "audit_N", Name: humanWorkflowStageName("audit_N"), Type: "loop_template", Stage: "audit_N",
 		Mode: "pre_qa_audit",
@@ -236,7 +236,11 @@ func buildQualityLoopWorkflowSpec(spec WorkflowSpec) WorkflowSpec {
 	spec.addEdge("execution", "audit_N", "")
 	spec.addGate("gate_audit_N", "audit gate", "audit_N", 0)
 	spec.addEdge("audit_N", "gate_audit_N", "")
-	spec.addDecisionEdge("gate_audit_N", "audit_N", "needs_more / self-tests failed")
+	auditLoopLabel := "needs_more / self-tests failed"
+	if workflow.MaxAuditIterations > 0 {
+		auditLoopLabel = fmt.Sprintf("needs_more before audit limit %d / self-tests failed", workflow.MaxAuditIterations)
+	}
+	spec.addDecisionEdge("gate_audit_N", "audit_N", auditLoopLabel)
 
 	spec.addNode(WorkflowNode{
 		ID: "qa_N", Name: humanWorkflowStageName("qa_N"), Type: "loop_template", Stage: "qa_N",
@@ -264,6 +268,13 @@ func buildQualityLoopWorkflowSpec(spec WorkflowSpec) WorkflowSpec {
 	for _, from := range []string{"gate_audit_N", "gate_targeted_repair_N"} {
 		spec.addDecisionEdge(from, statusBlockedEnvironment, "environment missing")
 		spec.addDecisionEdge(from, statusBlockedStalled, "no proven progress")
+	}
+	if workflow.MaxAuditIterations > 0 {
+		spec.addDecisionEdge(
+			"gate_audit_N",
+			"qa_N",
+			fmt.Sprintf("audit limit %d reached; continue to QA", workflow.MaxAuditIterations),
+		)
 	}
 	for _, blocked := range []string{statusBlockedEnvironment, statusBlockedStalled} {
 		spec.addDecisionEdge(blocked, "audit_N", "resume/restart → blocked_from_stage")
@@ -293,7 +304,12 @@ func buildCompactMermaid(changeName string, workflow WorkflowConfig) string {
 		out.WriteString("  blocked_stalled[停滞阻塞]\n")
 		out.WriteString("  archive[归档]\n")
 		out.WriteString("  execution --> audit\n")
-		out.WriteString("  audit -->|needs_more 或自测失败| audit\n")
+		if workflow.MaxAuditIterations > 0 {
+			fmt.Fprintf(&out, "  audit -->|needs_more 且未达%d轮，或自测失败| audit\n", workflow.MaxAuditIterations)
+			fmt.Fprintf(&out, "  audit -->|达到%d轮，不再自查| qa\n", workflow.MaxAuditIterations)
+		} else {
+			out.WriteString("  audit -->|needs_more 或自测失败| audit\n")
+		}
 		out.WriteString("  audit -->|clean 且自测通过| qa\n")
 		out.WriteString("  qa -->|needs_fix| targeted_repair\n")
 		out.WriteString("  targeted_repair -->|失败测试与 required tests 通过| qa\n")

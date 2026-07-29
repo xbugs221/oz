@@ -317,6 +317,51 @@ func TestPreQAFullAuditRequiresCleanConfirmation(t *testing.T) {
 	})
 }
 
+// TestPreQAAuditLimitMovesToQA verifies the cap ends self-review and lets independent tests decide whether repair is needed.
+func TestPreQAAuditLimitMovesToQA(t *testing.T) {
+	needsMore := cleanReviewForStageDecision()
+	needsMore.Decision = "needs_more"
+	needsMore.Findings = []Finding{blockingFindingForStageDecision()}
+
+	limited := qualityLoopState("audit_2")
+	limited.Workflow.MaxAuditIterations = 2
+	limited.AcceptanceRun[limited.Stage] = StageValidationState{Status: validationStatusPassed}
+	decision, err := DecideNextStage(limited, needsMore, QA{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.NextStatus != statusRunning || decision.NextStage != "qa_1" ||
+		decision.QualityLoop == nil || decision.QualityLoop.BlockedFromStage != "" ||
+		decision.BlockedReason != "" {
+		t.Fatalf("limit decision = %#v", decision)
+	}
+
+	clean := qualityLoopState("audit_2")
+	clean.Workflow.MaxAuditIterations = 2
+	clean.AcceptanceRun[clean.Stage] = StageValidationState{Status: validationStatusPassed}
+	decision, err = DecideNextStage(clean, cleanReviewForStageDecision(), QA{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.NextStatus != statusRunning || decision.NextStage != "qa_1" {
+		t.Fatalf("clean final audit decision = %#v", decision)
+	}
+
+	rerouted := qualityLoopState("audit_3")
+	rerouted.Workflow.MaxAuditIterations = 2
+	if !routeQualityAuditAboveLimitToQA(&rerouted) ||
+		rerouted.Status != statusRunning ||
+		rerouted.Stage != "qa_1" {
+		t.Fatalf("fresh audit limit state = %#v", rerouted)
+	}
+
+	unlimited := qualityLoopState("audit_13")
+	unlimited.Workflow.MaxAuditIterations = 0
+	if routeQualityAuditAboveLimitToQA(&unlimited) {
+		t.Fatalf("legacy unlimited audit was rerouted: %#v", unlimited)
+	}
+}
+
 // TestQAFailureTargetsFindingsAndSelfValidates verifies QA findings drive a gated targeted repair.
 func TestQAFailureTargetsFindingsAndSelfValidates(t *testing.T) {
 	state := qualityLoopState("qa_1")

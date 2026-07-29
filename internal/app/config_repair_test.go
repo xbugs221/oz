@@ -32,6 +32,26 @@ func TestRepairLimitConfiguration(t *testing.T) {
 	}
 }
 
+// TestAuditLimitConfiguration verifies new quality-loop runs have a configurable audit cap.
+func TestAuditLimitConfiguration(t *testing.T) {
+	if got := DefaultWorkflowConfig().MaxAuditIterations; got != defaultMaxAuditIterations {
+		t.Fatalf("default MaxAuditIterations = %d, want %d", got, defaultMaxAuditIterations)
+	}
+	for _, value := range []int{0, 3} {
+		body := []byte(fmt.Sprintf("max_audit_iterations: %d\n", value))
+		config, err := workflowConfigFromYAML(body, "test.yaml", nil)
+		if err != nil {
+			t.Fatalf("max_audit_iterations=%d: %v", value, err)
+		}
+		if config.MaxAuditIterations != value {
+			t.Fatalf("MaxAuditIterations = %d, want %d", config.MaxAuditIterations, value)
+		}
+	}
+	if _, err := workflowConfigFromYAML([]byte("max_audit_iterations: -1\n"), "test.yaml", nil); err == nil {
+		t.Fatal("negative max_audit_iterations should fail")
+	}
+}
+
 // TestQualityLoopDynamicStageOptions verifies later stages inherit sealed first-stage templates.
 func TestQualityLoopDynamicStageOptions(t *testing.T) {
 	config, err := workflowConfigFromYAML([]byte("stages:\n  repair:\n    reasoning: high\n"), "test.yaml", nil)

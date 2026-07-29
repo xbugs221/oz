@@ -13,6 +13,7 @@ verify_source_contract() {
   rg -q 'Sources: 45-收敛全量自查与QA定向修复闭环' docs/specs/codex-workflow-cli/spec.md
   rg -q 'Session: "repairer"' internal/app/stage_role.go
   rg -q 'max_repair_iterations|MaxRepairIterations' internal/app
+  rg -q 'max_audit_iterations|MaxAuditIterations' internal/app
   rg -q 'repair_' internal/app/workflow_stage.go internal/app/stage_decision.go
   rg -q 'pre_qa_audit' internal/app
   rg -q 'qa_targeted_repair' internal/app
@@ -25,7 +26,7 @@ verify_source_contract() {
 # verify_runtime_contract 运行真实状态机回归，覆盖动态自查、定向修复、恢复门禁与旧快照兼容。
 verify_runtime_contract() {
   go test ./internal/app \
-    -run '^(TestPreQAFullAuditRequiresCleanConfirmation|TestQAFailureTargetsFindingsAndSelfValidates|TestRepairLoopHasNoIterationCeiling|TestRepairEnvironmentBlockResumesWithoutBudget|TestRepairStalledBlockResumesWithProgress|TestQualityLoopResumeChecksLockBeforeUnblocking|TestQualityLoopQAGateRejectsCheckpointDriftDuringRun|TestQualityLoopArchiveGateRejectsFinalQAContentDrift|TestRepairWorkflowDAGResumeEvidence|TestLegacyRepairWorkflowResumeEvidence)$' \
+    -run '^(TestPreQAFullAuditRequiresCleanConfirmation|TestPreQAAuditLimitMovesToQA|TestQAFailureTargetsFindingsAndSelfValidates|TestRepairLoopHasNoIterationCeiling|TestRepairEnvironmentBlockResumesWithoutBudget|TestRepairStalledBlockResumesWithProgress|TestQualityLoopResumeChecksLockBeforeUnblocking|TestQualityLoopQAGateRejectsCheckpointDriftDuringRun|TestQualityLoopArchiveGateRejectsFinalQAContentDrift|TestRepairWorkflowDAGResumeEvidence|TestLegacyRepairWorkflowResumeEvidence)$' \
     -count=1
 }
 

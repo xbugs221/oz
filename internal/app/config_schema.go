@@ -23,6 +23,7 @@ type woConfig struct {
 
 type workflowConfigInput struct {
 	Engine              string                       `yaml:"engine"`
+	MaxAuditIterations  *int                         `yaml:"max_audit_iterations"`
 	MaxRepairIterations *int                         `yaml:"max_repair_iterations"`
 	MaxReviewIterations *int                         `yaml:"max_review_iterations"`
 	SubagentGuard       subagentGuardModeInput       `yaml:"subagent_guard"`
@@ -176,7 +177,7 @@ func (input stageOptionsInput) hasValues() bool {
 
 // hasValues reports whether the workflow input contains any user field.
 func (input workflowConfigInput) hasValues() bool {
-	return input.Engine != "" || input.MaxRepairIterations != nil || input.MaxReviewIterations != nil || input.SubagentGuard.Set || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
+	return input.Engine != "" || input.MaxAuditIterations != nil || input.MaxRepairIterations != nil || input.MaxReviewIterations != nil || input.SubagentGuard.Set || input.Defaults.hasValues() || input.Stages != nil || input.Iterations != nil || input.Parallel.Enabled != nil || input.Parallel.Groups != nil || input.Subagents.Enabled != nil || input.Subagents.Groups != nil || input.Validation.MaxAttemptsPerStage != nil || input.Validation.Limit != nil || input.Validation.Commands != nil
 }
 
 func hasLegacyWorkflowRoot(data []byte) (bool, error) {
@@ -227,12 +228,14 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		return WorkflowConfig{}, fmt.Errorf("parallel 是旧字段，已删除")
 	}
 	maxIterations := 0
+	maxAuditIterations := defaultMaxAuditIterations
 	engine := "go-dag"
 	var basePrompts map[string]string
 	byKind := defaultStageOptionsByKind()
 	validation := ValidationConfig{MaxAttemptsPerStage: 3}
 	if baseConfig != nil {
 		engine = baseConfig.Engine
+		maxAuditIterations = baseConfig.MaxAuditIterations
 		maxIterations = baseConfig.MaxRepairIterations
 		if maxIterations == 0 && baseConfig.MaxReviewIterations > 0 {
 			maxIterations = baseConfig.MaxReviewIterations
@@ -267,6 +270,12 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 	}
 	if input.MaxRepairIterations != nil && input.MaxReviewIterations != nil {
 		return WorkflowConfig{}, fmt.Errorf("max_repair_iterations 与弃用的 max_review_iterations 不能同时出现")
+	}
+	if input.MaxAuditIterations != nil {
+		if *input.MaxAuditIterations < 0 {
+			return WorkflowConfig{}, fmt.Errorf("max_audit_iterations 不能小于 0")
+		}
+		maxAuditIterations = *input.MaxAuditIterations
 	}
 	if input.MaxRepairIterations != nil {
 		if *input.MaxRepairIterations < 0 {
@@ -322,7 +331,7 @@ func workflowConfigFromInput(input workflowConfigInput, baseConfig *WorkflowConf
 		}
 		byKind[kind] = base
 	}
-	config := WorkflowConfig{Engine: engine, Generation: qualityLoopWorkflowGeneration, MaxRepairIterations: maxIterations, Stages: map[string]StageOptions{
+	config := WorkflowConfig{Engine: engine, Generation: qualityLoopWorkflowGeneration, MaxAuditIterations: maxAuditIterations, MaxRepairIterations: maxIterations, Stages: map[string]StageOptions{
 		"planning":          byKind["planning"],
 		"execution":         byKind["execution"],
 		"audit_1":           byKind["repair"],

@@ -166,6 +166,20 @@ func newQualityLoopQAReadOnlyFixture(t *testing.T, mutate bool) (string, State, 
 	return repo, state, NewEngine(repo, registry), runner
 }
 
+// TestQualityAuditAboveLimitRunsQAImmediately verifies an overflow reroute executes QA instead of ending the worker turn.
+func TestQualityAuditAboveLimitRunsQAImmediately(t *testing.T) {
+	_, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
+	state.Stage = "audit_4"
+	state.Workflow.MaxAuditIterations = 3
+
+	if err := engine.runStage(context.Background(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if runner.calls != 1 || state.Status != statusRunning || state.Stage != "qa_1" {
+		t.Fatalf("overflow audit QA calls=%d state=%s/%s", runner.calls, state.Status, state.Stage)
+	}
+}
+
 // TestQualityLoopQAReadOnlyGateBlocksSourceMutation verifies a clean QA cannot bless untested code.
 func TestQualityLoopQAReadOnlyGateBlocksSourceMutation(t *testing.T) {
 	repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, true)

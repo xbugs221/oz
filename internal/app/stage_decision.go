@@ -130,6 +130,9 @@ func decideQualityLoopStage(state State, stage workflowStage, repair Review, qa 
 		quality.SourceQAHash = ""
 		quality.RequiredTestsPassed = qualityStageTestsPassed(state, state.Stage)
 		if RepairNeedsMore(repair) {
+			if limit := state.Workflow.MaxAuditIterations; limit > 0 && stage.Iteration >= limit {
+				return qualityAuditLimitQADecision(state, quality, nextStatus), nil
+			}
 			fingerprint := reviewFindingFingerprint(repair)
 			progress := qualityProgressHash(state)
 			if quality.FindingFingerprint == fingerprint && quality.ProgressHash == progress {
@@ -199,6 +202,33 @@ func decideQualityLoopStage(state State, stage workflowStage, repair Review, qa 
 	default:
 		return StageDecision{}, fmt.Errorf("quality loop 未知阶段 %q", state.Stage)
 	}
+}
+
+// qualityAuditLimitQADecision ends capped self-review and lets independent QA decide whether repair is needed.
+func qualityAuditLimitQADecision(state State, quality QualityLoopState, nextStatus string) StageDecision {
+	quality.FindingFingerprint = ""
+	quality.ProgressHash = ""
+	return StageDecision{
+		NextStage:   fmt.Sprintf("qa_%d", nextQualityLoopQAIteration(state)),
+		NextStatus:  nextStatus,
+		QualityLoop: &quality,
+	}
+}
+
+// routeQualityAuditAboveLimitToQA sends fresh reroutes to independent QA instead of exceeding the sealed audit cap.
+func routeQualityAuditAboveLimitToQA(state *State) bool {
+	if state == nil || !usesQualityLoop(state.Workflow) || state.Workflow.MaxAuditIterations <= 0 {
+		return false
+	}
+	stage, err := parseWorkflowStage(state.Stage)
+	if err != nil || !stage.isKind(workflowStageAudit) || stage.Iteration <= state.Workflow.MaxAuditIterations {
+		return false
+	}
+	state.QualityLoop.BlockedFromStage = ""
+	state.Status = statusRunning
+	state.Stage = fmt.Sprintf("qa_%d", nextQualityLoopQAIteration(*state))
+	state.Error = ""
+	return true
 }
 
 // nextQualityLoopQAIteration allocates a fresh QA artifact after any re-audit.

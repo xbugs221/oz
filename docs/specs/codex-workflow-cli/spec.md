@@ -182,7 +182,7 @@
 - **给定** `qa_N` 开始前已把当前提案差异、required evidence 和最近通过的 audit/targeted repair 检查点绑定到只读门禁
 - **当** QA 开始前或执行期间，required evidence 或 durable checkpoint 发生仍可安全读取和验证的漂移
 - **则** 当前 QA 结论不得放行，也不得直接进入停滞暂停
-- **且** 系统必须把该 QA 轮次记录为 `rerouted`，清理其验证与只读门禁状态，并进入新的 `audit_M`
+- **且** 系统必须把该 QA 轮次记录为 `rerouted`，清理其验证与只读门禁状态；未达自查上限时进入新的 `audit_M`，已达上限时进入新的独立 QA
 - **且** 新 audit 通过后必须分配从未使用的 `qa_(N+1)` 或更大编号、独立会话和独立 artifact，不得因旧 `qa-N.json` 仍存在而跳过 QA
 - **且** 哈希计算只能读取并摘要当前输入，不得预处理或改写仓库文件
 - **测试**：`internal/app/quality_loop_qa_read_only_test.go`
@@ -196,16 +196,23 @@
 - **但** 归档期间出现迁移合同之外的源码、验收合同或证据变化时，系统必须恢复活动提案并进入新的全量 audit
 - **测试**：`internal/app/quality_loop_qa_read_only_test.go`
 
-#### 场景：质量循环不受固定轮次限制
+#### 场景：全量自查受独立轮次上限保护
 
 // Sources: 45-收敛全量自查与QA定向修复闭环, 46-验证升级后动态质量循环
 
+- **给定** 新运行未覆盖 `max_audit_iterations`
+- **则** 系统默认最多执行 3 轮 `audit_N`
+- **当** 最后一轮 audit 为 `clean`
+- **则** 系统仍须进入独立 QA
+- **当** 最后一轮 audit 仍为 `needs_more`
+- **则** 系统不得创建下一轮 audit，必须直接进入独立 QA，由测试结果决定是否进入定向修复
+- **且** 其他路径尝试创建超过上限的新 audit 时，也必须改为进入新的独立 QA
+- **且** `max_audit_iterations: 0` 表示不限轮次，旧 sealed 快照缺少该字段时保持原行为
 - **给定** 新运行读取到 `max_repair_iterations`
 - **则** 该值只作为迁移诊断保留，不得作为 `quality-loop-v1` 的终止条件
 - **且** 默认配置不得输出 `max_repair_iterations`
 - **且** repair 提示必须把 `pre_qa_audit`、`qa_targeted_repair` 分别映射到动态 `audit_N`、`targeted_repair_N`
 - **且** repairer 不得自行归档，clean 后仍由独立 QA 会话放行
-- **且** 有源码、测试、验证或 evidence 进展时，超过历史十轮后仍可继续
 - **且** 缺少环境前置条件时进入 `blocked_environment`，补齐后从原阶段恢复
 - **且** 相同失败指纹下源码、测试、验证和 evidence 均无变化时进入 `blocked_stalled`，提供新输入后可恢复
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`、`tests/specs/codex-workflow-cli/test_compact_chinese_graph_and_iteration_limit.sh`

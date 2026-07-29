@@ -25,6 +25,11 @@ const stageStatusAgentCompleted = "agent_completed"
 // runStage builds the stage prompt and invokes the proper agent session.
 func (e *Engine) runStage(ctx context.Context, state *State) error {
 	e.routeUntrustedQualityLoopTargetedRepair(state)
+	if routeQualityAuditAboveLimitToQA(state) {
+		if err := saveState(e.Repo, *state); err != nil {
+			return err
+		}
+	}
 	if state.Sessions == nil {
 		state.Sessions = map[string]string{}
 	}

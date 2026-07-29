@@ -16,6 +16,7 @@ import (
 const (
 	defaultMaxReviewIterations    = 5
 	defaultMaxRepairIterations    = 5
+	defaultMaxAuditIterations     = 3
 	repairWorkflowGeneration      = "repair-v1"
 	qualityLoopWorkflowGeneration = "quality-loop-v1"
 )
@@ -39,6 +40,7 @@ type StageOptions struct {
 type WorkflowConfig struct {
 	Engine              string                  `json:"engine,omitempty" yaml:"-"`
 	Generation          string                  `json:"generation,omitempty" yaml:"-"`
+	MaxAuditIterations  int                     `json:"max_audit_iterations,omitempty" yaml:"max_audit_iterations"`
 	MaxRepairIterations int                     `json:"max_repair_iterations,omitempty" yaml:"max_repair_iterations"`
 	MaxReviewIterations int                     `json:"max_review_iterations,omitempty" yaml:"max_review_iterations,omitempty"`
 	SubagentGuard       string                  `json:"subagent_guard,omitempty" yaml:"subagent_guard,omitempty"`
@@ -393,7 +395,8 @@ func defaultPromptSet() map[string]string {
 }
 
 func mustDefaultWorkflowConfigYAML() string {
-	template := `stages:
+	template := `max_audit_iterations: 3
+stages:
   planning:
     agent: codex
     model: gpt-5.6-sol

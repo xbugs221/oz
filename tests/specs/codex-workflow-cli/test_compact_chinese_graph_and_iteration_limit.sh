@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证默认质量循环不设轮次上限，且 oz flow graph 输出紧凑中文 Mermaid 图。
+# 文件功能目的：验证默认质量循环限制全量自查轮次，且 oz flow graph 输出紧凑中文 Mermaid 图。
 # Sources: 45-收敛全量自查与QA定向修复闭环, 46-验证升级后动态质量循环
 set -euo pipefail
 
@@ -50,7 +50,7 @@ mkdir -p "$PROJECT"
   git commit -qm init
 )
 
-note "generate default oz-flow.yaml without a fixed iteration budget"
+note "generate default oz-flow.yaml with an audit iteration budget"
 (
   cd "$PROJECT"
   "$OZ_BIN" flow config
@@ -62,13 +62,15 @@ fi
 if grep -q 'max_review_iterations:' "$PROJECT/oz-flow.yaml"; then
   fail "new config should not emit legacy max_review_iterations"
 fi
+grep -q '^max_audit_iterations: 3$' "$PROJECT/oz-flow.yaml" ||
+  fail "new default config should cap pre-QA audits at 3"
 if grep -q '^engine:' "$PROJECT/oz-flow.yaml"; then
   fail "default oz-flow.yaml should not expose an engine field"
 fi
 REPAIR_PROMPT="$(prompt_block repair)"
 QA_PROMPT="$(prompt_block qa)"
-rg -q '`pre_qa_audit` 模式对应动态 `audit_N` 阶段' <<<"$REPAIR_PROMPT"
-rg -q '`qa_targeted_repair` 模式对应动态 `targeted_repair_N` 阶段' <<<"$REPAIR_PROMPT"
+rg -q '`pre_qa_audit`.*`audit_N`' <<<"$REPAIR_PROMPT"
+rg -q '`qa_targeted_repair`.*`targeted_repair_N`' <<<"$REPAIR_PROMPT"
 rg -q 'repairer 不能自行归档，clean 后仍须独立 QA 放行' <<<"$REPAIR_PROMPT"
 rg -q '使用独立 QA 会话' <<<"$QA_PROMPT"
 
@@ -79,8 +81,8 @@ note "render mermaid graph and verify it is compact"
 ) >"$RESULT_DIR/graph.mmd" 2>"$RESULT_DIR/graph.err"
 grep -q 'flowchart TD' "$RESULT_DIR/graph.mmd" || fail "mermaid graph should render a flowchart"
 
-if grep -Eq 'repair_[1-9]|qa_[1-9]|review_[1-9]|fix_[1-9]|第[0-9]+轮|[0-9]+轮上限' "$RESULT_DIR/graph.mmd"; then
-  fail "mermaid graph should use an unbounded template without legacy finite stages"
+if grep -Eq 'repair_[1-9]|qa_[1-9]|review_[1-9]|fix_[1-9]' "$RESULT_DIR/graph.mmd"; then
+  fail "mermaid graph should use a dynamic template without expanded legacy finite stages"
 fi
 
 if grep -Eq 'subagent:|fan-in|planning_context|implementation_context|before_review|before_qa|before_execution' "$RESULT_DIR/graph.mmd"; then
@@ -92,5 +94,6 @@ grep -q 'targeted_repair\[修复\]' "$RESULT_DIR/graph.mmd" || fail "graph shoul
 grep -q 'qa\[测试\]' "$RESULT_DIR/graph.mmd" || fail "graph should show the two-character QA label"
 grep -q '环境阻塞' "$RESULT_DIR/graph.mmd" || fail "graph should show recoverable environment blocking"
 grep -q '停滞阻塞' "$RESULT_DIR/graph.mmd" || fail "graph should show recoverable stalled blocking"
+grep -q '达到3轮，不再自查.*qa' "$RESULT_DIR/graph.mmd" || fail "graph should show the configured audit cap enters QA"
 
-note "contract passed: default quality loop is unbounded and graph is compact Chinese"
+note "contract passed: default quality loop caps audits and graph is compact Chinese"
