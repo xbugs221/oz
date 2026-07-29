@@ -231,6 +231,14 @@ func promoteQualityAcceptanceEvidence(repo string, state State, checkpoint strin
 	if contract.SubmissionEvidence == nil {
 		return fmt.Errorf("提案 %q 归档前必须声明 submission_evidence", state.ChangeName)
 	}
+	observations, err := qualityDeliveryObservations(repo, state, contract)
+	if err != nil {
+		return err
+	}
+	deliveryReport, err := acceptance.RenderDeliveryReport(contract, state.ChangeName, observations)
+	if err != nil {
+		return err
+	}
 	targetRelative := filepath.ToSlash(filepath.Join("tests", "evidence", "proposals", state.ChangeName))
 	targetDir, err := ensureAcceptanceArtifactDirectory(repo, targetRelative)
 	if err != nil {
@@ -293,14 +301,47 @@ func promoteQualityAcceptanceEvidence(repo string, state State, checkpoint strin
 	if err := writePromotedAcceptanceFile(repo, filepath.Join(targetDir, "manifest.json"), append(manifestData, '\n')); err != nil {
 		return err
 	}
+	if err := writePromotedAcceptanceFile(repo, filepath.Join(targetDir, "DELIVERY.md"), deliveryReport); err != nil {
+		return err
+	}
 	readme := fmt.Sprintf(
-		"# %s 验收证据\n\n本目录由 Oz 从运行态封存副本提升生成；`manifest.json` 记录 run/stage/attempt 与内容哈希，`result.json` 和 `tests/` 保留最终通过检查点。\n",
+		"# %s 审核入口\n\n请先阅读 [交付报告](DELIVERY.md)，按其中的用户路径验收，并直接查看对应截图、视频或业务日志。\n\n`manifest.json`、`result.json` 与 `tests/` 供需要追溯技术过程的审核人员使用。\n",
 		state.ChangeName,
 	)
 	if err := writePromotedAcceptanceFile(repo, filepath.Join(targetDir, "README.md"), []byte(readme)); err != nil {
 		return err
 	}
 	return acceptance.ValidateSubmissionEvidenceForChange(repo, contract, state.ChangeName)
+}
+
+// qualityDeliveryObservations reads the final clean QA observations used in the reviewer report.
+func qualityDeliveryObservations(repo string, state State, contract acceptance.Contract) ([]acceptance.DeliveryObservation, error) {
+	if contract.DeliveryReport == nil {
+		return nil, fmt.Errorf("提案 %q 缺少面向审核人员的 delivery_report", state.ChangeName)
+	}
+	iteration := latestCompletedQAIteration(state)
+	if iteration < 1 {
+		return nil, fmt.Errorf("提案 %q 缺少最终 clean QA，无法生成交付报告", state.ChangeName)
+	}
+	qaPath := filepath.Join(runDir(repo, state.RunID), fmt.Sprintf("qa-%d.json", iteration))
+	qa, err := ReadQA(qaPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取最终 QA 交付观察失败：%w", err)
+	}
+	if err := ValidateQAAgainstAcceptance(qa, contract); err != nil {
+		return nil, err
+	}
+	if QANeedsFix(qa) {
+		return nil, fmt.Errorf("最终 QA 尚未通过，不能生成交付报告")
+	}
+	observations := make([]acceptance.DeliveryObservation, 0, len(qa.UserAcceptance))
+	for _, result := range qa.UserAcceptance {
+		observations = append(observations, acceptance.DeliveryObservation{
+			ScenarioID: result.ScenarioID,
+			Observed:   result.Observed,
+		})
+	}
+	return observations, nil
 }
 
 // writePromotedAcceptanceFile atomically refreshes the uncommitted final package from immutable state evidence.

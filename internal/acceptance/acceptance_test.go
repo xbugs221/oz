@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xbugs221/oz/internal/testsupport"
 )
 
 func TestEvidenceHasProducerFromMetadata(t *testing.T) {
@@ -187,10 +189,66 @@ func TestValidateSubmissionEvidenceRequiresDemoVideo(t *testing.T) {
 	contract := submissionEvidenceContract()
 	contract.RequiredEvidence = contract.RequiredEvidence[1:]
 	contract.SubmissionEvidence = contract.SubmissionEvidence[1:]
+	contract.DeliveryReport.Scenarios[0].EvidenceIDs = []string{"final-demo-screenshot"}
 
 	err := Validate(contract)
 	if err == nil || !strings.Contains(err.Error(), "demo_video") {
 		t.Fatalf("expected missing demo video error, got %v", err)
+	}
+}
+
+func TestDeliveryReportRejectsFormalisticReviewerClaims(t *testing.T) {
+	// TestDeliveryReportRejectsFormalisticReviewerClaims keeps commands and pass strings out of user acceptance prose.
+	contract := submissionEvidenceContract()
+	contract.DeliveryReport.UserBenefits[0] = "go test ./..."
+	if err := Validate(contract); err == nil || !strings.Contains(err.Error(), "不能只写测试结果") {
+		t.Fatalf("expected command-only benefit rejection, got %v", err)
+	}
+
+	contract = submissionEvidenceContract()
+	_, err := RenderDeliveryReport(contract, "1-demo", []DeliveryObservation{{
+		ScenarioID: "complete-user-workflow",
+		Observed:   "测试通过",
+	}})
+	if err == nil || !strings.Contains(err.Error(), "具体说明用户能看到的行为") {
+		t.Fatalf("expected formalistic observation rejection, got %v", err)
+	}
+
+	contract = submissionEvidenceContract()
+	contract.DeliveryReport.Scenarios[0].Comparison = &DeliveryComparison{
+		Before:           "用户完成操作后看不到任何结果。",
+		After:            "用户完成操作后看不到任何结果！",
+		BeforeEvidenceID: "final-demo-video",
+		AfterEvidenceID:  "final-demo-screenshot",
+	}
+	if err := Validate(contract); err == nil || !strings.Contains(err.Error(), "必须描述不同") {
+		t.Fatalf("expected punctuation-only comparison rejection, got %v", err)
+	}
+}
+
+func TestDeliveryComparisonRejectsIdenticalArtifacts(t *testing.T) {
+	// TestDeliveryComparisonRejectsIdenticalArtifacts requires before and after proof to show a real change.
+	root := t.TempDir()
+	before := "tests/evidence/proposals/1-demo/before.png"
+	after := "tests/evidence/proposals/1-demo/after.png"
+	writeBytes(t, root, before, testsupport.ReviewablePNG())
+	writeBytes(t, root, after, testsupport.ReviewablePNG())
+	contract := Contract{
+		SubmissionEvidence: []SubmissionEvidence{
+			{EvidenceID: "before", ArchivePath: before},
+			{EvidenceID: "after", ArchivePath: after},
+		},
+		DeliveryReport: &DeliveryReport{Scenarios: []DeliveryScenario{{
+			Comparison: &DeliveryComparison{
+				BeforeEvidenceID: "before",
+				AfterEvidenceID:  "after",
+			},
+		}}},
+	}
+
+	err := validateDeliveryComparisonArtifacts(root, contract)
+	if err == nil || !strings.Contains(err.Error(), "内容完全相同") {
+		t.Fatalf("expected identical comparison rejection, got %v", err)
 	}
 }
 
@@ -258,15 +316,6 @@ func TestValidateSubmissionEvidenceRejectsUnsafeOrUnboundPaths(t *testing.T) {
 			},
 			wantErr: "同一提案目录",
 		},
-		{
-			name: "demo video has non-video extension",
-			mutate: func(contract *Contract) {
-				contract.RequiredEvidence[0].Path = "test-results/demo/final-demo.txt"
-				contract.SubmissionEvidence[0].SourcePath = "test-results/demo/final-demo.txt"
-				contract.SubmissionEvidence[0].ArchivePath = "tests/evidence/proposals/1-demo/final-demo.txt"
-			},
-			wantErr: "demo_video",
-		},
 	}
 
 	for _, test := range tests {
@@ -281,15 +330,24 @@ func TestValidateSubmissionEvidenceRejectsUnsafeOrUnboundPaths(t *testing.T) {
 	}
 }
 
+func TestValidateSubmissionEvidenceDoesNotImposeVideoFormat(t *testing.T) {
+	// TestValidateSubmissionEvidenceDoesNotImposeVideoFormat leaves format choice to the actual reviewable artifact.
+	contract := submissionEvidenceContract()
+	contract.RequiredEvidence[0].Path = "test-results/demo/final-demo.avi"
+	contract.SubmissionEvidence[0].SourcePath = "test-results/demo/final-demo.avi"
+	contract.SubmissionEvidence[0].ArchivePath = "tests/evidence/proposals/1-demo/final-demo.avi"
+
+	if err := Validate(contract); err != nil {
+		t.Fatalf("reviewable video format should not be constrained by contract paths: %v", err)
+	}
+}
+
 func TestValidateSubmissionEvidenceForChangeRequiresCommittedPackage(t *testing.T) {
 	// TestValidateSubmissionEvidenceForChangeRequiresCommittedPackage verifies archive-time identity, file, and Git visibility gates.
 	root := t.TempDir()
 	initGitRepository(t, root)
 	contract := submissionEvidenceContract()
-	writeFile(t, root, contract.SubmissionEvidence[0].ArchivePath, "final demo video")
-	writeFile(t, root, contract.SubmissionEvidence[1].ArchivePath, "final screenshot")
-	writeFile(t, root, "tests/evidence/proposals/1-demo/README.md", "review instructions")
-	writeFile(t, root, "tests/evidence/proposals/1-demo/manifest.json", `{"version":1,"change":"1-demo"}`)
+	writeSubmissionEvidencePackage(t, root, contract)
 
 	if err := ValidateSubmissionEvidenceForChange(root, contract, "1-demo"); err != nil {
 		t.Fatalf("valid committed proposal evidence should pass: %v", err)
@@ -333,6 +391,16 @@ func TestValidateSubmissionEvidenceForChangeRequiresCommittedPackage(t *testing.
 		}
 	})
 
+	t.Run("renamed text is not a video", func(t *testing.T) {
+		fake := submissionEvidenceContract()
+		fake.SubmissionEvidence[0].ArchivePath = "tests/evidence/proposals/1-demo/fake.webm"
+		writeFile(t, root, fake.SubmissionEvidence[0].ArchivePath, strings.Repeat("这是伪造的演示文字，不能展示用户操作。\n", 50))
+		err := ValidateSubmissionEvidenceForChange(root, fake, "1-demo")
+		if err == nil || !strings.Contains(err.Error(), "只是文本内容") {
+			t.Fatalf("expected renamed text rejection, got %v", err)
+		}
+	})
+
 	t.Run("archive file is symlink", func(t *testing.T) {
 		symlink := submissionEvidenceContract()
 		symlink.SubmissionEvidence[0].ArchivePath = "tests/evidence/proposals/1-demo/link.webm"
@@ -348,7 +416,7 @@ func TestValidateSubmissionEvidenceForChangeRequiresCommittedPackage(t *testing.
 
 	t.Run("ignored archive file", func(t *testing.T) {
 		ignored := submissionEvidenceContract()
-		writeFile(t, root, ".gitignore", "tests/evidence/proposals/1-demo/final-demo.webm\n")
+		writeFile(t, root, ".gitignore", "tests/evidence/proposals/1-demo/final-demo.avi\n")
 		err := ValidateSubmissionEvidenceForChange(root, ignored, "1-demo")
 		if err == nil || !strings.Contains(err.Error(), "不得被 Git ignore") {
 			t.Fatalf("expected ignored archive rejection, got %v", err)
@@ -377,11 +445,7 @@ func TestValidateSubmissionEvidenceForChangeRequiresLFSForLargeArtifacts(t *test
 	root := t.TempDir()
 	initGitRepository(t, root)
 	contract := submissionEvidenceContract()
-	for _, item := range contract.SubmissionEvidence {
-		writeFile(t, root, item.ArchivePath, "final evidence")
-	}
-	writeFile(t, root, "tests/evidence/proposals/1-demo/README.md", "review instructions")
-	writeFile(t, root, "tests/evidence/proposals/1-demo/manifest.json", `{"version":1,"change":"1-demo"}`)
+	writeSubmissionEvidencePackage(t, root, contract)
 	videoPath := filepath.Join(root, filepath.FromSlash(contract.SubmissionEvidence[0].ArchivePath))
 	if err := os.Truncate(videoPath, maxInlineSubmissionEvidenceBytes+1); err != nil {
 		t.Fatal(err)
@@ -392,7 +456,7 @@ func TestValidateSubmissionEvidenceForChangeRequiresLFSForLargeArtifacts(t *test
 		t.Fatalf("expected large artifact LFS rejection, got %v", err)
 	}
 
-	writeFile(t, root, ".gitattributes", "tests/evidence/proposals/**/*.webm filter=lfs diff=lfs merge=lfs -text\n")
+	writeFile(t, root, ".gitattributes", "tests/evidence/proposals/**/*.avi filter=lfs diff=lfs merge=lfs -text\n")
 	if err := ValidateSubmissionEvidenceForChange(root, contract, "1-demo"); err != nil {
 		t.Fatalf("large LFS-routed evidence should pass: %v", err)
 	}
@@ -414,7 +478,7 @@ func submissionEvidenceContract() Contract {
 			{
 				ID:      "final-demo-video",
 				Kind:    "demo_video",
-				Path:    "test-results/demo/final-demo.webm",
+				Path:    "test-results/demo/final-demo.avi",
 				Purpose: "shows the final proposal behavior from start to finish",
 			},
 			{
@@ -427,8 +491,8 @@ func submissionEvidenceContract() Contract {
 		SubmissionEvidence: []SubmissionEvidence{
 			{
 				EvidenceID:  "final-demo-video",
-				SourcePath:  "test-results/demo/final-demo.webm",
-				ArchivePath: "tests/evidence/proposals/1-demo/final-demo.webm",
+				SourcePath:  "test-results/demo/final-demo.avi",
+				ArchivePath: "tests/evidence/proposals/1-demo/final-demo.avi",
 			},
 			{
 				EvidenceID:  "final-demo-screenshot",
@@ -436,7 +500,39 @@ func submissionEvidenceContract() Contract {
 				ArchivePath: "tests/evidence/proposals/1-demo/final.png",
 			},
 		},
+		DeliveryReport: &DeliveryReport{
+			UserBenefits:  []string{"审核人员可以按真实用户路径确认提案能力，并直接看到最终结果。"},
+			Prerequisites: []string{"打开能够访问演示功能的测试环境和普通用户账号。"},
+			Scenarios: []DeliveryScenario{{
+				ID:        "complete-user-workflow",
+				Title:     "完成一次真实用户流程",
+				UserValue: "用户能够从入口完成操作，并看到符合提案要求的最终结果。",
+				Steps: []DeliveryStep{{
+					Action:   "按演示视频中的用户路径完成一次完整操作。",
+					Expected: "页面展示完成状态和用户真正需要的结果内容。",
+				}},
+				EvidenceIDs: []string{"final-demo-video", "final-demo-screenshot"},
+			}},
+			KnownLimits: []string{"演示使用测试数据，不代表生产环境中的实际业务数据。"},
+		},
 	}
+}
+
+// writeSubmissionEvidencePackage creates a complete reviewer-facing package with real media bytes.
+func writeSubmissionEvidencePackage(t *testing.T, root string, contract Contract) {
+	t.Helper()
+	writeBytes(t, root, contract.SubmissionEvidence[0].ArchivePath, testsupport.ReviewableAVI())
+	writeBytes(t, root, contract.SubmissionEvidence[1].ArchivePath, testsupport.ReviewablePNG())
+	writeFile(t, root, "tests/evidence/proposals/1-demo/README.md", "# 1-demo 审核入口\n\n请先阅读 DELIVERY.md，并按用户路径查看真实演示。\n")
+	writeFile(t, root, "tests/evidence/proposals/1-demo/manifest.json", `{"version":1,"change":"1-demo"}`)
+	report, err := RenderDeliveryReport(contract, "1-demo", []DeliveryObservation{{
+		ScenarioID: "complete-user-workflow",
+		Observed:   "普通用户完成操作后，页面显示完成状态，并呈现了可直接使用的结果内容。",
+	}})
+	if err != nil {
+		t.Fatalf("render delivery report: %v", err)
+	}
+	writeBytes(t, root, "tests/evidence/proposals/1-demo/DELIVERY.md", report)
 }
 
 func initGitRepository(t *testing.T, root string) {
@@ -461,6 +557,18 @@ func writeFile(t *testing.T, root, relPath, body string) {
 		t.Fatalf("create fixture dir: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write fixture file: %v", err)
+	}
+}
+
+// writeBytes creates a repo-relative binary fixture file.
+func writeBytes(t *testing.T, root, relPath string, body []byte) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create fixture dir: %v", err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
 		t.Fatalf("write fixture file: %v", err)
 	}
 }

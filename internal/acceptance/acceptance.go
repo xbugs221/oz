@@ -32,6 +32,7 @@ type Contract struct {
 	RequiredTests      []Test               `json:"required_tests"`
 	RequiredEvidence   []Evidence           `json:"required_evidence"`
 	SubmissionEvidence []SubmissionEvidence `json:"submission_evidence,omitempty"`
+	DeliveryReport     *DeliveryReport      `json:"delivery_report,omitempty"`
 }
 
 // Coverage links spec scenarios to concrete tests and QA evidence.
@@ -67,6 +68,38 @@ type SubmissionEvidence struct {
 	EvidenceID  string `json:"evidence_id"`
 	SourcePath  string `json:"source_path"`
 	ArchivePath string `json:"archive_path"`
+}
+
+// DeliveryReport defines the user-facing review guide generated beside final evidence.
+type DeliveryReport struct {
+	UserBenefits  []string           `json:"user_benefits"`
+	Prerequisites []string           `json:"prerequisites,omitempty"`
+	Scenarios     []DeliveryScenario `json:"scenarios"`
+	KnownLimits   []string           `json:"known_limits,omitempty"`
+}
+
+// DeliveryScenario explains one user-visible capability and how a reviewer can verify it.
+type DeliveryScenario struct {
+	ID          string              `json:"id"`
+	Title       string              `json:"title"`
+	UserValue   string              `json:"user_value"`
+	Steps       []DeliveryStep      `json:"steps"`
+	EvidenceIDs []string            `json:"evidence_ids"`
+	Comparison  *DeliveryComparison `json:"comparison,omitempty"`
+}
+
+// DeliveryStep pairs a reviewer action with the result visible to the user.
+type DeliveryStep struct {
+	Action   string `json:"action"`
+	Expected string `json:"expected"`
+}
+
+// DeliveryComparison binds a repair claim to distinct before and after evidence.
+type DeliveryComparison struct {
+	Before           string `json:"before"`
+	After            string `json:"after"`
+	BeforeEvidenceID string `json:"before_evidence_id"`
+	AfterEvidenceID  string `json:"after_evidence_id"`
 }
 
 // Read loads and validates the acceptance JSON file.
@@ -148,6 +181,11 @@ func Validate(contract Contract) error {
 	if err := validateSubmissionEvidence(contract.SubmissionEvidence, evidenceByID); err != nil {
 		return err
 	}
+	if contract.DeliveryReport != nil {
+		if err := validateDeliveryReportContract(*contract.DeliveryReport, evidenceByID); err != nil {
+			return err
+		}
+	}
 	for i, coverage := range contract.Coverage {
 		if strings.TrimSpace(coverage.Spec) == "" {
 			return fmt.Errorf("coverage[%d].spec 不能为空", i)
@@ -186,6 +224,9 @@ func ValidateSubmissionEvidenceContractForChange(contract Contract, changeName s
 	if contract.SubmissionEvidence == nil {
 		return fmt.Errorf("提案 %q 归档前必须声明 submission_evidence", changeName)
 	}
+	if contract.DeliveryReport == nil {
+		return fmt.Errorf("提案 %q 归档前必须声明面向审核人员的 delivery_report", changeName)
+	}
 	if !validSubmissionChangeName(changeName) {
 		return fmt.Errorf("submission_evidence 的 changeName 无效：%q", changeName)
 	}
@@ -206,6 +247,10 @@ func ValidateSubmissionEvidenceContractForChange(contract Contract, changeName s
 func ValidateSubmissionEvidenceForChange(projectRoot string, contract Contract, changeName string) error {
 	if err := ValidateSubmissionEvidenceContractForChange(contract, changeName); err != nil {
 		return err
+	}
+	evidenceByID := make(map[string]Evidence, len(contract.RequiredEvidence))
+	for _, evidence := range contract.RequiredEvidence {
+		evidenceByID[evidence.ID] = evidence
 	}
 	for i, item := range contract.SubmissionEvidence {
 		archivePath := filepath.Join(projectRoot, filepath.FromSlash(item.ArchivePath))
@@ -239,13 +284,22 @@ func ValidateSubmissionEvidenceForChange(projectRoot string, contract Contract, 
 				)
 			}
 		}
+		if err := validateReviewableEvidenceFile(archivePath, evidenceByID[item.EvidenceID]); err != nil {
+			return fmt.Errorf("submission_evidence[%d] 不是审核人员可理解的真实证据：%s: %w", i, item.ArchivePath, err)
+		}
 	}
 	packageRoot := filepath.ToSlash(filepath.Join("tests", "evidence", "proposals", changeName))
-	for _, name := range []string{"README.md", "manifest.json"} {
+	for _, name := range []string{"README.md", "DELIVERY.md", "manifest.json"} {
 		relativePath := filepath.ToSlash(filepath.Join(packageRoot, name))
 		if err := validateSubmissionArchiveFile(projectRoot, relativePath); err != nil {
 			return fmt.Errorf("提交级证据包缺少有效的 %s：%w", name, err)
 		}
+	}
+	if err := ValidateDeliveryReportFileForChange(projectRoot, contract, changeName); err != nil {
+		return fmt.Errorf("面向审核人员的交付报告无效：%w", err)
+	}
+	if err := validateDeliveryComparisonArtifacts(projectRoot, contract); err != nil {
+		return err
 	}
 	return nil
 }
@@ -323,9 +377,6 @@ func validateSubmissionEvidence(items []SubmissionEvidence, evidenceByID map[str
 		}
 		seenArchives[item.ArchivePath] = true
 		if evidence.Kind == "demo_video" {
-			if !validDemoVideoPath(item.SourcePath) || !validDemoVideoPath(item.ArchivePath) {
-				return fmt.Errorf("submission_evidence[%d] 的 demo_video 必须使用 .webm、.mp4、.mov 或 .mkv 文件：%s", i, item.ArchivePath)
-			}
 			hasDemoVideo = true
 		}
 	}
@@ -367,16 +418,6 @@ func submissionPathUnder(rawPath, rawRoot string) (string, bool) {
 		return "", false
 	}
 	return relative, true
-}
-
-// validDemoVideoPath reports whether a declared demo uses a reviewable video container.
-func validDemoVideoPath(path string) bool {
-	switch strings.ToLower(filepath.Ext(filepath.FromSlash(path))) {
-	case ".webm", ".mp4", ".mov", ".mkv":
-		return true
-	default:
-		return false
-	}
 }
 
 // submissionPathGitIgnored asks Git whether a committed evidence target is hidden by ignore rules.

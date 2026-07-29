@@ -58,6 +58,9 @@ git log --oneline -- docs/changes/<change>/
 - 执行、自查、修复和测试阶段禁止提交；归档阶段会把 `delivery_base_head` 之后的全部交付内容一次性提交
 - 结束前运行相关测试
 - `test-results/` 只存放临时运行结果，禁止提交。稳定测试快照基线可按项目惯例跟踪；实际运行结果只能在最终通过后由 `oz-archive` 归集到 `tests/evidence/proposals/<change>/` 再跟踪
+- 按 `delivery_report.scenarios` 实际走完用户路径并生成证据。Web 证据应让审核人员直接看懂操作与页面结果；命令行能力应保留真实输入、输出及业务状态变化
+- 视频、截图、trace 必须是真实可打开的文件。echo/printf 字符串、退出码、HTTP 200、元素存在、测试通过字样或哈希不能冒充用户证据
+- 修复前后对比必须来自同一入口、角色、数据和场景，并直观展示用户遇到的问题如何变成可用结果
 
 ## 退出条件
 
@@ -68,6 +71,7 @@ git log --oneline -- docs/changes/<change>/
 - 相关根目录回归、端到端或包级测试已经运行，并记录命令和结果
 - 没有删除、弱化、跳过或绕过 `acceptance.json` 与 `tests/`
 - 如果更新了历史测试，已经说明它与新意图冲突的原因
+- `delivery_report` 声明的每个用户场景都已实际演示，证据文件真实可打开且普通审核人员能够理解
 
 ## 反偷懒检查
 

@@ -181,6 +181,10 @@ func writeArchiveEvidenceFixture(t *testing.T, repo, archiveRelative, packageRel
 	files := map[string]string{
 		filepath.Join(archiveRelative, "brief.md"):  "# archived proposal\n",
 		filepath.Join(packageRelative, "README.md"): "# evidence\n",
+		filepath.Join(packageRelative, "DELIVERY.md"): `# 交付报告
+
+审核人员可按用户路径完成操作，并直接查看最终结果。
+`,
 		filepath.Join(packageRelative, "manifest.json"): `{"version":1}
 `,
 		filepath.Join(packageRelative, "result.json"): `{"status":"passed"}

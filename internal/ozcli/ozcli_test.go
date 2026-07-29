@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xbugs221/oz/internal/acceptance"
+	"github.com/xbugs221/oz/internal/testsupport"
 )
 
 type cliResult struct {
@@ -94,7 +97,7 @@ func writeValidChange(t *testing.T, project, change string) {
       "id": "archive-log",
       "kind": "runtime_log",
       "path": "test-results/archive.log",
-      "purpose": "记录归档测试结果"
+      "purpose": "展示归档后提案测试仍然存在并可供审核人员追溯"
     },
     {
       "id": "archive-demo-video",
@@ -114,7 +117,32 @@ func writeValidChange(t *testing.T, project, change string) {
       "source_path": "test-results/archive-demo.webm",
       "archive_path": "tests/evidence/proposals/` + change + `/archive-demo.webm"
     }
-  ]
+  ],
+  "delivery_report": {
+    "user_benefits": [
+      "用户归档提案后仍能找到原始测试和最终能力演示，方便后续复查。"
+    ],
+    "prerequisites": [
+      "准备一个已经完成实现与测试的有效提案。"
+    ],
+    "scenarios": [
+      {
+        "id": "archive-review",
+        "title": "归档后复查完整交付",
+        "user_value": "审核人员能够从归档提案回看测试来源和最终用户流程。",
+        "steps": [
+          {
+            "action": "归档提案后打开归档目录和最终演示视频。",
+            "expected": "提案测试仍然存在，视频展示完整的最终用户流程。"
+          }
+        ],
+        "evidence_ids": ["archive-log", "archive-demo-video"]
+      }
+    ],
+    "known_limits": [
+      "测试项目只演示归档能力，不包含生产业务数据。"
+    ]
+  }
 }
 `,
 	}
@@ -128,12 +156,10 @@ func writeValidChange(t *testing.T, project, change string) {
 		t.Fatal(err)
 	}
 	for relativePath, body := range map[string]string{
-		"test-results/archive.log":                                  "archive test passed\n",
-		"test-results/archive-demo.webm":                            "final demo video\n",
-		"tests/evidence/proposals/" + change + "/archive.log":       "archive test passed\n",
-		"tests/evidence/proposals/" + change + "/archive-demo.webm": "final demo video\n",
-		"tests/evidence/proposals/" + change + "/README.md":         "# 归档证据\n",
-		"tests/evidence/proposals/" + change + "/manifest.json":     `{"version":1,"change":"` + change + `"}`,
+		"test-results/archive.log":                              "用户场景：归档一个已完成的提案。\n实际操作：打开归档目录并检查提案测试。\n可见结果：测试文件保留，审核人员可以追溯原始验收要求。\n",
+		"tests/evidence/proposals/" + change + "/archive.log":   "用户场景：归档一个已完成的提案。\n实际操作：打开归档目录并检查提案测试。\n可见结果：测试文件保留，审核人员可以追溯原始验收要求。\n",
+		"tests/evidence/proposals/" + change + "/README.md":     "# 归档审核入口\n\n请先阅读 DELIVERY.md，并按用户路径查看演示与结果。\n",
+		"tests/evidence/proposals/" + change + "/manifest.json": `{"version":1,"change":"` + change + `"}`,
 	} {
 		path := filepath.Join(project, filepath.FromSlash(relativePath))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -142,6 +168,36 @@ func writeValidChange(t *testing.T, project, change string) {
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+	for _, relativePath := range []string{
+		"test-results/archive-demo.webm",
+		"tests/evidence/proposals/" + change + "/archive-demo.webm",
+	} {
+		path := filepath.Join(project, filepath.FromSlash(relativePath))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, testsupport.ReviewableWebM(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	contract, err := acceptance.Read(filepath.Join(dir, "acceptance.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := acceptance.RenderDeliveryReport(contract, change, []acceptance.DeliveryObservation{{
+		ScenarioID: "archive-review",
+		Observed:   "归档目录保留了提案测试，演示视频完整展示了用户从操作到看到结果的过程。",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(project, "tests", "evidence", "proposals", change, "DELIVERY.md"),
+		report,
+		0o644,
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 

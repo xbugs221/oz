@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 // TestValidateQACommandAcceptsCleanCoveredArtifact verifies the CLI accepts a QA artifact that covers acceptance.
@@ -71,6 +73,25 @@ func TestValidateQAAgainstAcceptanceUsesLifecycleRequiredItems(t *testing.T) {
 	}
 	if err := ValidateQAAgainstAcceptance(qa, contract); err != nil {
 		t.Fatalf("expected lifecycle required item set to pass QA coverage: %v", err)
+	}
+}
+
+func TestValidateQARequiresUserVisibleDeliveryObservation(t *testing.T) {
+	// TestValidateQARequiresUserVisibleDeliveryObservation prevents technical pass text from becoming delivery proof.
+	contract, err := acceptance.Parse([]byte(repairDAGAcceptanceJSON()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	qa := cleanRepairDAGQA()
+	qa.UserAcceptance = nil
+	if err := ValidateQAAgainstAcceptance(qa, contract); err == nil || !strings.Contains(err.Error(), "缺少用户验收场景") {
+		t.Fatalf("expected missing user observation rejection, got %v", err)
+	}
+
+	qa = cleanRepairDAGQA()
+	qa.UserAcceptance[0].Observed = "go test ./internal/app"
+	if err := ValidateQAAgainstAcceptance(qa, contract); err == nil || !strings.Contains(err.Error(), "不能只写测试结果") {
+		t.Fatalf("expected command-only user observation rejection, got %v", err)
 	}
 }
 

@@ -20,6 +20,7 @@ type QA struct {
 	Findings            []Finding          `json:"findings"`
 	NonBlockingFindings []Finding          `json:"non_blocking_findings,omitempty"`
 	AcceptanceMatrix    []AcceptanceResult `json:"acceptance_matrix,omitempty"`
+	UserAcceptance      []UserAcceptance   `json:"user_acceptance,omitempty"`
 }
 
 // AcceptanceResult maps one acceptance contract item to QA proof.
@@ -28,6 +29,32 @@ type AcceptanceResult struct {
 	Status   string `json:"status"`
 	Artifact string `json:"artifact"`
 	Evidence string `json:"evidence"`
+}
+
+// UserAcceptance records the user-visible result independently observed by final QA.
+type UserAcceptance struct {
+	ScenarioID  string   `json:"scenario_id"`
+	Status      string   `json:"status"`
+	Observed    string   `json:"observed"`
+	EvidenceIDs []string `json:"evidence_ids"`
+}
+
+// UnmarshalJSON accepts compact numeric status codes while preserving reviewer observations.
+func (r *UserAcceptance) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ScenarioID  string      `json:"scenario_id"`
+		Status      interface{} `json:"status"`
+		Observed    string      `json:"observed"`
+		EvidenceIDs []string    `json:"evidence_ids"`
+	}
+	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
+		return err
+	}
+	r.ScenarioID = raw.ScenarioID
+	r.Status = normalizeAcceptanceStatus(artifactScalarText(raw.Status))
+	r.Observed = raw.Observed
+	r.EvidenceIDs = raw.EvidenceIDs
+	return nil
 }
 
 // UnmarshalJSON accepts KISS numeric status codes while storing canonical words.
@@ -57,6 +84,7 @@ func (qa *QA) UnmarshalJSON(data []byte) error {
 		Findings            []Finding          `json:"findings"`
 		NonBlockingFindings []Finding          `json:"non_blocking_findings,omitempty"`
 		AcceptanceMatrix    []AcceptanceResult `json:"acceptance_matrix,omitempty"`
+		UserAcceptance      []UserAcceptance   `json:"user_acceptance,omitempty"`
 	}
 	if err := decodeStrictArtifactJSON(data, &raw); err != nil {
 		return err
@@ -67,6 +95,7 @@ func (qa *QA) UnmarshalJSON(data []byte) error {
 	qa.Findings = raw.Findings
 	qa.NonBlockingFindings = raw.NonBlockingFindings
 	qa.AcceptanceMatrix = raw.AcceptanceMatrix
+	qa.UserAcceptance = raw.UserAcceptance
 	return nil
 }
 
@@ -139,6 +168,10 @@ func redactQAEnvironmentMarkers(qa QA) (QA, bool) {
 		safe.AcceptanceMatrix[i].Artifact = redact(safe.AcceptanceMatrix[i].Artifact)
 		safe.AcceptanceMatrix[i].Evidence = redact(safe.AcceptanceMatrix[i].Evidence)
 	}
+	safe.UserAcceptance = append([]UserAcceptance(nil), safe.UserAcceptance...)
+	for i := range safe.UserAcceptance {
+		safe.UserAcceptance[i].Observed = redact(safe.UserAcceptance[i].Observed)
+	}
 	return safe, changed
 }
 
@@ -164,6 +197,9 @@ func qualityEnvironmentNamesFromQA(qa QA) []string {
 	}
 	for _, result := range qa.AcceptanceMatrix {
 		parts = append(parts, result.Artifact, result.Evidence)
+	}
+	for _, result := range qa.UserAcceptance {
+		parts = append(parts, result.Observed)
 	}
 	return qualityEnvironmentNamesFromText(strings.Join(parts, "\n"))
 }
@@ -197,6 +233,17 @@ func ValidateQA(qa QA) error {
 			return err
 		}
 	}
+	for i, result := range qa.UserAcceptance {
+		if strings.TrimSpace(result.ScenarioID) == "" || strings.TrimSpace(result.Observed) == "" || len(result.EvidenceIDs) == 0 {
+			return fmt.Errorf("user_acceptance[%d] 不完整", i)
+		}
+		if result.Status != "passed" && result.Status != "failed" {
+			return fmt.Errorf("user_acceptance[%d].status 无效：%s", i, result.Status)
+		}
+		if err := acceptance.ValidateUserFacingText(fmt.Sprintf("user_acceptance[%d].observed", i), result.Observed); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -204,6 +251,11 @@ func ValidateQA(qa QA) error {
 func ValidateQAAgainstAcceptance(qa QA, contract Acceptance) error {
 	if err := ValidateQA(qa); err != nil {
 		return err
+	}
+	if contract.DeliveryReport != nil {
+		if err := validateQAUserAcceptance(qa, *contract.DeliveryReport); err != nil {
+			return err
+		}
 	}
 	required := acceptance.RequiredItems(contract)
 	if len(required.Tests) == 0 && len(required.Evidence) == 0 {
@@ -240,6 +292,56 @@ func ValidateQAAgainstAcceptance(qa QA, contract Acceptance) error {
 	return nil
 }
 
+// validateQAUserAcceptance requires clean QA to cover every delivery scenario with observed, linked evidence.
+func validateQAUserAcceptance(qa QA, report acceptance.DeliveryReport) error {
+	if qa.Decision != "clean" {
+		return nil
+	}
+	scenarios := make(map[string]acceptance.DeliveryScenario, len(report.Scenarios))
+	for _, scenario := range report.Scenarios {
+		scenarios[scenario.ID] = scenario
+	}
+	seen := map[string]bool{}
+	for i, result := range qa.UserAcceptance {
+		scenario, ok := scenarios[result.ScenarioID]
+		if !ok {
+			return fmt.Errorf("user_acceptance[%d].scenario_id 未在 delivery_report 中定义：%q", i, result.ScenarioID)
+		}
+		if seen[result.ScenarioID] {
+			return fmt.Errorf("user_acceptance[%d].scenario_id 重复：%q", i, result.ScenarioID)
+		}
+		seen[result.ScenarioID] = true
+		if result.Status != "passed" {
+			return fmt.Errorf("clean qa 的用户验收场景未通过：%s", result.ScenarioID)
+		}
+		allowed := map[string]bool{}
+		for _, id := range scenario.EvidenceIDs {
+			allowed[id] = true
+		}
+		referenced := map[string]bool{}
+		for _, id := range result.EvidenceIDs {
+			if !allowed[id] {
+				return fmt.Errorf("user_acceptance[%d].evidence_ids 引用场景外证据：%q", i, id)
+			}
+			if referenced[id] {
+				return fmt.Errorf("user_acceptance[%d].evidence_ids 重复：%q", i, id)
+			}
+			referenced[id] = true
+		}
+		for id := range allowed {
+			if !referenced[id] {
+				return fmt.Errorf("user_acceptance[%d] 缺少场景证据：%s", i, id)
+			}
+		}
+	}
+	for id := range scenarios {
+		if !seen[id] {
+			return fmt.Errorf("clean qa 缺少用户验收场景：%s", id)
+		}
+	}
+	return nil
+}
+
 func normalizeQA(qa QA) QA {
 	qa.Decision = normalizeDecision(qa.Decision)
 	for i := range qa.Findings {
@@ -260,6 +362,9 @@ func normalizeQA(qa QA) QA {
 	}
 	for i := range qa.AcceptanceMatrix {
 		qa.AcceptanceMatrix[i].Status = normalizeAcceptanceStatus(qa.AcceptanceMatrix[i].Status)
+	}
+	for i := range qa.UserAcceptance {
+		qa.UserAcceptance[i].Status = normalizeAcceptanceStatus(qa.UserAcceptance[i].Status)
 	}
 	return qa
 }

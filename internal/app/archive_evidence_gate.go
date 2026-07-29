@@ -32,7 +32,7 @@ func verifyQualityLoopArchivedEvidenceCommit(repo string, state State) error {
 	if err != nil {
 		return err
 	}
-	for _, required := range []string{"README.md", "manifest.json", "result.json"} {
+	for _, required := range []string{"README.md", "DELIVERY.md", "manifest.json", "result.json"} {
 		if !containsArchiveEvidenceFile(files, packageRelative+"/"+required) {
 			return fmt.Errorf("archive 提交级证据包缺少 %s", required)
 		}

@@ -48,7 +48,8 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 - 如果当前仓库完全没有可用测试框架，也必须在 `tests/` 写出最小可运行的项目测试入口；引入新框架前先确认这是最小代价
 - 契约测试脚本必须包含业务级断言，断言对象应是输出内容、数据库记录、API 响应字段、权限拒绝、持久化状态、审计日志或用户可见流程结果；不能只证明测试文件能运行
 - `test-results/` 只存放可重新生成的临时运行产物，始终不得跟踪。稳定测试快照基线可以按项目惯例跟踪；实际运行结果不得冒充快照基线。
-- 每份 `required_evidence` 都必须在 `submission_evidence` 中声明相同 `source_path` 和位于 `tests/evidence/proposals/<change>/` 的 `archive_path`；至少一份证据使用 `kind=demo_video`。Oz 工作流由引擎从最终通过轮次的封存副本提升，独立归档则在调用 `oz archive` 前归集。
+- 每份 `required_evidence` 都必须在 `submission_evidence` 中声明归档路径；至少一份使用 `kind=demo_video`。演示视频不限定 WebM 或其他固定格式，选择当前环境能真实生成且审核人员可直接打开的格式；视频、截图和 trace 必须是真实可打开的文件，不能把命令输出、退出码、echo/printf 或硬编码字符串改后缀冒充证据
+- `delivery_report` 是审核人员交付合同：只写用户获得了什么、如何操作、应看到什么和直接查看哪些证据。修复类场景必须提供同一场景下可理解且内容不同的前后证据
 - 创建完成前要自查一次：如果实现者只做最小表面实现也能通过测试，必须继续加断言或收窄文档承诺
 
 `acceptance.json` 使用严格 JSON，形如：
@@ -83,23 +84,57 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
     {
       "id": "main-flow-demo",
       "kind": "demo_video",
-      "path": "test-results/main-flow/demo.webm",
+      "path": "test-results/main-flow/demo.mp4",
       "purpose": "从真实入口演示创建、刷新和状态恢复"
     }
   ],
   "submission_evidence": [
     {
       "evidence_id": "main-flow-demo",
-      "source_path": "test-results/main-flow/demo.webm",
-      "archive_path": "tests/evidence/proposals/12-示例/main-flow-demo.webm"
+      "source_path": "test-results/main-flow/demo.mp4",
+      "archive_path": "tests/evidence/proposals/12-示例/main-flow-demo.mp4"
     }
-  ]
+  ],
+  "delivery_report": {
+    "user_benefits": ["用户可以完成目标操作，并直接看到持久化后的结果。"],
+    "prerequisites": ["使用可访问该功能的普通用户账号。"],
+    "scenarios": [
+      {
+        "id": "main-user-flow",
+        "title": "完成主业务流程",
+        "user_value": "用户无需额外人工处理即可获得可用结果。",
+        "steps": [
+          {
+            "action": "从真实入口创建记录并刷新页面。",
+            "expected": "刷新后仍能看到刚创建的记录及关键字段。"
+          }
+        ],
+        "evidence_ids": ["main-flow-demo"]
+      }
+    ],
+    "known_limits": ["演示使用测试账号和脱敏业务数据。"]
+  }
 }
 ```
 
+示例中的 `.mp4` 只用于说明临时文件与归档文件的映射，不是格式要求。实际使用执行环境产出的可播放视频格式，并保持 `path`、`source_path` 与 `archive_path` 的实际扩展名一致。
+
 `coverage[].spec` 必须引用 `spec.md` 中真实存在的需求和场景；`coverage[].tests` 必须引用 `required_tests[].id`；`coverage[].evidence` 必须引用 `required_evidence[].id`，没有证据时写空数组并在 `risk` 解释。`required_tests[].source` 仅使用 `change_contract`、`root_e2e`、`existing_regression`、`new_regression`。`required_tests[].assertions` 至少列出一个业务级断言。`required_evidence[].kind` 仅使用 `screenshot`、`trace`、`network`、`console`、`runtime_log`、`state_snapshot`、`demo_video`、`other`。
 
-`required_evidence` 表示 QA/执行阶段可复核的临时运行证据；`submission_evidence` 表示最终提交路径。`test-results/` 本身不进入版本控制，归档只从最终通过轮次的不可变副本提升证据。
+修复类场景必须在同一个 `delivery_report.scenarios[]` 中加入：
+
+```json
+"comparison": {
+  "before": "修复前用户实际看到的问题",
+  "after": "修复后用户实际获得的结果",
+  "before_evidence_id": "before-proof",
+  "after_evidence_id": "after-proof"
+}
+```
+
+两个证据编号必须同时列入该场景的 `evidence_ids`，分别指向可打开且内容不同的文件；步骤或前置条件写清同一入口、角色、数据和环境。
+
+`required_evidence` 表示可复核的临时运行证据；`submission_evidence` 表示最终提交路径；`delivery_report` 驱动最终 `DELIVERY.md`。纯测试通过信息只能作为技术附件，不能替代审核人员能理解的用户行为证据。
 
 如果暂时无法确定测试策略、真实数据来源、用户可感知断言或 QA 证据要求，先和用户澄清；不要创建缺少契约测试或 `acceptance.json` 的提案。
 
@@ -116,7 +151,7 @@ micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器�
 - `<change-name>` 必须是中文需求描述，可以混用英文单词、数字和连字符，但必须包含中文汉字，不能全英文。尽量写成动宾短语格式，让人一眼能看明白提案的意图
 
 - 运行 `oz validate <change> --json` 检验，确认 `brief.md` 存在且能支撑执行阶段默认上下文，`tests/` 目录存在、包含测试代码且没有占位内容
-- 人工核对 `acceptance.json` 是合法 JSON，且 `coverage` / `required_tests` / `required_evidence` / `submission_evidence` 一致；全部临时证据都有归档映射，并包含 demo 视频
+- 人工核对 `acceptance.json` 合法且各映射一致；`delivery_report` 覆盖用户收益、操作、可见结果和直接证据，并包含真实 demo 视频
 - 完成后，立刻 commit 这部分提案，message格式："<number>提案: <change-name>"
 
 ## 反偷懒检查

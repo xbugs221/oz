@@ -20,8 +20,10 @@ description: 当用户提到 oz archive，或要求归档已完成的 oz 提案�
 - 运行 `oz validate <change> --json`
 - 禁止创建或修改 `task.md`；归档完成条件以校验、验收结果和最终审核为准
 - 重新运行相关测试并确认最终通过轮次；`test-results/` 只作临时目录
-- Oz 工作流上下文中，引擎会在进入本阶段前从最终通过的不可变副本生成 `tests/evidence/proposals/<change>/`；只核对 `README.md`、`manifest.json`、demo、日志及 `submission_evidence` 映射，不得重新复制或覆盖
-- 独立归档上下文中，在调用 `oz archive` 前将最终通过轮次的证据筛选、脱敏并归集到同一目录，同时生成 `README.md` 与 `manifest.json`
+- Oz 工作流上下文中，引擎会从最终 QA 的用户实测结论生成 `DELIVERY.md`，并从不可变副本生成证据包；归档只读核对，不得重写报告或证据
+- 独立归档上下文中，归集证据时同时生成 `DELIVERY.md`、`README.md` 与 `manifest.json`
+- `DELIVERY.md` 固定面向审核人员：先写用户获得了什么，再写验收准备、逐步操作、预期结果、实际观察、直接证据和已知限制；修复类交付还要写清前后差异
+- 命令、退出码、HTTP 200、元素存在、测试通过字样、哈希或硬编码字符串只能作技术附件，不能替代用户能看懂的截图、视频、业务日志或真实输入输出
 - 先运行 `oz archive <change> --yes`，由 CLI 完成提案目录（含 `tests/`）迁移，并自动改写测试脚本、`acceptance.json`、`brief.md`、`spec.md` 等文本中的提案测试路径；CLI 不负责把测试按业务能力合并进长期 `tests/specs/`
 - 读取 `docs/changes/archive/<date>-<change>/tests/`，理解每个测试表达的业务契约和断言
 - 像合并 `docs/specs/*.md` 一样，把测试用例按业务能力合并到 `tests/specs/` 中稳定的规格测试文件；不要按 `<change>` 机械创建目录，也不要只搬运文件
@@ -46,7 +48,8 @@ description: 当用户提到 oz archive，或要求归档已完成的 oz 提案�
 - 提案 `tests/` 的业务意图已按能力合并到稳定的 `tests/specs/` 文件，或明确说明无需合并的原因
 - 归档 `spec.md` 的长期行为已合并到 `docs/specs/*.md`，或明确说明无需合并的原因
 - 受影响规格测试已经重新运行
-- `tests/evidence/proposals/<change>/` 已包含最终通过轮次的 demo 视频、`README.md` 摘要和必要日志，并与代码处于同一提交
+- `tests/evidence/proposals/<change>/` 已包含 `DELIVERY.md`、真实可打开的 demo 视频、审核入口和必要附件，并与代码处于同一提交
+- 每个修复类场景的前后证据均可打开、成对存在、内容不同，使用同一入口/角色/数据/环境，并被 `DELIVERY.md` 直接引用
 - `delivery_base_head..HEAD` 恰好一个完整交付提交，提交后相关工作区干净
 - 暂存清单已经逐项复核，不含 `test-results/`、失败轮次、缓存、敏感或无关产物
 

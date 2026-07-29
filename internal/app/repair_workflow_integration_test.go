@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xbugs221/oz/internal/testsupport"
 )
 
 // repairWorkflowRunner writes valid artifacts for a resumed QA-failure repair loop.
@@ -49,12 +51,7 @@ func (r *repairWorkflowRunner) Run(_ context.Context, _ string, prompt string, s
 		if sessionID != "qa-session" {
 			return "", fmt.Errorf("QA session = %q, want qa-session; prompt=%q", sessionID, promptStageExcerpt(prompt))
 		}
-		qa := cleanQAForStageDecision()
-		qa.Evidence = []string{"runtime go test ./internal/app passed"}
-		qa.AcceptanceMatrix = []AcceptanceResult{
-			{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "integration contract passed"},
-			{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "final demo exists"},
-		}
+		qa := cleanRepairDAGQA()
 		if err := writeJSONFile(filepath.Join(base, "qa-3.json"), qa); err != nil {
 			return "", err
 		}
@@ -103,7 +100,7 @@ func newRepairEvidenceFixture(t *testing.T) (string, string, string, string, str
 	if err := os.MkdirAll(filepath.Dir(testPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成最终能力演示证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'demo verified\\n' > test-results/repair-dag/final-demo.webm\n"
+	testBody := fmt.Sprintf("#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成真实的最终能力演示视频。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf '%%s' '%s' | base64 -d > test-results/repair-dag/final-demo.webm\n", testsupport.ReviewableWebMBase64())
 	if err := os.WriteFile(testPath, []byte(testBody), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -240,6 +237,12 @@ func cleanRepairDAGQA() QA {
 		{ID: "repair-dag-contract", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "integration contract passed"},
 		{ID: "repair-dag-runtime", Status: "passed", Artifact: "test-results/repair-dag/final-demo.webm", Evidence: "final demo exists"},
 	}
+	qa.UserAcceptance = []UserAcceptance{{
+		ScenarioID:  "resume-repair",
+		Status:      "passed",
+		Observed:    "工作流在修复后继续完成质检，用户能够看到最终能力演示并进入归档。",
+		EvidenceIDs: []string{"repair-dag-runtime"},
+	}}
 	return qa
 }
 
@@ -266,7 +269,7 @@ func TestRepairWorkflowDAGResumeEvidence(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(testPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testBody := "#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成最终能力演示证据。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf 'demo verified\\n' > test-results/repair-dag/final-demo.webm\n"
+	testBody := fmt.Sprintf("#!/usr/bin/env bash\n# 文件功能目的：为优化 DAG 集成测试生成真实的最终能力演示视频。\nset -euo pipefail\nmkdir -p test-results/repair-dag\nprintf '%%s' '%s' | base64 -d > test-results/repair-dag/final-demo.webm\n", testsupport.ReviewableWebMBase64())
 	if err := os.WriteFile(testPath, []byte(testBody), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -669,6 +672,31 @@ func repairDAGAcceptanceJSON() string {
       "source_path": "test-results/repair-dag/final-demo.webm",
       "archive_path": "tests/evidence/proposals/1-演示/final-demo.webm"
     }
-  ]
+  ],
+  "delivery_report": {
+    "user_benefits": [
+      "工作流在发现问题并修复后能够继续质检，用户无需手动重启整个流程。"
+    ],
+    "prerequisites": [
+      "准备一个会在首轮质检暴露问题的测试提案。"
+    ],
+    "scenarios": [
+      {
+        "id": "resume-repair",
+        "title": "问题修复后继续完成交付",
+        "user_value": "用户能够保留已有进展，在修复后继续得到可验收的最终结果。",
+        "steps": [
+          {
+            "action": "启动提案工作流并让首轮质检发现需要修复的问题。",
+            "expected": "流程完成修复后再次测试，并在通过后生成最终演示。"
+          }
+        ],
+        "evidence_ids": ["repair-dag-runtime"]
+      }
+    ],
+    "known_limits": [
+      "集成演示使用最小测试提案，不包含真实业务数据。"
+    ]
+  }
 }`
 }

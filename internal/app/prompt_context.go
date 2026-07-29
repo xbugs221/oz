@@ -134,11 +134,11 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 	}
 	switch stageKind {
 	case workflowStagePlanning:
-		block.WriteString("- 规划必须定义覆盖目标能力的 demo，并在 `submission_evidence` 中把可变 `source_path` 映射到 `tests/evidence/proposals/<change>/**` 下的 `archive_path`；`test-results/**` 只作为可变运行产物。\n")
+		block.WriteString("- 规划必须定义 `delivery_report`：用用户语言写收益、验收操作、可见结果和直接证据；修复类场景还要绑定同一场景下可理解且不同的前后证据。\n")
 	case workflowStageExecution:
-		block.WriteString("- 执行完成前必须实际运行覆盖目标能力的 demo，只产出 `submission_evidence.source_path` 声明的 `test-results/**` 临时证据，交由阶段后置门禁封存为当前 run 的不可变快照；不得自行写入 `tests/evidence/proposals/<change>/**` 或创建 git commit，最终证据只由引擎在归档前提升。\n")
+		block.WriteString("- 执行完成前必须产出真实可打开的演示媒体；禁止用 echo/printf、硬编码字符串、退出码或测试通过字样冒充用户证据。\n")
 	case workflowStageQA:
-		block.WriteString("- QA 必须实际复核 demo 覆盖目标能力及当前 run 内封存的 required_evidence 不可变快照；保持只读，不得修改 `test-results/**` 临时源或写入 `tests/evidence/proposals/<change>/**`。若验收修复结果，逐项确认 finding 的修复前失败证据与同一场景的修复后通过证据。\n")
+		block.WriteString("- QA 必须逐项填写 `user_acceptance[]`，用普通用户语言记录实际看到的行为并引用交付场景证据；命令、退出码、哈希、HTTP 200 或元素存在不能替代用户结果。\n")
 	}
 	switch context.RepairMode {
 	case "pre_qa_audit":
@@ -148,7 +148,7 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 	case "qa_targeted_repair":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
 		block.WriteString("- 执行、自查和定向修复期间不得创建 git commit；完整交付提交只能由归档阶段创建。\n")
-		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`；写入：`targeted-repair-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"targeted-repair-%d.json\" --json`。\n- 仅处理最新 QA findings 及直接相关回归；来源 QA：`qa-%d.json`。逐项产出可复现的修复前失败证据与同一场景的修复后通过证据，按已封存 `submission_evidence` 映射更新临时源，交由本阶段后置门禁封存新快照。\n", context.Iteration, context.Iteration, context.Iteration)
+		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`；写入：`targeted-repair-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"targeted-repair-%d.json\" --json`。\n- 仅处理最新 QA findings 及直接相关回归；来源 QA：`qa-%d.json`。逐项产出同一用户场景下可理解且不同的修复前后证据；命令输出、退出码、哈希或硬编码字符串不算用户证据。\n", context.Iteration, context.Iteration, context.Iteration)
 		if len(context.QAFindingSummaries) > 0 {
 			block.WriteString("- 最新 QA findings：\n")
 			for _, finding := range context.QAFindingSummaries {
@@ -162,7 +162,8 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 	}
 	if context.Stage == workflowStageArchive {
 		block.WriteString("- 归档是最终 QA 后的只读边界：仅执行归档 skill 的机械移动并写入 delivery-summary.md；长期规格与规格测试必须已在最终 QA 前完成。\n")
-		block.WriteString("- 引擎会在进入归档前从最终通过的不可变快照自动提升证据；归档代理只核对最终包位于 `tests/evidence/proposals/<change>/**`、没有命中 git ignore，并将其随本次归档提交，不得从 `test-results/**` 自行复制或重建。\n")
+		block.WriteString("- 引擎会生成 `tests/evidence/proposals/<change>/DELIVERY.md`；归档代理必须核对用户收益、验收步骤、实测结果与直接证据均可理解、可打开，再将整包随本次归档提交。\n")
+		block.WriteString("- 最终包仍须位于 `tests/evidence/proposals/<change>/**`、不得命中 git ignore，也不得从 `test-results/**` 重建；归档后严禁编辑，按引擎产物原样暂存。\n")
 		block.WriteString("- 必须从 state 封存的 `delivery_base_head` 新建且只新建一个完整交付 commit，使实现、归档提案与最终证据同属 HEAD；禁止 amend、squash 或沿用执行/自查阶段的提交。\n")
 		block.WriteString("- 归档命令返回后，严禁编辑、格式化或恢复提案目录及任何源码；可以原样暂存/提交命令结果，但不得为工作区干净改写内容，差异必须交由只读门禁判定。\n")
 	}
