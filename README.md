@@ -2,7 +2,7 @@
 url: https://github.com/xbugs221/oz
 ---
 
-中文精简版 Openspec 规范工具和工作流执行器
+中文精简版 OpenSpec 规范工具和工作流执行器，把需求、实现、验收材料和交付说明归入同一次可复查的提交。
 
 ## 动机
 
@@ -25,7 +25,7 @@ oz 按变更大小选择 micro、small、standard 三种入口。数量只作为
 | 类型 | 适用场景 | 产物 |
 | --- | --- | --- |
 | micro | 不改变用户可感知行为、命令契约、状态语义或长期规格的纯实现修复 | TDD + git commit，不创建 change 目录 |
-| small | 单一业务意图，最多 2 个验收场景或 2 个 required tests，且没有复杂设计分歧 | `docs/changes/<编号-中文需求>/brief.md`、`acceptance.json`、`tests/` |
+| small | 单一业务意图，最多 2 个验收场景或 2 项必测内容，且没有复杂设计分歧 | `docs/changes/<编号-中文需求>/brief.md`、`acceptance.json`、`tests/` |
 | standard | 中大型、高风险、跨模块、多场景，或超过 small 上限 | 完整提案：`brief.md`、`proposal.md`、`design.md`、`spec.md`、`acceptance.json`、`tests/` |
 
 ```text
@@ -38,36 +38,35 @@ oz 按变更大小选择 micro、small、standard 三种入口。数量只作为
         +-- 是，且跨模块/高风险/多场景：standard
 ```
 
-small 仍必须写清长期规格去向，归档时必须把长期行为合并进 `docs/specs/`，把测试意图合并进 `tests/specs/`。standard 升级触发器包括跨模块影响、高风险迁移、多个业务场景、超过 2 个验收场景或超过 2 个 required tests；standard 不得为了显得“够大”硬凑测试或任务。
+small 仍必须写清长期规格去向，归档时必须把长期行为合并进 `docs/specs/`，把测试意图合并进 `tests/specs/`。standard 升级触发器包括跨模块影响、高风险迁移、多个业务场景、超过 2 个验收场景或超过 2 项必测内容；standard 不得为了显得“够大”硬凑测试或任务。
 
 运行 `oz archive <change> --yes` 时，CLI 只接受已经生成提交级证据包的提案，再迁移提案（含 `tests/`），并将测试脚本、验收合同和文档中的相对测试引用同步改为归档路径；长期测试合并仍由归档技能按业务能力完成。
 
-## 核心产物关系
+## 一次提案最终留下什么
 
-每个 small 或 standard 活跃变更都放在 `docs/changes/<编号-中文需求>/`。目录名必须包含数字编号和至少一个中文汉字，例如 `12-重写-oz-cli`；这样可以避免全英文短名在长期历史中变得含糊。
+每个 small 或 standard 提案都放在 `docs/changes/<编号-中文需求>/`。目录名包含编号和中文需求，例如 `12-重写-oz-cli`，方便长期查找。
 
 ```mermaid
-flowchart TD
-    C["docs/changes/<N-需求>"] --> P["proposal.md"]
-    P --> P1["需求是什么"]
-    C --> D["design.md"]
-    D --> D1["边界在哪"]
-    C --> S["spec.md"]
-    S --> S1["预期结果是什么"]
-    C --> A["acceptance.json"]
-    A --> A1["验收必测项"]
-    C --> UT["tests/（场景测试）"]
-    UT --> UT1["测试集"]
-    M["docs/specs/*.md"] --> LM["长期规范"]
-    LM --> RS["tests/specs/*（长期回归测试集）"]
-    R["test-results/**（临时、忽略）"] --> I["~/.local/state/oz/flow/.../evidence（轮次封存）"]
-    I --> E["tests/evidence/proposals/<change>（最终提交证据包）"]
-    RT["执行器 Todo / state.json"] --> DP["动态实现计划（不进入 Git）"]
+flowchart LR
+    R["需求与验收方法"] --> I["实现与自查"]
+    I --> T["真实场景测试"]
+    T --> D["用户交付报告"]
+    T --> E["演示视频/截图/结果"]
+    D --> C["完整提交"]
+    E --> C
+    I --> C
 ```
 
-`acceptance.json.required_evidence` 声明测试生成的临时证据；`submission_evidence` 将每份临时证据映射到 `tests/evidence/proposals/<change>/`。映射必须覆盖全部 required evidence，并至少包含一个 `demo_video`。归档包还包含 `README.md`、`manifest.json`、最终验收结果和测试日志，与实现代码进入同一提交。
+提案通过后，最终材料保存在 `tests/evidence/proposals/<change>/`：
 
-active 提案禁止包含 `task.md`。创建阶段定义目标、边界和验收合同，具体步骤由执行器在 Todo 或运行态中动态决策；历史归档中的旧任务文件只作为历史资料保留。
+- `DELIVERY.md`：普通审核人员可以照着完成验收。
+- 演示视频：展示提案要求的能力，格式不限，以能直接播放为准。
+- 修复前后对比：截图、视频、日志或结果文件均可，但必须让人一眼看出变化。
+- 最终验收结果：只保留通过轮次，避免后续测试覆盖已经确认的材料。
+
+这些材料会和实现、测试、归档提案进入同一次提交。`test-results/` 只保存可重新生成的临时结果，不进入 Git。
+
+活动提案不使用 `task.md`。创建阶段只定义目标、边界和验收方法，具体实现步骤由执行器根据当前结果动态安排。
 
 ## 命令入口
 
@@ -107,9 +106,7 @@ oz flow watch
 
 `oz flow config` 只生成这一份内嵌默认配置，并且仅支持可选的 `--global`。不再提供 profile、`--profile` 或 `--list-profiles`；需要差异化行为时，直接编辑生成的 `oz-flow.yaml`。
 
-职责边界：skill 说明各角色怎么做；change 目录保存需求与范围；`acceptance.json` 是测试和证据的可执行合同；`oz flow` 决定何时推进阶段并执行门禁。
-
-常见门禁配置：
+项目需要执行额外检查时，可以在 `oz-flow.yaml` 中配置验证命令：
 
 ```yaml
 validation:
@@ -118,54 +115,36 @@ validation:
     - go test ./...
 ```
 
-## 优化为什么这样设计
+## 工作流如何收敛
 
-`oz flow` 的目标不是多生成一份审核报告，而是让提案被充分执行，并在无人介入时修掉可稳定发现的低级 BUG。
+`oz flow` 允许智能体持续自我优化，但每一步都会明确进入下一阶段，不会原地死循环。
 
 ```mermaid
 flowchart LR
-    E["执行"] --> U["自查"]
-    U -->|"needs_more：修复后再查"| U
-    U -->|"clean 且自测通过"| Q["测试"]
-    Q -->|"可信证据或检查点漂移"| U
-    Q -->|"needs_fix"| T["修复"]
-    T -->|"失败测试与完整验收通过"| Q
-    T -->|"自测失败"| T
-    Q -->|"clean"| A["归档"]
-    U -->|"缺少环境"| BE["环境阻塞"]
-    T -->|"缺少环境"| BE
-    U -->|"相同失败且无进展"| BS["停滞阻塞"]
-    T -->|"相同失败且无进展"| BS
+    E["执行提案"] --> U["自查"]
+    U -->|"发现问题：修正后继续查"| U
+    U -->|"第一次没问题：再完整查一次"| U
+    U -->|"连续两次没问题"| Q["测试"]
+    Q -->|"未通过"| F["修复"]
+    F --> Q
+    Q -->|"通过"| A["归档"]
 ```
 
-`status`、`watch`、JSON 的人类名称和 graph 可见节点统一显示“执行、自查、修复、测试、归档”。持久状态仍使用 `execution`、`audit_N`、`targeted_repair_N`、`qa_N`、`archive`，恢复与流转协议不变。
-
-阶段按适用范围依次通过“产物格式、只读边界、验证命令、验收测试、差异绑定”门禁。这里的哈希是 `state.json` 中保存的源码、测试、验证、证据和检查点摘要，用于确认当前结论仍对应同一组输入；它不会预处理或改写工作区文件。
-
-| 决策 | 原因 |
-| --- | --- |
-| 全量自查与定向修复复用同一后端、同一 repairer 会话 | 保留修改意图、失败尝试和排查脉络，避免每轮从头理解 |
-| 每轮重读状态、验收合同、完整差异和验证结果 | 文件是权威事实，防止持续会话依据过期记忆判断 |
-| 每轮写 `audit-N.json`、`targeted-repair-N.json` 或 `qa-N.json` | 把发现、修复验证和剩余问题做成可恢复、可审计的检查点 |
-| QA 前持续全量自查，QA 后只定向修复 | 先覆盖当前提案完整范围，再避免 QA 打回后反复扩大修复范围 |
-| 每轮 QA 使用独立会话 | 降低修复者自我确认和前一轮 QA 判断造成的盲区 |
-| 每轮测试后封存 evidence | QA 和归档只读取运行态不可变副本，不再因 `test-results/**` 被后续测试覆盖而回退 |
-| QA 修改 tracked source 时暂停 | QA 必须只读；这类变化不是可吸收的新证据，必须拒绝当前结论 |
-| 不设置固定修复轮次上限 | 只要源码、测试或证据仍有进展就继续；相同失败且无变化时进入 `blocked_stalled` |
-| 环境缺失单独进入 `blocked_environment` | 补齐账号、配置或外部服务后从原阶段恢复，不把环境问题伪装成代码失败 |
-| 只有独立 QA clean 才能归档 | repairer 负责修复和自测，最终放行权仍属于独立 QA |
-
-因此，会话记忆只负责“延续思路”，`state.json`、封存的 `acceptance.json`、当前差异、动态阶段 artifact 和确定性测试才构成放行证据。新运行中的 `max_repair_iterations` 仅保留为迁移诊断，不作为终止条件；已 sealed 的 `repair-v1` 与更早的 review/fix 运行仍严格按快照中的有限状态机恢复，不会被静默改写。
+- 自查可以多轮优化，用更多时间换取更好的实现。
+- 连续两次完整自查都没有发现问题，才会开始独立测试。
+- 测试未通过时只修复实际发现的问题，然后继续测试，直到通过。
+- 缺少账号、配置或外部服务时会暂停并说明原因；相同失败长期没有变化时也会停止空转。
+- 归档前会生成普通人可读的交付报告，并确认链接的截图、视频或结果文件能够直接审核。
 
 ### 三类归档
 
 | 入口 | 作用 |
 | --- | --- |
 | `oz archive <change> --yes` | 把活动提案迁入 `docs/changes/archive/`，并更新提案内路径引用 |
-| 工作流 `archive` 阶段 | 从最终通过检查点生成 `tests/evidence/proposals/<change>/`，再调用提案归档、沉淀长期规格与测试并生成交付摘要 |
+| 工作流自动归档 | 测试通过后生成交付报告和证据包，再归档提案、长期规格与测试 |
 | `oz flow archive` | 仅归档已经失败的 run/batch 运行记录，不等于完成提案交付 |
 
-`blocked_environment` 和 `blocked_stalled` 是可恢复暂停：批次继续挂接当前提案，`oz flow loop` 不会把它们当成失败归档；补齐输入或执行 `oz flow restart` 后从可信检查点恢复。真正的终止失败才会归档运行记录并尝试续跑剩余提案，相同失败连续出现两次或命中人工门禁时停止。
+环境或输入补齐后，可以执行 `oz flow restart` 从暂停位置继续。只有无法继续的运行才会保存失败记录；`oz flow archive` 不会把失败运行误当成已经完成的提案。
 
 ## 发布与本地验证
 
