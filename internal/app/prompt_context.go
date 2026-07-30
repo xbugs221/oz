@@ -144,10 +144,12 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 	case "pre_qa_audit":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
 		block.WriteString("- 执行、自查和定向修复期间不得创建 git commit；完整交付提交只能由归档阶段创建。\n")
+		block.WriteString("- 移交独立 QA 前，按仓库已有显式入口运行提交前钩子，不得创建临时 commit；吸收改动后，再次运行不再修改文件才可移交。钩子稳定后重新运行受影响测试、全部 required tests 和 validation commands。\n")
 		fmt.Fprintf(&block, "- 模式：`pre_qa_audit`；写入：`audit-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"audit-%d.json\" --json`。\n- 全量检查当前提案的 acceptance、完整 diff、源码、测试与证据；实际运行并确认 demo 覆盖目标能力，核对上一检查点的不可变证据快照（如有），只产出 `test-results/**` 临时源并交由本阶段后置门禁封存，不得写入 `tests/evidence/proposals/<change>/**` 提交级证据包；本轮零新问题且 required tests 通过才可移交独立 QA。\n", context.Iteration, context.Iteration)
 	case "qa_targeted_repair":
 		block.WriteString("- 若确定缺少环境前置条件，在 artifact evidence 中写 `blocked_environment: VARIABLE_OR_PATH`；只写变量名/路径，不写密钥值。\n")
 		block.WriteString("- 执行、自查和定向修复期间不得创建 git commit；完整交付提交只能由归档阶段创建。\n")
+		block.WriteString("- 移交独立 QA 前，按仓库已有显式入口运行提交前钩子，不得创建临时 commit；吸收改动后，再次运行不再修改文件才可移交。钩子稳定后重新运行受影响测试、全部 required tests 和 validation commands。\n")
 		fmt.Fprintf(&block, "- 模式：`qa_targeted_repair`；写入：`targeted-repair-%d.json`（相对运行目录）。\n- 在运行目录中运行：`oz flow validate-repair --artifact \"targeted-repair-%d.json\" --json`。\n- 仅处理最新 QA findings 及直接相关回归；来源 QA：`qa-%d.json`。逐项产出同一用户场景下可理解且不同的修复前后证据；命令输出、退出码、哈希或硬编码字符串不算用户证据。\n", context.Iteration, context.Iteration, context.Iteration)
 		if len(context.QAFindingSummaries) > 0 {
 			block.WriteString("- 最新 QA findings：\n")
@@ -165,6 +167,7 @@ func appendQualityLoopPrompt(prompt string, context promptTemplateContext) strin
 		block.WriteString("- 引擎会生成 `tests/evidence/proposals/<change>/DELIVERY.md`；归档代理必须核对用户收益、验收步骤、实测结果与直接证据均可理解、可打开，再将整包随本次归档提交。\n")
 		block.WriteString("- 最终包仍须位于 `tests/evidence/proposals/<change>/**`、不得命中 git ignore，也不得从 `test-results/**` 重建；归档后严禁编辑，按引擎产物原样暂存。\n")
 		block.WriteString("- 必须从 state 封存的 `delivery_base_head` 新建且只新建一个完整交付 commit，使实现、归档提案与最终证据同属 HEAD；禁止 amend、squash 或沿用执行/自查阶段的提交。\n")
+		block.WriteString("- 不得在最终 QA 后首次触发会改写文件的提交前钩子；只允许复核上一自查阶段已确认幂等的同一入口。若仍产生改动，停止归档并返回自查与 QA，不得吸收为已测试内容。\n")
 		block.WriteString("- 归档命令返回后，严禁编辑、格式化或恢复提案目录及任何源码；可以原样暂存/提交命令结果，但不得为工作区干净改写内容，差异必须交由只读门禁判定。\n")
 	}
 	return prompt + block.String()

@@ -217,6 +217,17 @@
 - **且** 相同失败指纹下源码、测试、验证和 evidence 均无变化时进入 `blocked_stalled`，提供新输入后可恢复
 - **测试**：`tests/specs/codex-workflow-cli/test_self_review_repair_loop_contract.sh`、`tests/specs/codex-workflow-cli/test_compact_chinese_graph_and_iteration_limit.sh`
 
+#### 场景：提交前钩子在独立 QA 前收敛
+
+- **给定** 仓库配置了会确定性改写文件的提交前钩子
+- **当** execution、audit 或 targeted repair 准备移交独立 QA
+- **则** 对应 skill 必须按仓库已有显式入口运行钩子，不得创建临时 commit
+- **且** 必须吸收钩子改动后再次运行；第二次不再修改文件，才可重跑受影响测试、全部 required tests 和 validation commands
+- **且** 独立 QA 与归档快照必须绑定钩子稳定后的内容
+- **当** 归档阶段首次触发钩子，或复核钩子仍产生改动
+- **则** 系统不得吸收改动或完成归档，必须返回自查和独立 QA
+- **测试**：`internal/app/migrated_contract_regression_test.go`、`tests/specs/codex-workflow-cli/test_skill_workflow_docs_contract.sh`、`tests/specs/codex-workflow-cli/test_stage_prompt_contract_completeness.sh`
+
 #### 场景：可恢复暂停保持批次挂接
 
 - **给定** 当前 run 进入 `blocked_environment` 或 `blocked_stalled`

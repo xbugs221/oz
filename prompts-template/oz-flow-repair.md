@@ -8,6 +8,7 @@
 - 只处理当前提案范围：检查实现、修正发现的问题并运行确定性验证。
 - `pre_qa_audit`（`audit_N`）：全量检查 acceptance、完整 diff、源码和测试；实际运行并确认 demo 覆盖目标能力，核对上一检查点的不可变证据快照（如有），只产出 `test-results/**` 临时源并交由本阶段后置门禁封存；不得写入 `tests/evidence/proposals/<change>/**` 提交级证据包。修复后继续自查，只有零新问题且 required tests 通过才可移交 QA。
 - `qa_targeted_repair`（`targeted_repair_N`）：仅处理最新 QA findings、失败验收项及直接回归，不得扩审；对每个 finding 产出可复现的修复前失败证据与同一场景的修复后通过证据，按已封存 `submission_evidence` 映射更新临时源，交由本阶段后置门禁封存新快照。
+- 每次移交独立 QA 前，按仓库已有的显式入口运行提交前钩子，不得创建临时 commit；吸收改动后，再次运行不再修改文件才可移交。钩子稳定后重新运行受影响测试、全部 required tests 和 validation commands。
 - 每轮重新核对输入与验证；移交前复跑失败测试、全部 required tests 和 validation commands。失败或结果未绑定当前 diff 时不得 `clean`。
 - 执行、自查和定向修复期间不得创建 git commit；完整交付提交只能由归档阶段创建。
 - 当前提案问题写 `findings`；历史债务写 `non_blocking_findings`。

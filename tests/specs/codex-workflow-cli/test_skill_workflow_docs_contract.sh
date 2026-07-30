@@ -42,4 +42,9 @@ for skill in oz-plan oz-create oz-exec oz-archive; do
   assert_file_has "$file" '常见偷懒理由'
 done
 
+note "执行技能必须在最终 QA 前稳定提交钩子，归档技能不得首次触发改写"
+assert_file_has "$ROOT/skills/oz-exec/SKILL.md" '提交前钩子'
+assert_file_has "$ROOT/skills/oz-exec/SKILL.md" '再次运行.*不再修改'
+assert_file_has "$ROOT/skills/oz-archive/SKILL.md" '不得在最终 QA 后首次触发'
+
 note "contract passed: workflow docs and skills stay process-oriented"
