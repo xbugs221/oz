@@ -376,6 +376,9 @@ func (e *Engine) prepareQualityLoopResume(state *State, manualInstruction bool) 
 		return fmt.Errorf("run %s 的 %s 缺少原阶段，无法恢复", state.RunID, state.Status)
 	}
 	blockedFrom := original
+	archiveRepairGate, hasArchiveRepairGate := state.ArtifactGates[workflowStageArchive]
+	hasArchiveRepairGate = hasArchiveRepairGate &&
+		strings.Contains(archiveRepairGate.LastError, "archive 提升最终 acceptance evidence 失败")
 	if blockedFrom == workflowStageArchive {
 		resumed, err := e.resumeQualityLoopArchiveGateIfUnchanged(state)
 		if err != nil {
@@ -443,6 +446,14 @@ func (e *Engine) prepareQualityLoopResume(state *State, manualInstruction bool) 
 	if blockedFrom == workflowStageArchive && strings.HasPrefix(original, "audit_") {
 		if err := e.restoreQualityLoopProposalForAudit(state); err != nil {
 			return err
+		}
+		if hasArchiveRepairGate {
+			archiveRepairGate.Kind = validationKindArchiveRepair
+			state.ArtifactGates[original] = archiveRepairGate
+			state.QualityLoop.ArchiveGateFingerprint = qualityHashStrings(
+				validationKindArchiveRepair,
+				strings.TrimSpace(archiveRepairGate.LastError),
+			)
 		}
 	}
 	state.Status = statusRunning

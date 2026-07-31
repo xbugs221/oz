@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/xbugs221/oz/internal/acceptance"
 )
 
 // qualityLoopQAReadOnlyRunner writes a clean QA artifact and optionally mutates tracked source.
@@ -598,6 +601,116 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 	}
 }
 
+// TestQualityLoopArchiveEvidenceFailureReroutesToRepair verifies reviewable evidence defects never stop for a human.
+func TestQualityLoopArchiveEvidenceFailureReroutesToRepair(t *testing.T) {
+	repo, changeName, acceptanceSource, _, _ := newRepairEvidenceFixture(t)
+	var contract Acceptance
+	if err := json.Unmarshal([]byte(repairDAGAcceptanceJSON()), &contract); err != nil {
+		t.Fatal(err)
+	}
+	contract.RequiredEvidence = append(contract.RequiredEvidence, AcceptanceEvidence{
+		ID:      "repair-dag-log",
+		Kind:    "runtime_log",
+		Path:    "test-results/repair-dag/final-demo.log",
+		Purpose: "explain the final user-visible workflow result",
+	})
+	contract.SubmissionEvidence = append(contract.SubmissionEvidence, acceptance.SubmissionEvidence{
+		EvidenceID:  "repair-dag-log",
+		SourcePath:  "test-results/repair-dag/final-demo.log",
+		ArchivePath: "tests/evidence/proposals/1-演示/final-demo.log",
+	})
+	contract.Coverage[0].Evidence = append(contract.Coverage[0].Evidence, "repair-dag-log")
+	contract.DeliveryReport.Scenarios[0].EvidenceIDs = append(
+		contract.DeliveryReport.Scenarios[0].EvidenceIDs,
+		"repair-dag-log",
+	)
+	contractData, err := json.MarshalIndent(contract, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(acceptanceSource, append(contractData, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	producerPath := filepath.Join(repo, "docs", "changes", changeName, "tests", "test_repair_dag.sh")
+	producer, err := os.ReadFile(producerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	producer = append(producer, []byte("printf 'too short\\n' > test-results/repair-dag/final-demo.log\n")...)
+	if err := os.WriteFile(producerPath, producer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	state := qualityLoopState(workflowStageArchive)
+	state.RunID = newRunID()
+	state.ChangeName = changeName
+	state.ArtifactGates = map[string]StageValidationState{}
+	state.Workflow.MaxAuditIterations = 1
+	if err := snapshotQualityLoopAcceptance(repo, &state, acceptanceSource); err != nil {
+		t.Fatal(err)
+	}
+	content, err := gitChangeContentSnapshotForChange(repo, changeName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.QualityLoop.DiffHash = qualityHashStrings(content)
+	state.Stages["audit_1"] = "completed"
+	state.Stages["qa_1"] = "completed"
+	recordPassedQualityLoopCheckpoint(t, repo, &state, "audit_1")
+	qa := cleanRepairDAGQA()
+	qa.AcceptanceMatrix = append(qa.AcceptanceMatrix, AcceptanceResult{
+		ID:       "repair-dag-log",
+		Status:   "passed",
+		Artifact: "test-results/repair-dag/final-demo.log",
+		Evidence: "final workflow log exists",
+	})
+	qa.UserAcceptance[0].EvidenceIDs = append(qa.UserAcceptance[0].EvidenceIDs, "repair-dag-log")
+	if err := writeJSONFile(filepath.Join(runDir(repo, state.RunID), "qa-1.json"), qa); err != nil {
+		t.Fatal(err)
+	}
+	state.QualityLoop.SourceQAArtifact = "qa-1.json"
+	state.QualityLoop.SourceQAHash = qaArtifactContentHash(qa)
+	state.ArtifactGates["qa_1"] = StageValidationState{
+		Kind: validationKindQAReadOnly, Status: validationStatusPassed,
+		DiffHash:       state.QualityLoop.DiffHash,
+		CheckpointHash: trustedQualityLoopCheckpointHash(t, repo, state, "audit_1"),
+	}
+
+	blocked, err := NewEngine(repo, NewAgentRegistry()).prepareQualityLoopArchiveReadOnlyGate(&state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !blocked || state.Status != statusRunning || state.Stage != "audit_2" ||
+		!state.QualityLoop.ResumeRerunPending || state.QualityLoop.BlockedFromStage != "" {
+		t.Fatalf("archive evidence reroute = blocked:%v status:%s stage:%s quality:%#v",
+			blocked, state.Status, state.Stage, state.QualityLoop)
+	}
+	gate := state.ArtifactGates["audit_2"]
+	if gate.Kind != validationKindArchiveRepair || gate.Status != validationStatusFailed ||
+		!strings.Contains(gate.LastError, "文本证据至少需要三行") {
+		t.Fatalf("archive evidence repair gate = %#v", gate)
+	}
+	if routeQualityAuditAboveLimitToQA(&state) {
+		t.Fatal("archive evidence repair was skipped because the ordinary audit limit was reached")
+	}
+	prompt := validationFailurePrompt(repo, state)
+	if !strings.Contains(prompt, "Archive evidence gate failed") ||
+		!strings.Contains(prompt, "文本证据至少需要三行") {
+		t.Fatalf("archive repair prompt omitted failure context:\n%s", prompt)
+	}
+	firstFailure := gate.LastError
+	state.Stage = workflowStageArchive
+	state.Status = statusRunning
+	state.QualityLoop.ResumeRerunPending = false
+	if err := NewEngine(repo, NewAgentRegistry()).rerouteQualityLoopArchiveRepair(&state, firstFailure); err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != statusBlockedStalled || state.Stage != statusBlockedStalled ||
+		state.QualityLoop.BlockedFromStage != workflowStageArchive {
+		t.Fatalf("repeated archive obstacle did not stop: status:%s stage:%s quality:%#v",
+			state.Status, state.Stage, state.QualityLoop)
+	}
+}
+
 // TestQualityLoopArchiveResumeCompletesUnchangedGate avoids restoring and re-auditing a valid archive.
 func TestQualityLoopArchiveResumeCompletesUnchangedGate(t *testing.T) {
 	repo, changeName, state, engine, _ := newQualityLoopArchiveGateFixture(t)
@@ -628,6 +741,27 @@ func TestQualityLoopArchiveResumeCompletesUnchangedGate(t *testing.T) {
 	}
 	if !result.Done || result.Blocked || state.Status != statusDone || state.Stage != workflowStageDone {
 		t.Fatalf("unchanged archive completion = result:%#v state:%s/%s", result, state.Status, state.Stage)
+	}
+}
+
+// TestLegacyArchiveEvidenceBlockResumesWithRepairContext preserves the first-strike error across upgrades.
+func TestLegacyArchiveEvidenceBlockResumesWithRepairContext(t *testing.T) {
+	_, _, state, engine, _ := newQualityLoopArchiveGateFixture(t)
+	reason := "archive 提升最终 acceptance evidence 失败: 文本证据至少需要三行"
+	if err := engine.blockQualityLoopArchiveReadOnly(&state, reason); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.prepareQualityLoopResume(&state, true); err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != statusRunning || state.Stage != "audit_2" ||
+		state.QualityLoop.ArchiveGateFingerprint == "" {
+		t.Fatalf("legacy archive repair resume = status:%s stage:%s quality:%#v",
+			state.Status, state.Stage, state.QualityLoop)
+	}
+	gate := state.ArtifactGates["audit_2"]
+	if gate.Kind != validationKindArchiveRepair || gate.LastError != reason {
+		t.Fatalf("legacy archive repair context = %#v", gate)
 	}
 }
 

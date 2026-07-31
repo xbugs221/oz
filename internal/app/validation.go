@@ -579,6 +579,12 @@ func validationFailurePrompt(repo string, state State) string {
 			"Read the artifact below, fix acceptance.json or the bound tests, then rerun the same stage.\n\n" +
 			"- Artifact: `" + current.LastArtifact + "`\n"
 	}
+	if current.Kind == validationKindArchiveRepair {
+		body = "# Archive evidence gate failed\n\n" +
+			"The final evidence package could not pass deterministic reviewer-quality validation. " +
+			"Read the artifact below, repair the evidence producer or acceptance mapping, rerun all affected required tests, and produce fresh reviewable evidence before independent QA.\n\n" +
+			"- Artifact: `" + current.LastArtifact + "`\n"
+	}
 	if current.LastError != "" {
 		body += "- Error: " + current.LastError + "\n"
 	}

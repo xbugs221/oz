@@ -20,6 +20,7 @@ const (
 	stageGatePipelineLoop         stageGatePipelineMode = "loop"
 	stageGatePipelineNode         stageGatePipelineMode = "node"
 	validationKindArchiveReadOnly                       = "archive_read_only"
+	validationKindArchiveRepair                         = "archive_repair"
 )
 
 // stageGatePipelineResult describes the caller-visible outcome of completing a stage.
@@ -449,8 +450,12 @@ func (e *Engine) prepareQualityLoopArchiveReadOnlyGate(state *State) (bool, erro
 		}
 	}
 	if err := promoteQualityAcceptanceEvidence(e.Repo, *state, checkpoint); err != nil {
-		return true, e.blockQualityLoopArchiveReadOnly(state, fmt.Sprintf("archive 提升最终 acceptance evidence 失败: %v", err))
+		return true, e.rerouteQualityLoopArchiveRepair(
+			state,
+			fmt.Sprintf("archive 提升最终 acceptance evidence 失败: %v", err),
+		)
 	}
+	state.QualityLoop.ArchiveGateFingerprint = ""
 	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
 	if err != nil {
 		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
@@ -737,6 +742,33 @@ func (e *Engine) blockQualityLoopArchiveReadOnly(state *State, reason string) er
 	state.Status = statusBlockedStalled
 	state.Stage = statusBlockedStalled
 	state.Error = reason
+	return nil
+}
+
+// rerouteQualityLoopArchiveRepair lets the repairer fix deterministic evidence packaging failures before a fresh QA.
+func (e *Engine) rerouteQualityLoopArchiveRepair(state *State, reason string) error {
+	if state == nil {
+		return fmt.Errorf("archive 证据修复缺少 state")
+	}
+	fingerprint := qualityHashStrings(validationKindArchiveRepair, strings.TrimSpace(reason))
+	if state.QualityLoop.ArchiveGateFingerprint == fingerprint {
+		return e.blockQualityLoopArchiveReadOnly(state, reason)
+	}
+	archiveStage := state.Stage
+	if err := e.blockQualityLoopArchiveReadOnly(state, reason); err != nil {
+		return err
+	}
+	failedGate := state.ArtifactGates[archiveStage]
+	nextStage := qualityLoopResumeAuditStage(state)
+	failedGate.Kind = validationKindArchiveRepair
+	state.ArtifactGates[nextStage] = failedGate
+	state.Stages[archiveStage] = "rerouted"
+	state.Status = statusRunning
+	state.Stage = nextStage
+	state.Error = ""
+	state.QualityLoop.BlockedFromStage = ""
+	state.QualityLoop.ResumeRerunPending = true
+	state.QualityLoop.ArchiveGateFingerprint = fingerprint
 	return nil
 }
 

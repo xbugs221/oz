@@ -82,6 +82,7 @@ type QualityLoopState struct {
 	RerunProgressHash       string   `json:"rerun_progress_hash,omitempty"`
 	GateFailureFingerprint  string   `json:"gate_failure_fingerprint,omitempty"`
 	GateProgressHash        string   `json:"gate_progress_hash,omitempty"`
+	ArchiveGateFingerprint  string   `json:"archive_gate_fingerprint,omitempty"`
 	DiffHash                string   `json:"diff_hash,omitempty"`
 	TestsHash               string   `json:"tests_hash,omitempty"`
 	ValidationHash          string   `json:"validation_hash,omitempty"`

@@ -224,6 +224,10 @@ func routeQualityAuditAboveLimitToQA(state *State) bool {
 	if err != nil || !stage.isKind(workflowStageAudit) || stage.Iteration <= state.Workflow.MaxAuditIterations {
 		return false
 	}
+	if gate := state.ArtifactGates[state.Stage]; gate.Kind == validationKindArchiveRepair &&
+		gate.Status == validationStatusFailed {
+		return false
+	}
 	state.QualityLoop.BlockedFromStage = ""
 	state.Status = statusRunning
 	state.Stage = fmt.Sprintf("qa_%d", nextQualityLoopQAIteration(*state))
