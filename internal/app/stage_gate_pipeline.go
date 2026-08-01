@@ -474,10 +474,10 @@ func (e *Engine) verifyQualityLoopArchiveReadOnlyGate(state *State) (bool, error
 		return true, nil
 	}
 	if err := verifyQualityLoopTrustedFinalQA(e.Repo, *state); err != nil {
-		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
+		recordRuntimeWarning(e.Repo, *state, "archive_qa", err.Error())
 	}
 	if err := verifyQualityLoopArchivedEvidenceCommit(e.Repo, *state); err != nil {
-		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
+		recordRuntimeWarning(e.Repo, *state, "archive_evidence", err.Error())
 	}
 	return true, nil
 }

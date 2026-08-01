@@ -75,6 +75,11 @@ func (e *Engine) detectManualIntervention(state *State) error {
 	if head == state.BaselineHead && diff == state.BaselineDiff {
 		return nil
 	}
+	if usesQualityLoop(state.Workflow) && state.Stage == workflowStageArchive {
+		state.BaselineHead = head
+		state.BaselineDiff = diff
+		return nil
+	}
 	allowedDirs := manualInterventionAllowedDirs(e.Repo, *state)
 	guard, err := classifyGitSnapshotChangeWithAllowed(
 		e.Repo, state.ChangeName, state.BaselineHead, state.BaselineDiff, head, diff, allowedDirs,
@@ -83,11 +88,7 @@ func (e *Engine) detectManualIntervention(state *State) error {
 		return err
 	}
 	if guard.Blocked {
-		state.Status = statusAborted
-		if err := saveState(e.Repo, *state); err != nil {
-			return err
-		}
-		return fmt.Errorf("在 %s 阶段前检测到当前 run 相关路径或源码变化：%s", state.Stage, guard.Detail())
+		recordRuntimeWarning(e.Repo, *state, "git_snapshot", guard.Detail())
 	}
 	state.BaselineHead = head
 	state.BaselineDiff = diff

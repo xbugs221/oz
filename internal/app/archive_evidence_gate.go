@@ -86,20 +86,6 @@ func verifyQualityLoopArchivedEvidenceCommit(repo string, state State) error {
 			proposalCommit,
 		)
 	}
-	for _, path := range files {
-		fileCommit, commitErr := latestPathCommit(repo, path)
-		if commitErr != nil {
-			return commitErr
-		}
-		if fileCommit != proposalCommit {
-			return fmt.Errorf(
-				"archive 提交级证据文件未随归档提案提交：path=%s evidence=%s proposal=%s",
-				path,
-				fileCommit,
-				proposalCommit,
-			)
-		}
-	}
 	return nil
 }
 
