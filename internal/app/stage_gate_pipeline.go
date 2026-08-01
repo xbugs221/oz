@@ -548,7 +548,9 @@ func qualityLoopArchiveCheckpointStage(state State) (string, error) {
 	return checkpoint, err
 }
 
-// qualityLoopArchiveInvariantSnapshot binds source and required evidence across a proposal move.
+// qualityLoopArchiveInvariantSnapshot locks implementation and sealed evidence through archive.
+// Proposal files are deliberately excluded because oz archive may rewrite their test references
+// while moving them into the dated archive directory.
 func qualityLoopArchiveInvariantSnapshot(repo string, state State) (string, error) {
 	content, err := gitChangeContentSnapshotForChange(repo, state.ChangeName)
 	if err != nil {
@@ -578,7 +580,6 @@ func qualityLoopArchiveInvariantSnapshot(repo string, state State) (string, erro
 	if len(payloadEntries) == 0 {
 		return "", fmt.Errorf("archive 门禁找不到提案内容：%s", payloadDir)
 	}
-	entries = append(entries, payloadEntries...)
 	sort.Strings(entries)
 	sourceHash := qualityHashStrings(entries...)
 	checkpoint, err := qualityLoopArchiveCheckpointStage(state)

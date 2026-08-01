@@ -601,6 +601,29 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 	}
 }
 
+// TestQualityLoopArchiveGateAllowsProposalTestPathRewrite keeps archive packaging outside final-QA source locking.
+func TestQualityLoopArchiveGateAllowsProposalTestPathRewrite(t *testing.T) {
+	repo, changeName, state, engine, _ := newQualityLoopArchiveGateFixture(t)
+	blocked, err := engine.prepareQualityLoopArchiveReadOnlyGate(&state)
+	if err != nil || blocked {
+		t.Fatalf("prepare archive gate = blocked:%v err:%v", blocked, err)
+	}
+	brief := filepath.Join(repo, "docs", "changes", changeName, "brief.md")
+	if err := os.WriteFile(brief, []byte("# 归档合同\n\n测试见 `tests/contract.test.ts`。\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := archiveRepairEvidence(repo, state.RunID, changeName); err != nil {
+		t.Fatal(err)
+	}
+	passed, err := engine.verifyQualityLoopArchiveReadOnlyGate(&state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !passed {
+		t.Fatalf("proposal test-path rewrite was blocked: %#v", state.ArtifactGates[workflowStageArchive])
+	}
+}
+
 // TestQualityLoopArchiveEvidenceFailureReroutesToRepair verifies reviewable evidence defects never stop for a human.
 func TestQualityLoopArchiveEvidenceFailureReroutesToRepair(t *testing.T) {
 	repo, changeName, acceptanceSource, _, _ := newRepairEvidenceFixture(t)
