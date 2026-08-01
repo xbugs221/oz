@@ -380,7 +380,7 @@ func (e *Engine) prepareQualityLoopResume(state *State, manualInstruction bool) 
 	hasArchiveRepairGate = hasArchiveRepairGate &&
 		strings.Contains(archiveRepairGate.LastError, "archive 提升最终 acceptance evidence 失败")
 	if blockedFrom == workflowStageArchive {
-		resumed, err := e.resumeQualityLoopArchiveGateIfUnchanged(state)
+		resumed, err := e.resumeQualityLoopArchiveGate(state)
 		if err != nil {
 			return err
 		}
@@ -465,23 +465,16 @@ func (e *Engine) prepareQualityLoopResume(state *State, manualInstruction bool) 
 	return saveState(e.Repo, *state)
 }
 
-// resumeQualityLoopArchiveGateIfUnchanged rechecks a completed archive without rerunning its agent.
-func (e *Engine) resumeQualityLoopArchiveGateIfUnchanged(state *State) (bool, error) {
+// resumeQualityLoopArchiveGate reruns an interrupted archive without treating its move as source drift.
+func (e *Engine) resumeQualityLoopArchiveGate(state *State) (bool, error) {
 	if state == nil || state.Status != statusBlockedStalled {
 		return false, nil
 	}
-	gate := state.ArtifactGates[workflowStageArchive]
-	if gate.DiffHash == "" {
+	gate, ok := state.ArtifactGates[workflowStageArchive]
+	if !ok || gate.Kind != validationKindArchiveReadOnly ||
+		strings.Contains(gate.LastError, "archive 提升最终 acceptance evidence 失败") {
 		return false, nil
 	}
-	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
-	if err != nil || invariant != gate.DiffHash {
-		return false, nil
-	}
-	gate.Kind = validationKindArchiveReadOnly
-	gate.Status = validationStatusPassed
-	gate.LastError = ""
-	state.ArtifactGates[workflowStageArchive] = gate
 	state.Stages[workflowStageArchive] = statusRunning
 	state.Status = statusRunning
 	state.Stage = workflowStageArchive

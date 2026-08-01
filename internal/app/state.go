@@ -75,7 +75,10 @@ func (e *Engine) detectManualIntervention(state *State) error {
 	if head == state.BaselineHead && diff == state.BaselineDiff {
 		return nil
 	}
-	guard, err := classifyGitSnapshotChange(e.Repo, state.ChangeName, state.BaselineHead, state.BaselineDiff, head, diff)
+	allowedDirs := manualInterventionAllowedDirs(e.Repo, *state)
+	guard, err := classifyGitSnapshotChangeWithAllowed(
+		e.Repo, state.ChangeName, state.BaselineHead, state.BaselineDiff, head, diff, allowedDirs,
+	)
 	if err != nil {
 		return err
 	}
@@ -89,6 +92,22 @@ func (e *Engine) detectManualIntervention(state *State) error {
 	state.BaselineHead = head
 	state.BaselineDiff = diff
 	return nil
+}
+
+// manualInterventionAllowedDirs permits only workflow-owned archive artifacts while resuming archive.
+func manualInterventionAllowedDirs(repo string, state State) []string {
+	if !usesQualityLoop(state.Workflow) || state.Stage != workflowStageArchive {
+		return nil
+	}
+	dirs := []string{
+		filepath.Join(repo, "tests", "evidence", "proposals", state.ChangeName),
+		filepath.Join(repo, "docs", "changes", state.ChangeName),
+	}
+	matches, err := filepath.Glob(filepath.Join(repo, "docs", "changes", "archive", "*-"+state.ChangeName))
+	if err == nil && len(matches) == 1 {
+		dirs = append(dirs, matches[0])
+	}
+	return dirs
 }
 
 // promptNameForStage maps workflow stages to named prompt templates.

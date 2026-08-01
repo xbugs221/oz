@@ -136,6 +136,24 @@ func TestDetectManualInterventionAllowsUnrelatedActiveChange(t *testing.T) {
 	}
 }
 
+// TestDetectManualInterventionAllowsArchiveEvidencePromotion permits QA-owned evidence while archive resumes.
+func TestDetectManualInterventionAllowsArchiveEvidencePromotion(t *testing.T) {
+	repo := gitRepoForMigratedContract(t)
+	mustChangeForMigratedContract(t, repo, "10-当前需求")
+	runGitForMigratedContract(t, repo, "add", ".")
+	runGitForMigratedContract(t, repo, "commit", "-m", "current change baseline")
+	head, diff, err := gitSnapshot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := migratedContractState("archive-evidence-promotion", "10-当前需求", workflowStageArchive, head, diff)
+	state.Workflow.Generation = qualityLoopWorkflowGeneration
+	mustWriteForMigratedContract(t, filepath.Join(repo, "tests", "evidence", "proposals", state.ChangeName, "result.json"), "{}\n")
+	if err := NewEngine(repo, migratedContractRegistry()).detectManualIntervention(&state); err != nil {
+		t.Fatalf("archive evidence promotion should not abort archive: %v", err)
+	}
+}
+
 // TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff verifies only new delta paths are guarded.
 func TestDetectManualInterventionIgnoresExistingProtectedBaselineDiff(t *testing.T) {
 	repo := gitRepoForMigratedContract(t)

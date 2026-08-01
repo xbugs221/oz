@@ -355,6 +355,13 @@ func TestPreQAAuditLimitMovesToQA(t *testing.T) {
 		t.Fatalf("fresh audit limit state = %#v", rerouted)
 	}
 
+	resumed := qualityLoopState("audit_3")
+	resumed.Workflow.MaxAuditIterations = 2
+	resumed.QualityLoop.ResumeRerunPending = true
+	if routeQualityAuditAboveLimitToQA(&resumed) {
+		t.Fatalf("resumed audit was skipped instead of revalidating fresh source: %#v", resumed)
+	}
+
 	unlimited := qualityLoopState("audit_13")
 	unlimited.Workflow.MaxAuditIterations = 0
 	if routeQualityAuditAboveLimitToQA(&unlimited) {

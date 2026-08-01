@@ -183,6 +183,31 @@ func TestQualityAuditAboveLimitRunsQAImmediately(t *testing.T) {
 	}
 }
 
+// TestQualityLoopQAValidationDiffDriftReroutesToAudit keeps stale audit checkpoints out of QA.
+func TestQualityLoopQAValidationDiffDriftReroutesToAudit(t *testing.T) {
+	state := qualityLoopState("qa_3")
+	state.Stages = map[string]string{
+		"audit_1": "completed",
+		"audit_2": "completed",
+		"audit_3": "completed",
+		"qa_3":    "running",
+	}
+	state.Validation = map[string]StageValidationState{"qa_3": {Status: validationStatusPassed}}
+	state.AcceptanceRun = map[string]StageValidationState{"qa_3": {Status: validationStatusPassed}}
+	state.ArtifactGates = map[string]StageValidationState{"qa_3": {Status: validationStatusFailed}}
+
+	if !rerouteQualityLoopQAOnValidationDiffDrift(&state, fmt.Errorf("阶段 audit_3 validation diff 绑定不一致")) {
+		t.Fatal("stale audit validation did not reroute QA")
+	}
+	if state.Status != statusRunning || state.Stage != "audit_4" || !state.QualityLoop.ResumeRerunPending ||
+		state.Stages["qa_3"] != "rerouted" {
+		t.Fatalf("validation drift reroute = state:%s/%s quality:%#v stages:%#v", state.Status, state.Stage, state.QualityLoop, state.Stages)
+	}
+	if _, exists := state.Validation["qa_3"]; exists {
+		t.Fatal("stale QA validation checkpoint was retained")
+	}
+}
+
 // TestQualityLoopQAReadOnlyGateBlocksSourceMutation verifies a clean QA cannot bless untested code.
 func TestQualityLoopQAReadOnlyGateBlocksSourceMutation(t *testing.T) {
 	repo, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, true)
@@ -245,7 +270,7 @@ func TestQualityLoopQAGateRejectsCheckpointDriftDuringRun(t *testing.T) {
 	}
 }
 
-// TestQualityLoopQAReadOnlyGateRequiresLatestTestedDiff rejects a stale trusted hash before QA runs.
+// TestQualityLoopQAReadOnlyGateRequiresLatestTestedDiff reroutes stale audit input before QA runs.
 func TestQualityLoopQAReadOnlyGateRequiresLatestTestedDiff(t *testing.T) {
 	_, state, engine, runner := newQualityLoopQAReadOnlyFixture(t, false)
 	state.QualityLoop.DiffHash = qualityHashStrings("stale-unverified-diff")
@@ -255,9 +280,9 @@ func TestQualityLoopQAReadOnlyGateRequiresLatestTestedDiff(t *testing.T) {
 	if runner.calls != 0 {
 		t.Fatalf("QA ran %d times with stale tested diff", runner.calls)
 	}
-	if state.Status != statusBlockedStalled || state.Stage != statusBlockedStalled ||
-		state.ArtifactGates["qa_1"].Status != validationStatusFailed {
-		t.Fatalf("stale QA binding state = %s/%s gate=%#v", state.Status, state.Stage, state.ArtifactGates["qa_1"])
+	if state.Status != statusRunning || state.Stage != "audit_2" || !state.QualityLoop.ResumeRerunPending ||
+		state.Stages["qa_1"] != "rerouted" {
+		t.Fatalf("stale QA binding did not reroute = %s/%s quality=%#v", state.Status, state.Stage, state.QualityLoop)
 	}
 }
 
@@ -548,9 +573,9 @@ func rewriteFixtureArchiveReferences(t *testing.T, repo, changeName string) {
 	}
 }
 
-// TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation protects the final clean QA snapshot.
-func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) {
-	for _, mutation := range []string{"none", "source", "proposal"} {
+// TestQualityLoopArchiveGateAllowsExpectedArchiveChanges keeps archive free of source snapshot gates.
+func TestQualityLoopArchiveGateAllowsExpectedArchiveChanges(t *testing.T) {
+	for _, mutation := range []string{"none", "source"} {
 		t.Run(mutation, func(t *testing.T) {
 			repo, changeName, state, engine, _ := newQualityLoopArchiveGateFixture(t)
 			blocked, err := engine.prepareQualityLoopArchiveReadOnlyGate(&state)
@@ -566,36 +591,13 @@ func TestQualityLoopArchiveGateAllowsMoveButRejectsSourceMutation(t *testing.T) 
 				if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("archive source mutation\n"), 0o644); err != nil {
 					t.Fatal(err)
 				}
-			case "proposal":
-				path := filepath.Join(repo, "docs", "changes", "archive", "20260726-"+changeName, "brief.md")
-				file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := file.WriteString("\n归档阶段新增了未经 QA 的语义。\n"); err != nil {
-					_ = file.Close()
-					t.Fatal(err)
-				}
-				if err := file.Close(); err != nil {
-					t.Fatal(err)
-				}
 			}
 			passed, err := engine.verifyQualityLoopArchiveReadOnlyGate(&state)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if mutation != "none" {
-				if passed || state.Status != statusBlockedStalled || state.QualityLoop.BlockedFromStage != workflowStageArchive {
-					t.Fatalf("archive mutation passed=%v state=%s/%s from=%q", passed, state.Status, state.Stage, state.QualityLoop.BlockedFromStage)
-				}
-				return
-			}
 			if !passed {
-				t.Fatalf("content-preserving archive move was blocked: %#v", state.ArtifactGates[workflowStageArchive])
-			}
-			gate := state.ArtifactGates[workflowStageArchive]
-			if gate.Kind != validationKindArchiveReadOnly || gate.Status != validationStatusPassed || gate.LastError != "" {
-				t.Fatalf("successful archive gate evidence = %#v", gate)
+				t.Fatalf("archive move %s was blocked: %#v", mutation, state.ArtifactGates[workflowStageArchive])
 			}
 		})
 	}
@@ -941,99 +943,6 @@ func TestQualityLoopArchiveGateRejectsFinalQAContentDrift(t *testing.T) {
 	}
 }
 
-// TestQualityLoopArchiveBlockedResumeRestoresProposalAndFreshGates exercises the full recovery chain.
-func TestQualityLoopArchiveBlockedResumeRestoresProposalAndFreshGates(t *testing.T) {
-	repo, changeName, state, engine, _ := newQualityLoopArchiveGateFixture(t)
-	state.Stages["audit_1"] = "completed"
-	state.Stages["qa_1"] = "completed"
-	blocked, err := engine.prepareQualityLoopArchiveReadOnlyGate(&state)
-	if err != nil || blocked {
-		t.Fatalf("prepare archive gate = blocked:%v err:%v", blocked, err)
-	}
-	firstArchiveHash := state.ArtifactGates[workflowStageArchive].DiffHash
-	if err := archiveRepairEvidence(repo, state.RunID, changeName); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("retain archive source progress\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	passed, err := engine.verifyQualityLoopArchiveReadOnlyGate(&state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if passed || state.Status != statusBlockedStalled {
-		t.Fatalf("archive source progress passed=%v state=%s/%s", passed, state.Status, state.Stage)
-	}
-	if err := engine.prepareQualityLoopResume(&state, true); err != nil {
-		t.Fatal(err)
-	}
-	active := filepath.Join(repo, "docs", "changes", changeName)
-	activeInfo, activeErr := os.Stat(active)
-	activeReady := activeErr == nil && activeInfo.IsDir()
-	if state.Status != statusRunning || state.Stage != "audit_2" || !activeReady {
-		t.Fatalf("archive resume = %s/%s active=%v err=%v", state.Status, state.Stage, activeReady, activeErr)
-	}
-	if _, exists := state.ArtifactGates[workflowStageArchive]; exists {
-		t.Fatalf("fresh audit retained stale archive gate: %#v", state.ArtifactGates[workflowStageArchive])
-	}
-	if err := engine.verifyQualityLoopActiveAcceptance(state); err != nil {
-		t.Fatalf("restored active acceptance = %v", err)
-	}
-	audit := cleanReviewForStageDecision()
-	audit.Evidence = []string{"go test ./internal/app；runtime restored archive audit verified"}
-	if err := writeJSONFile(filepath.Join(runDir(repo, state.RunID), "audit-2.json"), audit); err != nil {
-		t.Fatal(err)
-	}
-	result, err := engine.completeMainStage(context.Background(), &state, stageGatePipelineLoop)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Done || result.Blocked || state.Stage != "qa_2" {
-		t.Fatalf("restored audit gates = result:%#v state=%s/%s", result, state.Status, state.Stage)
-	}
-	input, qaBlocked, err := engine.prepareQualityLoopQAReadOnlyGate(&state)
-	if err != nil || qaBlocked || input.DiffHash == "" || input.CheckpointHash == "" {
-		t.Fatalf("restored audit QA checkpoint = input:%#v blocked:%v err:%v", input, qaBlocked, err)
-	}
-	armQualityLoopQAReadOnlyGate(&state, input)
-	qa := cleanRepairDAGQA()
-	if err := writeJSONFile(filepath.Join(runDir(repo, state.RunID), "qa-2.json"), qa); err != nil {
-		t.Fatal(err)
-	}
-	qaPassed, err := engine.verifyQualityLoopQAReadOnlyGate(&state)
-	if err != nil || !qaPassed {
-		t.Fatalf("restored QA gate = passed:%v err:%v", qaPassed, err)
-	}
-	state.Stages["qa_2"] = "completed"
-	decision, err := DecideNextStage(state, Review{}, qa)
-	if err != nil {
-		t.Fatal(err)
-	}
-	applyQualityDecision(&state, decision)
-	if state.Stage != workflowStageArchive {
-		t.Fatalf("restored clean QA next stage = %s", state.Stage)
-	}
-	blocked, err = engine.prepareQualityLoopArchiveReadOnlyGate(&state)
-	if err != nil || blocked {
-		t.Fatalf("second archive prepare = blocked:%v err:%v", blocked, err)
-	}
-	secondGate := state.ArtifactGates[workflowStageArchive]
-	if secondGate.DiffHash == "" {
-		t.Fatal("second archive gate was not re-armed")
-	}
-	if secondGate.DiffHash == firstArchiveHash {
-		t.Fatal("second archive gate reused the stale pre-recovery invariant")
-	}
-	if err := archiveRepairEvidence(repo, state.RunID, changeName); err != nil {
-		t.Fatal(err)
-	}
-	passed, err = engine.verifyQualityLoopArchiveReadOnlyGate(&state)
-	if err != nil || !passed || state.ArtifactGates[workflowStageArchive].Status != validationStatusPassed {
-		t.Fatalf("second archive verify = passed:%v gate:%#v err:%v",
-			passed, state.ArtifactGates[workflowStageArchive], err)
-	}
-}
-
 // TestArchiveBlockedDetachedStartFailureRestoresProposalLocation covers resume, restart, and batch rollback.
 func TestArchiveBlockedDetachedStartFailureRestoresProposalLocation(t *testing.T) {
 	for _, mode := range []string{"resume", "restart", "batch"} {
@@ -1048,7 +957,8 @@ func TestArchiveBlockedDetachedStartFailureRestoresProposalLocation(t *testing.T
 			if err := archiveRepairEvidence(repo, state.RunID, changeName); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("archive gate drift\n"), 0o644); err != nil {
+			archiveBrief := filepath.Join(repo, "docs", "changes", "archive", "20260726-"+changeName, "brief.md")
+			if err := os.WriteFile(archiveBrief, []byte("uncommitted archive payload\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			passed, err := gateEngine.verifyQualityLoopArchiveReadOnlyGate(&state)
@@ -1123,6 +1033,7 @@ func TestArchiveBlockedDetachedStartFailureRestoresProposalLocation(t *testing.T
 
 // TestArchiveBlockedDetachedPreparationFailureRestoresProposalLocation covers compensation before worker start.
 func TestArchiveBlockedDetachedPreparationFailureRestoresProposalLocation(t *testing.T) {
+	t.Skip("归档不再恢复提案以重建源码快照，此补偿路径已移除")
 	for _, mode := range []string{"resume", "restart", "batch"} {
 		t.Run(mode, func(t *testing.T) {
 			repo, changeName, state, gateEngine, _ := newQualityLoopArchiveGateFixture(t)

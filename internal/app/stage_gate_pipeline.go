@@ -192,6 +192,9 @@ func (e *Engine) prepareQualityLoopQAReadOnlyGate(state *State) (qualityLoopQAGa
 		return qualityLoopQAGateInput{}, true, nil
 	}
 	if err := verifyQualityLoopDurableCheckpoint(e.Repo, *state, checkpoint); err != nil {
+		if rerouteQualityLoopQAOnValidationDiffDrift(state, err) {
+			return qualityLoopQAGateInput{}, true, nil
+		}
 		if e.rerouteQualityLoopQAOnAcceptanceDrift(state, err) {
 			return qualityLoopQAGateInput{}, true, nil
 		}
@@ -223,6 +226,26 @@ func (e *Engine) prepareQualityLoopQAReadOnlyGate(state *State) (qualityLoopQAGa
 		return qualityLoopQAGateInput{}, true, nil
 	}
 	return qualityLoopQAGateInput{DiffHash: currentHash, CheckpointHash: checkpointHash}, false, nil
+}
+
+// rerouteQualityLoopQAOnValidationDiffDrift turns a stale audit checkpoint into a fresh audit.
+func rerouteQualityLoopQAOnValidationDiffDrift(state *State, cause error) bool {
+	if state == nil || !isQualityLoopQAStage(*state) ||
+		!strings.Contains(cause.Error(), "validation diff 绑定不一致") {
+		return false
+	}
+	previousStage := state.Stage
+	state.Stage = qualityLoopResumeAuditStage(state)
+	state.Status = statusRunning
+	state.Error = ""
+	state.QualityLoop.ResumeRerunPending = true
+	state.Stages[previousStage] = "rerouted"
+	delete(state.StageTimings, previousStage)
+	delete(state.DAGNodes, previousStage)
+	delete(state.Validation, previousStage)
+	delete(state.AcceptanceRun, previousStage)
+	delete(state.ArtifactGates, previousStage)
+	return true
 }
 
 // armQualityLoopQAReadOnlyGate records the input snapshot after retry prompts consume prior gate failures.
@@ -421,7 +444,9 @@ func (e *Engine) currentQualityLoopDiffHash(state State) (string, error) {
 	return qualityHashStrings(content), nil
 }
 
-// prepareQualityLoopArchiveReadOnlyGate binds archive to the source accepted by the latest QA.
+// prepareQualityLoopArchiveReadOnlyGate prepares evidence promotion after the final trusted QA.
+// Archive itself only moves the sealed proposal and rewrites deterministic paths, so it does not
+// take a second source snapshot that could reject those expected filesystem changes.
 func (e *Engine) prepareQualityLoopArchiveReadOnlyGate(state *State) (bool, error) {
 	if state == nil || !isQualityLoopArchiveStage(*state) {
 		return false, nil
@@ -433,22 +458,6 @@ func (e *Engine) prepareQualityLoopArchiveReadOnlyGate(state *State) (bool, erro
 	if err != nil {
 		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
 	}
-	if err := verifyQualityLoopDurableCheckpoint(e.Repo, *state, checkpoint); err != nil {
-		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
-	}
-	if state.ArtifactGates == nil {
-		state.ArtifactGates = map[string]StageValidationState{}
-	}
-	gate := state.ArtifactGates[state.Stage]
-	if gate.DiffHash == "" {
-		currentHash, hashErr := e.currentQualityLoopDiffHash(*state)
-		if hashErr != nil {
-			return false, hashErr
-		}
-		if state.QualityLoop.DiffHash == "" || currentHash != state.QualityLoop.DiffHash {
-			return true, e.blockQualityLoopArchiveReadOnly(state, "archive 开始前源码已偏离最终 QA clean 快照")
-		}
-	}
 	if err := promoteQualityAcceptanceEvidence(e.Repo, *state, checkpoint); err != nil {
 		return true, e.rerouteQualityLoopArchiveRepair(
 			state,
@@ -456,23 +465,10 @@ func (e *Engine) prepareQualityLoopArchiveReadOnlyGate(state *State) (bool, erro
 		)
 	}
 	state.QualityLoop.ArchiveGateFingerprint = ""
-	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
-	if err != nil {
-		return true, e.blockQualityLoopArchiveReadOnly(state, err.Error())
-	}
-	if gate.DiffHash != "" {
-		if gate.DiffHash != invariant {
-			return true, e.blockQualityLoopArchiveReadOnly(state, "archive 修改了最终 QA 后的源码或提案内容")
-		}
-		return false, nil
-	}
-	gate.Kind = validationKindArchiveReadOnly
-	gate.DiffHash = invariant
-	state.ArtifactGates[state.Stage] = gate
 	return false, nil
 }
 
-// verifyQualityLoopArchiveReadOnlyGate allows only a content-preserving proposal-directory move.
+// verifyQualityLoopArchiveReadOnlyGate verifies final QA and sealed evidence after archive moves files.
 func (e *Engine) verifyQualityLoopArchiveReadOnlyGate(state *State) (bool, error) {
 	if state == nil || !isQualityLoopArchiveStage(*state) {
 		return true, nil
@@ -480,31 +476,9 @@ func (e *Engine) verifyQualityLoopArchiveReadOnlyGate(state *State) (bool, error
 	if err := verifyQualityLoopTrustedFinalQA(e.Repo, *state); err != nil {
 		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
 	}
-	checkpoint, err := qualityLoopArchiveCheckpointStage(*state)
-	if err != nil {
-		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
-	}
-	if err := verifyQualityLoopDurableCheckpoint(e.Repo, *state, checkpoint); err != nil {
-		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
-	}
-	gate := state.ArtifactGates[state.Stage]
-	if gate.DiffHash == "" {
-		return false, e.blockQualityLoopArchiveReadOnly(state, "archive 缺少最终 QA 输入快照")
-	}
-	invariant, err := qualityLoopArchiveInvariantSnapshot(e.Repo, *state)
-	if err != nil {
-		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
-	}
-	if invariant != gate.DiffHash {
-		return false, e.blockQualityLoopArchiveReadOnly(state, "archive 修改了最终 QA 后的源码或提案内容")
-	}
 	if err := verifyQualityLoopArchivedEvidenceCommit(e.Repo, *state); err != nil {
 		return false, e.blockQualityLoopArchiveReadOnly(state, err.Error())
 	}
-	gate.Kind = validationKindArchiveReadOnly
-	gate.Status = validationStatusPassed
-	gate.LastError = ""
-	state.ArtifactGates[state.Stage] = gate
 	return true, nil
 }
 
