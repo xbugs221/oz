@@ -289,6 +289,7 @@ func statusRoleSessionID(state State, role string) string {
 		sessionStateKey("codex", role),
 		sessionStateKey("pi", role),
 		sessionStateKey("agy", role),
+		sessionStateKey("claude", role),
 		role,
 	} {
 		if id := state.Sessions[key]; id != "" {

@@ -38,6 +38,7 @@ func NewAgentRegistry() *AgentRegistry {
 		CodexTool{},
 		PiTool{},
 		AgyTool{},
+		ClaudeTool{},
 	} {
 		registry.Register(tool)
 	}
@@ -81,7 +82,7 @@ func (r *AgentRegistry) ResolveForWorkflow(config WorkflowConfig) error {
 
 // validAgentTool reports whether a config value names a supported backend.
 func validAgentTool(name string) bool {
-	return name == "codex" || name == "pi" || name == "agy"
+	return name == "codex" || name == "pi" || name == "agy" || name == "claude"
 }
 
 // requiredAgentTools returns the unique backends referenced by the effective stage snapshot.

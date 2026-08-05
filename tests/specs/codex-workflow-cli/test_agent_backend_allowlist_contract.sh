@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 文件功能目的：验证工作流后端集合稳定收敛为 Codex/Pi/Agy，不再保留历史第三后端源码、文档承诺或状态 key。
-# Sources: 14-精简后端为-codex-pi-并迁移测试, 15-支持-agy-cli作为pi候选
+# 文件功能目的：验证工作流后端集合稳定收敛为 Codex/Pi/Agy/Claude，不再保留历史第三后端源码、文档承诺或状态 key。
+# Sources: 14-精简后端为-codex-pi-并迁移测试, 15-支持-agy-cli作为pi候选, claude-code-backend
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -36,13 +36,13 @@ if [[ -e "$ROOT/internal/app/${legacy_lower}.go" || -e "$ROOT/internal/app/${leg
   fail "internal/app 下仍存在第三后端实现或测试文件"
 fi
 
-note "确认 agent registry 只注册并接受 codex/pi/agy"
+note "确认 agent registry 只注册并接受 codex/pi/agy/claude"
 agent_file="$ROOT/internal/app/agent.go"
 [[ -f "$agent_file" ]] || fail "缺少 internal/app/agent.go"
-grep -q 'return name == "codex" || name == "pi" || name == "agy"' "$agent_file" || fail "validAgentTool 未明确收敛为 codex/pi/agy"
-for tool in CodexTool PiTool AgyTool; do
+grep -q 'return name == "codex" || name == "pi" || name == "agy" || name == "claude"' "$agent_file" || fail "validAgentTool 未明确收敛为 codex/pi/agy/claude"
+for tool in CodexTool PiTool AgyTool ClaudeTool; do
   grep -q "$tool{}" "$agent_file" || fail "NewAgentRegistry 缺少 $tool"
 done
 go test "$ROOT/internal/app" -run 'TestAgentRegistryResolvesConfiguredTools|TestValidAgentTool' -count=1 >>"$LOG" 2>&1
 
-note "contract passed: agent backend allowlist is codex/pi/agy only"
+note "contract passed: agent backend allowlist is codex/pi/agy/claude only"

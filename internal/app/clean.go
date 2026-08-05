@@ -63,19 +63,19 @@ func CleanRuntimeStateWithOptions(repo string, options CleanOptions) (CleanResul
 	return ApplyCleanPlan(plan, options)
 }
 
-// collectAgentSessions records Codex/Pi child session IDs referenced by a run state.
+// collectAgentSessions records Codex/Pi/Claude child session IDs referenced by a run state.
 func collectAgentSessions(state State, sessions map[string]bool) {
 	for key, sessionID := range state.Sessions {
 		if sessionID == "" {
 			continue
 		}
-		if strings.HasPrefix(key, "codex:") || strings.HasPrefix(key, "pi:") {
+		if strings.HasPrefix(key, "codex:") || strings.HasPrefix(key, "pi:") || strings.HasPrefix(key, "claude:") {
 			sessions[sessionID] = true
 		}
 	}
 }
 
-// cleanAgentSessionRecords removes external Codex/Pi records for sessions only
+// cleanAgentSessionRecords removes external Codex/Pi/Claude records for sessions only
 // referenced by runs that oz flow clean is deleting.
 func cleanAgentSessionRecords(cleanableSessions, protectedSessions map[string]bool) int {
 	targets := map[string]bool{}
@@ -91,6 +91,7 @@ func cleanAgentSessionRecords(cleanableSessions, protectedSessions map[string]bo
 	cleaned += cleanJSONLSessionFiles(codexSessionsRoot(), targets)
 	cleaned += cleanJSONLSessionFiles(piSessionsRoot(), targets)
 	cleaned += cleanPiSQLiteSessionRows(targets)
+	cleaned += cleanClaudeSessionFiles(targets)
 	return cleaned
 }
 
@@ -122,6 +123,32 @@ func piAgentRoot() string {
 		return ""
 	}
 	return filepath.Join(home, ".pi", "agent")
+}
+
+// claudeConfigDir returns the Claude Code config directory, honoring CLAUDE_CONFIG_DIR.
+func claudeConfigDir() string {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude")
+}
+
+// claudeSessionsRoot returns the Claude Code projects directory oz flow clean scans.
+func claudeSessionsRoot() string {
+	dir := claudeConfigDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "projects")
+}
+
+// cleanClaudeSessionFiles deletes Claude Code .jsonl session files matching sessionIDs.
+func cleanClaudeSessionFiles(sessionIDs map[string]bool) int {
+	return cleanJSONLSessionFiles(claudeSessionsRoot(), sessionIDs)
 }
 
 // cleanJSONLSessionFiles deletes ordinary .jsonl files whose basename contains a full session ID.

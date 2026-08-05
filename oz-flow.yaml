@@ -1,3 +1,7 @@
+# agent 可选 codex / pi / agy / claude。使用 claude 时：
+#   agent: claude
+#   model: sonnet        # 或 opus / fable / 完整模型 id
+#   reasoning: medium    # low / medium / high / xhigh
 max_audit_iterations: 3
 stages:
   planning:

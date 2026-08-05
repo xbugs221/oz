@@ -5,6 +5,7 @@
 ### 新增
 
 - 默认最多执行 3 轮全量自查，可通过 `max_audit_iterations` 调整；达到上限后直接进入独立测试，测试失败再定向修复。
+- oz flow 支持 claude（Claude Code CLI）作为 agent backend，stage 配置 `agent: claude` 即可；sealed run 通过 `claude -p --verbose --output-format stream-json` 驱动并按 session_id 续跑；planning 用交互式 TUI；`oz flow clean` 会清理 claude 会话记录。
 
 ### 修复
 

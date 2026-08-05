@@ -93,7 +93,7 @@ flowchart LR
 go install github.com/xbugs221/oz@latest
 oz install --global
 oz flow config
-# 唤起coding-agent比如codex/pi，要求创建新提案，完成后退出
+# 唤起coding-agent比如codex/pi/agy/claude，要求创建新提案，完成后退出
 oz flow run
 oz flow watch
 ```
@@ -163,4 +163,4 @@ bash scripts/extract-release-notes.sh CHANGELOG.md v0.0.0-local /tmp/oz-release-
 
 ## 局限性
 
-如果只是一些轻量更改，比如前端样式的微调，没有必要硬套用这个工具。oz更适合中大规模的变更，据此什么样的变更算大规模，这个见仁见智，也和执行任务的具体agent的智能程度有关
+如果只是一些轻量更改，比如前端样式的微调，没有必要硬套用这个工具。oz更适合中大规模的变更，据此什么样的变更算大规模，这个见仁见智，也和执行任务的具体agent（codex/pi/agy/claude 等）的智能程度有关
