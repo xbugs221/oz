@@ -161,6 +161,19 @@ go test ./...
 bash scripts/extract-release-notes.sh CHANGELOG.md v0.0.0-local /tmp/oz-release-notes.md
 ```
 
+## 与外部认知子技能的集成
+
+oz 内置技能（`oz-plan`、`oz-create`、`oz-exec`、`oz-archive`）负责守住 Oz 的合同边界与证据链。在阶段内部需要更强的对话、规划、实现或诊断能力时，可以由对应内置技能点名调用外部 Matt Pocock 技能作为**认知子程序**。
+
+| Oz 阶段 | 可辅助调用的外部技能 | 作用 |
+| --- | --- | --- |
+| planning | `/grill-with-docs`、`/wayfinder`、`/domain-modeling` | 对齐意图、绘制决策地图、统一术语 |
+| create | `/to-spec`、`/to-tickets`、`/prototype`、`/domain-modeling` | 生成 spec、拆票、原型验证 |
+| exec | `/implement`、`/tdd`、`/code-review`、`/prototype`、`/diagnosing-bugs`、`/codebase-design` | 红绿实现、交付前 review、顽固 bug 诊断 |
+| archive | `/writing-for-agents`、`/domain-modeling` | 润色 DELIVERY.md、沉淀术语 |
+
+这些外部技能**不由 `oz install` 安装**，需要单独安装到 harness 技能目录（如 `~/.claude/skills` 或 `~/.agents/skills`）。Oz 技能只以斜杠命令唤起它们，不复制其内部流程；外部技能不得绕过 Oz 的硬合同（`acceptance.json`、`tests/`）和只读边界。
+
 ## 局限性
 
 如果只是一些轻量更改，比如前端样式的微调，没有必要硬套用这个工具。oz更适合中大规模的变更，据此什么样的变更算大规模，这个见仁见智，也和执行任务的具体agent（codex/pi/agy/claude 等）的智能程度有关

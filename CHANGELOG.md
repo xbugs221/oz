@@ -1,15 +1,58 @@
 # 更新日志
 
-## [尚未发布]
+## [v1.4.1] - 2026-08-07
 
 ### 新增
 
-- 默认最多执行 3 轮全量自查，可通过 `max_audit_iterations` 调整；达到上限后直接进入独立测试，测试失败再定向修复。
+- 在 `README.md` 和四个内置 SKILL.md 中说明如何调用 Matt Pocock 技能作为可选认知子程序：规划阶段可用 `/grill-with-docs`、`/wayfinder`、`/domain-modeling`，创建阶段可用 `/to-spec`、`/to-tickets`、`/prototype`、`/domain-modeling`，执行阶段可用 `/implement`、`/tdd`、`/code-review`、`/prototype`、`/diagnosing-bugs`、`/codebase-design`，归档阶段可用 `/writing-for-agents`、`/domain-modeling`。外部技能不替代 Oz 的硬合同与只读归档边界，需单独安装。
+
+## [v1.4.0] - 2026-08-05
+
+### 新增
+
 - oz flow 支持 claude（Claude Code CLI）作为 agent backend，stage 配置 `agent: claude` 即可；sealed run 通过 `claude -p --verbose --output-format stream-json` 驱动并按 session_id 续跑；planning 用交互式 TUI；`oz flow clean` 会清理 claude 会话记录。
+
+## [v1.3.5] - 2026-08-05
+
+### 改进
+
+- 强化 `oz-exec` 的反偷懒约束，明确禁止跳过测试、弱化验收合同、伪造证据、把动态计划写入 Git 跟踪文件等常见规避行为。
+
+## [v1.3.4] - 2026-08-02
+
+### 改进
+
+- 将部分归档门禁检查从硬阻塞改为运行时警告，降低因非致命条件导致流程中断的概率。
+
+## [v1.3.3] - 2026-08-01
+
+### 改进
+
+- 移除归档阶段的快照门禁，简化归档流程并减少误阻塞。
+
+## [v1.3.2] - 2026-08-01
+
+### 修复
+
+- 允许归档阶段整理提案测试路径引用，避免迁移后的提案测试无法定位。
+
+## [v1.3.1] - 2026-07-31
+
+### 修复
+
+- 门禁首次失败时自动进入修复阶段，不再直接阻塞工作流。
+
+## [v1.3.0] - 2026-07-30
 
 ### 修复
 
 - 执行和自查阶段会在独立测试前显式运行提交前钩子并确认幂等，避免归档提交首次触发文件改写后破坏已测试快照。
+
+## [v1.2.9] - 2026-07-29
+
+### 新增
+
+- 默认最多执行 3 轮全量自查，可通过 `max_audit_iterations` 调整；达到上限后直接进入独立测试，测试失败再定向修复。
 
 ## [v1.2.8] - 2026-07-29
 

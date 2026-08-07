@@ -19,6 +19,17 @@ description: 当用户希望规划一个变更提案时使用
 
 standard 升级触发器是风险、跨度和场景复杂度；不得为了进入 standard 硬凑测试或任务。small 仍要说明长期规格去向，归档时合并到 `docs/specs/` 和 `tests/specs/`。
 
+## 外部认知子技能（可选）
+
+oz-plan 负责在本技能内完成入口选型与范围收敛。当规划需要更强的对话、制图或术语澄清能力时，可调用单独安装的 Matt Pocock 技能作为认知子程序；这些技能不由 `oz install` 安装，调用前确认已可用，不可用时回退到 oz-plan 内置流程。
+
+- `/tdd`：`micro` 入口可直接使用，不创建 change 目录。
+- `/grill-with-docs` + `/domain-modeling`：`small`/`standard` 规划中对齐用户意图、建立统一语言并产出 `CONTEXT.md` 与 ADR。当需求边界、验收标准或设计取舍需要多轮追问时使用；让该技能主导访谈，本技能只负责把结论收敛为 oz 入口与范围。
+- `/wayfinder`：当用户提出的是远超 standard 的宏大或迷雾型变更（单会话无法承载）时，先调用 wayfinder 在 issue tracker 上绘制决策票图，待 map clears 后再用 `/to-spec` 生成 Oz 的 `proposal.md`/`spec.md`，最后决定是否拆分为 oz 提案。
+- `/domain-modeling`：当对话中出现与现有术语冲突、词汇多义或需要建立统一语言时调用；本技能仍负责最终的范围声明，但应复用其术语结论。
+
+调用时只须以斜杠命令唤起，不要在本文件中重复外部技能的内部流程；外部技能的具体步骤由各自的 `SKILL.md` 拥有。
+
 ## 流程
 
 1. 先确认用户要解决的问题和当前痛点，不急着写文件

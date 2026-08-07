@@ -16,6 +16,20 @@ description: 当用户提到 oz exec，或要求执行一个活动 oz 提案时�
 
 small 不降低测试要求；归档前仍要把长期行为沉淀到规格和规格测试。
 
+## 外部实现与诊断技能（可选）
+
+oz-exec 负责让 oz 提案的契约测试通过并生成真实证据。当实现需要 red-green 循环、交付前评审或顽固缺陷诊断时，可调用单独安装的 Matt Pocock 技能作为认知子程序；这些技能不由 `oz install` 安装，调用前确认已可用，不可用时回退到 oz-exec 内置流程。
+
+- `/implement` + `/tdd`：在实现 spec/tickets 时优先使用 red-green-refactor 循环；本技能负责确保新增测试与 `acceptance.json` 对齐，且不得删除或弱化创建阶段写入的契约测试。
+- `/code-review`：在移交给独立 QA 前，对当前 diff 做一次双轴 review（规范轴与规格轴）；把 review 结论作为自查 findings 处理，必要时先修复再进入 QA。
+- `/prototype`：若实现中发现合同假设不成立，先做可丢弃原型验证再回改合同；如需调整 `spec.md`/`acceptance.json`，必须同步更新并记录原因，不得用原型代码直接冒充交付代码。
+- `/diagnosing-bugs`：当遇到顽固 bug、性能退化或测试失败原因不明时调用；本技能负责把诊断结论和回归测试纳入当前提案范围，并按 oz-exec 的退出条件重新运行相关测试。
+- `/codebase-design`：当需要 seam、interface、depth 等共享词汇来讨论模块设计时，作为参考词汇表查阅，不替代 oz-exec 的实现责任。
+
+硬约束：不得用任何外部技能绕过、弱化或修改 `acceptance.json`/`tests/`；如需调整合同，先更新 `spec.md`、`acceptance.json` 和对应测试并记录原因，再继续实现。
+
+调用时只须以斜杠命令唤起，不要在本文件中重复外部技能的内部流程；外部技能的具体步骤由各自的 `SKILL.md` 拥有。
+
 ## 流程
 
 1. 确认当前提案目录已经提交；Oz 启动后封存 `delivery_base_head`，执行、自查、修复和测试阶段都不得创建或改写 commit。

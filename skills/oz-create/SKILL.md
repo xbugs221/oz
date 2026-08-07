@@ -16,6 +16,19 @@ description: 当用户提到 oz create，或要求创建 oz 变更提案时使�
 
 micro 不进入 oz create；使用 TDD + git commit。standard 升级触发器是风险、跨度和场景复杂度，不得为了进入 standard 硬凑测试或任务。
 
+## 外部规格与拆分技能（可选）
+
+oz-create 负责生成 oz 提案合同文件。当已有上下文足够、需要快速产出规格或把计划拆成可追踪票时，可调用单独安装的 Matt Pocock 技能作为认知子程序；这些技能不由 `oz install` 安装，调用前确认已可用，不可用时回退到 oz-create 内置流程。
+
+- `/to-spec`：当规划阶段的对话已经充分、需要把讨论综合为 `spec.md`（standard）或 `brief.md`（small）的行为描述时使用；本技能负责把其输出映射为 oz 的 `brief.md`、`proposal.md`、`spec.md` 与 `acceptance.json` 结构。
+- `/to-tickets`：当 standard 提案需要拆成多个 tracer-bullet 票并声明阻塞边时调用；本技能负责把票图映射到 `acceptance.json` 的验收矩阵，并保持 `tests/` 与票一一对应。
+- `/prototype`：当设计存在不确定、需要可丢弃的原型来回答“状态模型是否正确”或“UI 应长什么样”时调用；本技能把原型验证的结论纳入 `design.md` 与 `spec.md`，但不得把原型代码当作交付代码；原型分支可作为 `required_evidence` 的设计预演证据。
+- `/domain-modeling`：在写 spec/brief 前若发现术语不一致，先调用以统一词汇。
+
+这些外部技能不替代 `acceptance.json` 和 `tests/` 硬合同；任何由 `/to-spec` 产出的行为描述必须被 `acceptance.json` 覆盖，任何由 `/to-tickets` 产出的票必须对应到 `required_tests`/`required_evidence`。
+
+调用时只须以斜杠命令唤起，不要在本文件中重复外部技能的内部流程；外部技能的具体步骤由各自的 `SKILL.md` 拥有。
+
 ## 流程
 
 1. 先运行 `oz create` 获取下一个编号，只把输出整数作为 `<number>`。

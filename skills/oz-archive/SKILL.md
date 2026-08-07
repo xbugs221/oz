@@ -14,6 +14,17 @@ description: 当用户提到 oz archive，或要求归档已完成的 oz 提案�
 | small | `brief.md`、`acceptance.json`、`tests/`，即 brief-only | 必须从 brief 提取长期行为，合并到 `docs/specs/`，并把测试意图合并到 `tests/specs/` |
 | standard | 完整提案文档、`acceptance.json`、`tests/` | 从 `spec.md` 和测试中合并长期规格与长期规格测试 |
 
+## 外部文档技能（可选）
+
+oz-archive 负责把已验证的提案沉淀为长期规格与规格测试，并确认 `DELIVERY.md` 与证据包。当需要把交付文档写成面向智能体的可读格式或统一长期术语时，可调用单独安装的 Matt Pocock 技能作为认知子程序；这些技能不由 `oz install` 安装，调用前确认已可用，不可用时回退到 oz-archive 内置流程。
+
+- `/writing-for-agents`：在生成或润色 `DELIVERY.md` 时可选调用，用于检查信息层级、上下文指针和完成标准是否对后续 agent 友好；但不得改写引擎已封存的实测结论与证据路径。
+- `/domain-modeling`：把本次变更中成熟的新术语合并进 `docs/specs/` 词汇表；归档阶段只负责核对与合并，不得由该技能触发新的文件改写。
+
+归档阶段仍是最终 QA 后的只读边界，外部技能只能用于核对、润色和长期沉淀建议，不得触发任何会改写源码、提案目录或证据包的文件操作。
+
+调用时只须以斜杠命令唤起，不要在本文件中重复外部技能的内部流程；外部技能的具体步骤由各自的 `SKILL.md` 拥有。
+
 ## 流程
 
 - 确认工作区干净或相关修改已提交，避免混入非提案文件
